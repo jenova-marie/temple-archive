@@ -5,7 +5,7 @@
  * based on configuration.
  */
 
-import type { PipelineConfig } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -16,9 +16,10 @@ import {
 } from '@recoverysky/memory'
 import { KeywordCrisisDetector, StubCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator } from '@recoverysky/safety'
-import { MockAgentProvider } from '@recoverysky/agent'
+import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator } from '@recoverysky/evaluation'
 import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
+import { getLogger } from '@recoverysky/observability'
 
 export interface Container {
   pipeline: Pipeline
@@ -34,6 +35,9 @@ export interface ContainerConfig {
  */
 export function createContainer(options: ContainerConfig = {}): Container {
   const useStubs = options.useStubs ?? process.env.USE_STUBS === 'true'
+  const logger = getLogger().child({ component: 'container' })
+
+  logger.info({ useStubs }, 'Creating container')
 
   // Pipeline configuration
   const pipelineConfig: PipelineConfig = {
@@ -67,10 +71,20 @@ export function createContainer(options: ContainerConfig = {}): Container {
   })
   const crisisHandler = new StubCrisisHandler()
 
-  // Create agent (mock for now)
-  const agent = new MockAgentProvider({
-    delayMs: 100,
-  })
+  // Create agent - real or mock based on USE_STUBS
+  let agent: IAgentProvider
+  if (useStubs) {
+    logger.info('Using MockAgentProvider (USE_STUBS=true)')
+    agent = new MockAgentProvider({ delayMs: 100 })
+  } else {
+    logger.info('Using VercelAIAgentProvider with Claude')
+    agent = new VercelAIAgentProvider({
+      model: 'claude-sonnet-4-20250514',
+      maxSteps: 5,
+      maxTokens: 4096,
+      temperature: 0.7,
+    })
+  }
 
   // Create safety and evaluation components
   const safety = new StubSafetyValidator()

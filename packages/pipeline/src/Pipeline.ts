@@ -24,11 +24,13 @@ import type {
   IEvaluator,
   IEmbeddingProvider,
   CrisisCheckResult,
+  ToolDefinition,
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import { MemoryOrchestrator } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
+import { recoveryTools } from '@recoverysky/tools'
 
 export interface PipelineError {
   kind: 'CrisisError' | 'MemoryError' | 'AgentError' | 'SafetyError' | 'ValidationError' | 'TimeoutError' | 'UnexpectedError'
@@ -323,12 +325,16 @@ export class Pipeline {
 
     const systemPrompt = buildSystemPrompt(ctx.memory!, ctx.crisisCheck)
 
+    // Convert Vercel AI SDK tools to ToolDefinition format
+    const tools = this.convertToolsToDefinitions()
+
     const result = await this.deps.agent.generate(
       {
         userMessage: input.message,
         context: ctx.memory!,
         crisisCheck: ctx.crisisCheck,
         systemPrompt,
+        tools,
       },
       ctx
     )
@@ -348,6 +354,30 @@ export class Pipeline {
       content: result.value.content,
       usage: result.value.usage,
     })
+  }
+
+  /**
+   * Convert Vercel AI SDK tool definitions to our ToolDefinition format
+   */
+  private convertToolsToDefinitions(): ToolDefinition[] {
+    const tools: ToolDefinition[] = []
+
+    for (const [name, tool] of Object.entries(recoveryTools)) {
+      const t = tool as {
+        description?: string
+        parameters?: unknown
+        execute?: (args: Record<string, unknown>) => Promise<unknown>
+      }
+
+      tools.push({
+        name,
+        description: t.description || `Tool: ${name}`,
+        parameters: t.parameters as Record<string, unknown>,
+        execute: t.execute || (async () => ({ error: 'Not implemented' })),
+      })
+    }
+
+    return tools
   }
 
   private async persistMessages(

@@ -1,3 +1,5 @@
 export { buildSystemPrompt, getMinimalSystemPrompt } from './systemPrompt.js'
 export { MockAgentProvider } from './MockAgentProvider.js'
 export type { MockAgentProviderConfig } from './MockAgentProvider.js'
+export { VercelAIAgentProvider } from './VercelAIAgentProvider.js'
+export type { VercelAIAgentProviderConfig } from './VercelAIAgentProvider.js'

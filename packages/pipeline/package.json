@@ -25,7 +25,8 @@
     "@recoverysky/crisis": "workspace:*",
     "@recoverysky/safety": "workspace:*",
     "@recoverysky/agent": "workspace:*",
-    "@recoverysky/evaluation": "workspace:*"
+    "@recoverysky/evaluation": "workspace:*",
+    "@recoverysky/tools": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
