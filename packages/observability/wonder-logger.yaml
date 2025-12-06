@@ -1,0 +1,66 @@
+# RecoverySky Agent - wonder-logger configuration
+# See: https://github.com/jenova-marie/wonder-logger
+
+service:
+  name: ${SERVICE_NAME:-recoverysky-agent}
+  version: ${SERVICE_VERSION:-0.1.0}
+  environment: ${NODE_ENV:-development}
+
+logger:
+  enabled: true
+  level: ${LOG_LEVEL:-info}
+  redact:
+    - password
+    - token
+    - apiKey
+    - authorization
+    - cookie
+    - ssn
+    - creditCard
+  transports:
+    # Console transport (JSON format in production, aligned in dev)
+    - type: console
+      variant: aligned
+      alignedOptions:
+        dataFormat: json
+        colorize: true
+        showTimestamp: true
+
+    # File transport (async mode for long-running processes)
+    - type: file
+      dir: ./logs
+      fileName: agent.log
+      sync: false
+
+    # Memory transport (for testing and runtime log inspection)
+    - type: memory
+      name: ${SERVICE_NAME:-recoverysky-agent}
+      maxSize: 10000
+      level: debug
+
+    # OpenTelemetry transport (send logs to OTLP collector)
+    - type: otel
+      endpoint: ${OTEL_LOGS_ENDPOINT:-http://localhost:4318/v1/logs}
+
+  plugins:
+    # Inject trace_id and span_id into logs for correlation
+    traceContext: true
+
+otel:
+  enabled: true
+  tracing:
+    enabled: true
+    exporter: otlp
+    endpoint: ${OTEL_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}
+    sampleRate: 1.0
+  metrics:
+    enabled: true
+    exporters:
+      - type: prometheus
+        port: 9464
+      - type: otlp
+        endpoint: ${OTEL_METRICS_ENDPOINT:-http://localhost:4318/v1/metrics}
+        exportIntervalMillis: 60000
+  instrumentation:
+    auto: true
+    http: true
