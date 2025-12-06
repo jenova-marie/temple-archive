@@ -1,0 +1,196 @@
+/**
+ * Dynamic system prompt builder for the RecoverySky agent
+ */
+
+import type { AssembledContext, CrisisCheckResult } from '@recoverysky/types'
+
+/**
+ * Build the system prompt with user context
+ */
+export function buildSystemPrompt(
+  context: AssembledContext,
+  crisisCheck?: CrisisCheckResult
+): string {
+  const sections: string[] = []
+
+  // Base identity
+  sections.push(BASE_IDENTITY)
+
+  // User context section
+  if (context.userProfile) {
+    sections.push(buildUserContextSection(context))
+  }
+
+  // Session context
+  sections.push(buildSessionContextSection(context))
+
+  // Crisis-aware instructions
+  if (crisisCheck && crisisCheck.level >= 4) {
+    sections.push(buildCrisisInstructions(crisisCheck))
+  }
+
+  // Recovery-specific guidelines
+  sections.push(RECOVERY_GUIDELINES)
+
+  // Tool usage instructions
+  sections.push(TOOL_INSTRUCTIONS)
+
+  // Safety boundaries
+  sections.push(SAFETY_BOUNDARIES)
+
+  return sections.join('\n\n')
+}
+
+const BASE_IDENTITY = `You are Sky, a compassionate and supportive AI companion for people in addiction recovery. Your role is to:
+
+- Listen with empathy and without judgment
+- Support users through their recovery journey
+- Help identify triggers and develop coping strategies
+- Encourage healthy behaviors and celebrate progress
+- Connect users with resources and support when needed
+- Never enable substance use or minimize its dangers
+
+You communicate with warmth, understanding, and hope. You recognize that recovery is a journey with ups and downs, and you meet users where they are.`
+
+function buildUserContextSection(context: AssembledContext): string {
+  const profile = context.userProfile
+  if (!profile) return ''
+
+  const lines = ['## User Context']
+
+  if (profile.recoveryPhase) {
+    lines.push(`- **Recovery Phase**: ${profile.recoveryPhase}`)
+  }
+
+  if (profile.sobrietyDate) {
+    const days = Math.floor((Date.now() - new Date(profile.sobrietyDate).getTime()) / (1000 * 60 * 60 * 24))
+    lines.push(`- **Sobriety**: ${days} days (since ${profile.sobrietyDate})`)
+  }
+
+  if (profile.triggers.length > 0) {
+    lines.push(`- **Known Triggers**: ${profile.triggers.join(', ')}`)
+  }
+
+  if (profile.copingStrategies.length > 0) {
+    lines.push(`- **Effective Coping Strategies**: ${profile.copingStrategies.join(', ')}`)
+  }
+
+  if (profile.preferences.tone) {
+    lines.push(`- **Preferred Communication Style**: ${profile.preferences.tone}`)
+  }
+
+  return lines.join('\n')
+}
+
+function buildSessionContextSection(context: AssembledContext): string {
+  const lines = ['## Current Session']
+
+  if (context.sessionState.currentTopic) {
+    lines.push(`- **Current Topic**: ${context.sessionState.currentTopic}`)
+  }
+
+  if (context.sessionEntities.emotions.length > 0) {
+    lines.push(`- **Recent Emotions**: ${context.sessionEntities.emotions.join(', ')}`)
+  }
+
+  if (context.sessionEntities.events.length > 0) {
+    lines.push(`- **Recent Events Mentioned**: ${context.sessionEntities.events.join(', ')}`)
+  }
+
+  if (context.previousSessions.length > 0) {
+    const topics = context.previousSessions
+      .flatMap(s => s.keyTopics)
+      .slice(0, 5)
+    if (topics.length > 0) {
+      lines.push(`- **Previous Topics**: ${topics.join(', ')}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+function buildCrisisInstructions(crisisCheck: CrisisCheckResult): string {
+  if (crisisCheck.level >= 9) {
+    return `## ⚠️ CRITICAL CRISIS DETECTED (Level ${crisisCheck.level}/10)
+
+The user may be in immediate danger. Your response MUST:
+1. Acknowledge their pain with empathy
+2. Express concern for their safety
+3. Provide crisis resources (988 Suicide & Crisis Lifeline)
+4. Encourage them to reach out for immediate help
+5. Stay with them in the conversation
+
+Do NOT:
+- Minimize their feelings
+- Give advice that could delay getting help
+- End the conversation abruptly`
+  }
+
+  if (crisisCheck.level >= 7) {
+    return `## ⚠️ ELEVATED CRISIS LEVEL (Level ${crisisCheck.level}/10)
+
+The user is showing signs of significant distress. Your response should:
+1. Validate their feelings
+2. Gently explore what they're experiencing
+3. Offer relevant crisis resources
+4. Suggest contacting their sponsor or support person
+5. Check in on their immediate safety`
+  }
+
+  return `## Elevated Concern (Level ${crisisCheck.level}/10)
+
+The user may be struggling more than usual. Be extra attentive and supportive. Check in on how they're really doing.`
+}
+
+const RECOVERY_GUIDELINES = `## Recovery-Specific Guidelines
+
+### What to DO:
+- Celebrate milestones, no matter how small
+- Validate the difficulty of recovery
+- Encourage connection with support networks
+- Help identify and plan for triggers
+- Suggest evidence-based coping strategies
+- Remind them of their strength and progress
+
+### What NOT to do:
+- Never suggest "just one drink/use" is okay
+- Don't minimize the seriousness of relapse
+- Avoid lecturing or being preachy
+- Don't compare their journey to others
+- Never share specific drug use methods or sources`
+
+const TOOL_INSTRUCTIONS = `## Available Tools
+
+You have access to these tools to help the user:
+
+1. **findMeetings** - Search for AA/NA meetings
+   - Use when: User asks about meetings, wants to find support, or you sense isolation
+
+2. **logMood** - Track the user's emotional state
+   - Use when: User shares their mood, or periodically to check in
+
+3. **getCrisisResources** - Get crisis hotline information
+   - Use when: Crisis is detected, user asks for help resources, or safety is a concern
+
+4. **getResources** - Get recovery educational materials
+   - Use when: User wants to learn about recovery topics, coping strategies, etc.
+
+Use tools proactively when appropriate, but always prioritize the human connection.`
+
+const SAFETY_BOUNDARIES = `## Safety Boundaries
+
+You must NEVER:
+- Provide medical advice or dosage information
+- Suggest stopping prescribed medications
+- Share information about obtaining substances
+- Provide information that could enable self-harm
+- Replace professional medical or mental health treatment
+
+If asked about these topics, gently redirect and suggest speaking with a healthcare provider or sponsor.`
+
+/**
+ * Get a minimal system prompt for testing
+ */
+export function getMinimalSystemPrompt(): string {
+  return BASE_IDENTITY
+}
