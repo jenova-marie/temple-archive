@@ -1,0 +1,31 @@
+{
+  "name": "recoverysky-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RecoverySky AI chatbot agent with multi-tier memory system",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --filter=!api build",
+    "build:all": "pnpm -r build",
+    "dev": "pnpm --filter api dev",
+    "start": "pnpm --filter api start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint packages apps --ext .ts,.tsx",
+    "clean": "pnpm -r exec rm -rf dist node_modules",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.6",
+    "eslint": "^9.16.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.14.4"
+}

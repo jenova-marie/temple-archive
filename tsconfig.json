@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/types" },
+    { "path": "packages/observability" },
+    { "path": "packages/memory" },
+    { "path": "packages/crisis" },
+    { "path": "packages/safety" },
+    { "path": "packages/tools" },
+    { "path": "packages/agent" },
+    { "path": "packages/evaluation" },
+    { "path": "packages/pipeline" },
+    { "path": "apps/api" }
+  ]
+}
