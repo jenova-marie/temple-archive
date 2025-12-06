@@ -1,0 +1,38 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@recoverysky/types": "workspace:*",
+    "@recoverysky/observability": "workspace:*",
+    "@recoverysky/memory": "workspace:*",
+    "@recoverysky/crisis": "workspace:*",
+    "@recoverysky/safety": "workspace:*",
+    "@recoverysky/tools": "workspace:*",
+    "@recoverysky/agent": "workspace:*",
+    "@recoverysky/evaluation": "workspace:*",
+    "@recoverysky/pipeline": "workspace:*",
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "helmet": "^8.0.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.6"
+  }
+}
