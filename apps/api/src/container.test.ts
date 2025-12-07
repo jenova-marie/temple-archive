@@ -32,10 +32,31 @@ vi.mock('@recoverysky/memory', () => ({
   initializeSchema: vi.fn().mockResolvedValue(undefined),
   EntityExtractor: vi.fn().mockImplementation(() => ({})),
   MemoryContextBuilder: vi.fn().mockImplementation(() => ({})),
+  // Bootstrap system mocks
+  BootstrapOrchestrator: vi.fn().mockImplementation(() => ({})),
+  StubBootstrapOrchestrator: vi.fn().mockImplementation(() => ({})),
+  ConversationMemoryCache: vi.fn().mockImplementation(() => ({})),
+  InMemoryConversationMemoryCache: vi.fn().mockImplementation(() => ({})),
+  MemoryExtractor: vi.fn().mockImplementation(() => ({})),
+  MemoryCacheDeduplicator: vi.fn().mockImplementation(() => ({})),
+  TopicGenerator: vi.fn().mockImplementation(() => ({})),
+  InMemoryMemoryCachePersistence: vi.fn().mockImplementation(() => ({})),
+  loadBootstrapConfig: vi.fn().mockReturnValue({
+    enabled: false,
+    bootstrapStart: 3,
+    bootstrapEnd: 8,
+    cacheLimit: 50,
+    cacheTTLHours: 4,
+    dedupThreshold: 10,
+    extractionModel: 'haiku',
+  }),
+  Neo4jMemoryStore: vi.fn().mockImplementation(() => ({})),
+  InMemoryMemoryStore: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock('@recoverysky/tools', () => ({
   setMemoryToolProviders: vi.fn(),
+  setBootstrapOrchestrator: vi.fn(),
 }))
 
 vi.mock('@recoverysky/db', () => ({

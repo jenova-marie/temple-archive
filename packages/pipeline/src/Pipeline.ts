@@ -33,7 +33,7 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder } from '@recoverysky/memory'
+import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder, type IBootstrapOrchestrator } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
 import { recoveryTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, type MemoryToolAccessLevel } from '@recoverysky/tools'
 
@@ -60,6 +60,8 @@ export interface PipelineDependencies {
   memoryContextBuilder?: MemoryContextBuilder
   /** Memory tool access level (default: 'off') */
   memoryToolAccess?: MemoryToolAccessLevel
+  /** Bootstrap orchestrator for conversation memory priming (optional) */
+  bootstrapOrchestrator?: IBootstrapOrchestrator
 }
 
 export class Pipeline {
@@ -654,6 +656,24 @@ export class Pipeline {
         })
         .catch((err) => {
           logger.warn({ err }, 'Entity extraction failed')
+        })
+    }
+
+    // Memory bootstrap (fire and forget - don't block response)
+    // Extracts memories from exchange and handles bootstrap window logic
+    if (this.deps.bootstrapOrchestrator) {
+      this.deps.bootstrapOrchestrator
+        .processExchange(
+          {
+            userMessage: userMessage.content,
+            assistantResponse: assistantMessage.content,
+          },
+          ctx.input.conversationId,
+          ctx.input.userId,
+          ctx
+        )
+        .catch((err) => {
+          logger.warn({ err }, 'Bootstrap processing failed')
         })
     }
 

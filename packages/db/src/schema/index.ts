@@ -31,3 +31,9 @@ export {
   type DbCrisisEvent,
   type NewDbCrisisEvent,
 } from './crisisEvents.js'
+
+export {
+  memoryCache,
+  type DbMemoryCache,
+  type NewDbMemoryCache,
+} from './memoryCache.js'

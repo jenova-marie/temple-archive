@@ -88,3 +88,34 @@ export {
   InMemoryVectorStore,
   InMemoryArchiveStore,
 } from './stubs/index.js'
+
+// Bootstrap memory system
+export {
+  // Types and config
+  type BootstrapConfig,
+  type CacheMetadata,
+  type Exchange,
+  type ExtractionResult as BootstrapExtractionResult,
+  type IBootstrapOrchestrator,
+  type IConversationMemoryCache,
+  type IMemoryCacheDeduplicator,
+  type IMemoryCachePersistence,
+  type IMemoryExtractor,
+  type ITopicGenerator,
+  DEFAULT_BOOTSTRAP_CONFIG,
+  loadBootstrapConfig,
+  // Implementations
+  ConversationMemoryCache,
+  InMemoryConversationMemoryCache,
+  MemoryExtractor,
+  StubMemoryExtractor,
+  MemoryCacheDeduplicator,
+  StubMemoryCacheDeduplicator,
+  TopicGenerator,
+  StubTopicGenerator,
+  MemoryCachePersistence,
+  InMemoryMemoryCachePersistence,
+  BootstrapOrchestrator,
+  StubBootstrapOrchestrator,
+  type BootstrapOrchestratorDeps,
+} from './bootstrap/index.js'

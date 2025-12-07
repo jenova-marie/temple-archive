@@ -26,8 +26,22 @@ import {
   MemoryContextBuilder,
   type ExtractionMode,
   type MemoryContextMode,
+  // Bootstrap system
+  BootstrapOrchestrator,
+  StubBootstrapOrchestrator,
+  ConversationMemoryCache,
+  InMemoryConversationMemoryCache,
+  MemoryExtractor,
+  MemoryCacheDeduplicator,
+  TopicGenerator,
+  InMemoryMemoryCachePersistence,
+  loadBootstrapConfig,
+  type IBootstrapOrchestrator,
+  // Memory stores for bootstrap (implements IMemoryStore)
+  Neo4jMemoryStore,
+  InMemoryMemoryStore,
 } from '@recoverysky/memory'
-import { setMemoryToolProviders, type MemoryToolAccessLevel } from '@recoverysky/tools'
+import { setMemoryToolProviders, setBootstrapOrchestrator, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
@@ -319,6 +333,80 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info('Memory tools disabled (MEMORY_TOOL_ACCESS=off)')
   }
 
+  // Bootstrap Orchestrator for conversation memory priming
+  // Controlled by MEMORY_BOOTSTRAP_ENABLED env var (default: false)
+  let bootstrapOrchestrator: IBootstrapOrchestrator | undefined
+  const bootstrapConfig = loadBootstrapConfig()
+
+  if (bootstrapConfig.enabled && !useStubs) {
+    // Create bootstrap dependencies
+    // L1 cache - Redis when available, otherwise in-memory
+    const bootstrapCache = process.env.REDIS_URL
+      ? new ConversationMemoryCache(
+          createRedisClient({ url: process.env.REDIS_URL }),
+          bootstrapConfig
+        )
+      : new InMemoryConversationMemoryCache(bootstrapConfig)
+
+    // Anthropic client for Haiku extraction/deduplication
+    const anthropicForBootstrap = process.env.ANTHROPIC_API_KEY
+      ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      : null
+
+    // Create bootstrap components
+    const memoryExtractor = new MemoryExtractor(anthropicForBootstrap, bootstrapConfig)
+    const deduplicator = new MemoryCacheDeduplicator(anthropicForBootstrap, bootstrapConfig)
+    const topicGenerator = new TopicGenerator(anthropicForBootstrap, bootstrapConfig)
+
+    // L2 persistence - for now using in-memory (TODO: PostgresMemoryCachePersistence)
+    const persistence = new InMemoryMemoryCachePersistence(bootstrapCache)
+
+    // Memory store for bootstrap - uses IMemoryStore interface
+    // Reuses existing Neo4j driver if available, otherwise in-memory
+    const bootstrapMemoryStore = process.env.NEO4J_URI
+      ? new Neo4jMemoryStore(createNeo4jDriver({
+          uri: process.env.NEO4J_URI,
+          user: process.env.NEO4J_USER || 'neo4j',
+          password: process.env.NEO4J_PASSWORD || '',
+        }), {
+          databasePerUser: process.env.NEO4J_DATABASE_PER_USER === 'true',
+          defaultDatabase: process.env.NEO4J_DATABASE || 'neo4j',
+        })
+      : new InMemoryMemoryStore()
+
+    bootstrapOrchestrator = new BootstrapOrchestrator(
+      {
+        cache: bootstrapCache,
+        extractor: memoryExtractor,
+        deduplicator,
+        topicGenerator,
+        persistence,
+        memoryStore: bootstrapMemoryStore,
+        vectorStore,
+        embeddingProvider: embedding ?? null,
+      },
+      bootstrapConfig
+    )
+
+    logger.info({
+      bootstrapStart: bootstrapConfig.bootstrapStart,
+      bootstrapEnd: bootstrapConfig.bootstrapEnd,
+      cacheLimit: bootstrapConfig.cacheLimit,
+      hasLLM: !!anthropicForBootstrap,
+      hasRedis: !!process.env.REDIS_URL,
+    }, 'Memory bootstrap enabled')
+
+    // Set up bootstrap orchestrator for memory tools (clearMemoryCache)
+    setBootstrapOrchestrator(bootstrapOrchestrator)
+  } else if (!bootstrapConfig.enabled) {
+    logger.info('Memory bootstrap disabled (MEMORY_BOOTSTRAP_ENABLED=false)')
+    // Use stub that does nothing
+    bootstrapOrchestrator = new StubBootstrapOrchestrator()
+  } else if (useStubs) {
+    logger.info('Memory bootstrap disabled (USE_STUBS=true)')
+    bootstrapOrchestrator = new StubBootstrapOrchestrator()
+  }
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -332,6 +420,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     entityExtractor,
     memoryContextBuilder,
     memoryToolAccess,
+    bootstrapOrchestrator,
   }
 
   // Create pipeline

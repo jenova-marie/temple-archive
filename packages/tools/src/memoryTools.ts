@@ -20,12 +20,18 @@ import type { IKnowledgeStore, Entity, TraceContext } from '@recoverysky/types'
 
 export type MemoryToolAccessLevel = 'off' | 'read' | 'write' | 'full'
 
+/** Type for bootstrap orchestrator interface (avoid circular import) */
+interface IBootstrapOrchestrator {
+  clearMemoryCache(conversationId: string, levels: ('L1' | 'L2' | 'L4')[]): Promise<void>
+}
+
 /**
  * Context providers for memory tools
  * Must be set before tools are used
  */
 let knowledgeStoreInstance: IKnowledgeStore | null = null
 let currentTraceContext: TraceContext | null = null
+let bootstrapOrchestratorInstance: IBootstrapOrchestrator | null = null
 
 /**
  * Set the knowledge store instance for memory tools
@@ -49,6 +55,14 @@ export function setMemoryToolTraceContext(ctx: TraceContext): void {
  */
 export function clearMemoryToolTraceContext(): void {
   currentTraceContext = null
+}
+
+/**
+ * Set the bootstrap orchestrator for memory cache tools
+ * Called once during container initialization
+ */
+export function setBootstrapOrchestrator(orchestrator: IBootstrapOrchestrator): void {
+  bootstrapOrchestratorInstance = orchestrator
 }
 
 /**
@@ -552,6 +566,58 @@ Different from logObservation in that this is for explicit relationship creation
   },
 })
 
+/**
+ * Clear memory cache for the current conversation
+ * Used for testing/debugging memory bootstrap system
+ */
+export const clearMemoryCache = tool({
+  description: `Clear the memory cache for a conversation. Use sparingly and only when:
+- Testing or debugging the memory system
+- The user explicitly requests to start fresh
+- Memory cache has become corrupted or stale
+
+Levels:
+- L1: Current session cache (Redis)
+- L2: Persisted conversation cache (PostgreSQL)
+- L4: Topic embeddings (Qdrant)`,
+  parameters: z.object({
+    conversationId: z.string().describe('The conversation ID to clear cache for'),
+    levels: z.array(z.enum(['L1', 'L2', 'L4']))
+      .min(1)
+      .describe('Which cache levels to clear'),
+    reason: z.string().describe('Why the cache is being cleared'),
+  }),
+  execute: async ({ conversationId, levels, reason }) => {
+    return withSpan('tool.clearMemoryCache', async () => {
+      const logger = getLogger().child({ tool: 'clearMemoryCache' })
+      logger.info({ conversationId, levels, reason }, 'Clearing memory cache')
+
+      try {
+        if (!bootstrapOrchestratorInstance) {
+          return {
+            success: false,
+            message: 'Memory bootstrap system not configured.',
+          }
+        }
+
+        await bootstrapOrchestratorInstance.clearMemoryCache(conversationId, levels)
+
+        logger.info({ conversationId, levels }, 'Memory cache cleared')
+
+        return {
+          success: true,
+          conversationId,
+          clearedLevels: levels,
+          message: `Cleared memory cache for ${conversationId}: ${levels.join(', ')}`,
+        }
+      } catch (error) {
+        logger.error({ error }, 'Clear memory cache failed')
+        return { success: false, message: 'Error clearing memory cache.' }
+      }
+    })
+  },
+})
+
 // ============================================================================
 // Tool Collections by Access Level
 // ============================================================================
@@ -573,6 +639,7 @@ export const fullMemoryTools = {
   updateEntity,
   deleteEntity,
   createRelationship,
+  clearMemoryCache,
 }
 
 /**

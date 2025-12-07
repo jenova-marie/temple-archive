@@ -28,6 +28,7 @@ export {
   updateEntity,
   deleteEntity,
   createRelationship,
+  clearMemoryCache,
   readOnlyMemoryTools,
   writeMemoryTools,
   fullMemoryTools,
@@ -36,5 +37,6 @@ export {
   setMemoryToolKnowledgeStore,
   setMemoryToolTraceContext,
   clearMemoryToolTraceContext,
+  setBootstrapOrchestrator,
   type MemoryToolAccessLevel,
 } from './memoryTools.js'
