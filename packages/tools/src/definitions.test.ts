@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { findMeetings, logMood, getCrisisResources, getResources, recoveryTools } from './definitions.js'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { findMeetings, getLiveMeetings, logMood, getCrisisResources, getResources, recoveryTools } from './definitions.js'
+import { resetMeetingClient } from './clients/meetingClient.js'
 
 // Mock observability
 vi.mock('@recoverysky/observability', () => ({
@@ -14,80 +15,270 @@ vi.mock('@recoverysky/observability', () => ({
   withSpan: (_name: string, fn: () => Promise<unknown>) => fn(),
 }))
 
+// Mock fetch for meeting API calls
+const mockFetch = vi.fn()
+global.fetch = mockFetch
+
 describe('tools/definitions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetMeetingClient()
+  })
+
+  afterEach(() => {
+    resetMeetingClient()
   })
 
   describe('findMeetings', () => {
     it('has correct description', () => {
       expect(findMeetings.description).toContain('AA')
       expect(findMeetings.description).toContain('NA')
-      expect(findMeetings.description).toContain('meeting')
+      expect(findMeetings.description).toContain('CMA')
+      expect(findMeetings.description).toContain('RD')
     })
 
-    it('returns AA meetings when type is aa', async () => {
-      const result = await findMeetings.execute({ type: 'aa' })
+    it('returns live meetings when when=now', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          timestamp: '2025-12-07T12:00:00Z',
+          count: 2,
+          liveCount: 2,
+          meetings: [
+            { id: '1', name: 'AA Meeting', fellowship: 'AA', url: 'https://zoom.us/j/123' },
+            { id: '2', name: 'NA Meeting', fellowship: 'NA', location: 'Community Center' },
+          ],
+        }),
+      })
+
+      const result = await findMeetings.execute({
+        fellowship: 'all',
+        when: 'now',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
 
       expect(result.success).toBe(true)
-      expect(result.meetings.every((m: { type: string }) => m.type === 'aa')).toBe(true)
+      expect(result.source).toBe('live')
+      expect(result.meetings).toHaveLength(2)
     })
 
-    it('returns NA meetings when type is na', async () => {
-      const result = await findMeetings.execute({ type: 'na' })
+    it('returns scheduled meetings when when=today', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          timezone: 'America/New_York',
+          range: { start: '2025-12-07T00:00:00Z', end: '2025-12-07T23:59:59Z' },
+          count: 3,
+          meetings: [
+            { id: '1', name: 'Morning AA', fellowship: 'AA', trex: { hour: 7, minute: 0, dow: 1 } },
+            { id: '2', name: 'Noon NA', fellowship: 'NA', trex: { hour: 12, minute: 0, dow: 1 } },
+            { id: '3', name: 'Evening CMA', fellowship: 'CMA', trex: { hour: 19, minute: 30, dow: 1 } },
+          ],
+        }),
+      })
+
+      const result = await findMeetings.execute({
+        fellowship: 'all',
+        when: 'today',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
 
       expect(result.success).toBe(true)
-      expect(result.meetings.every((m: { type: string }) => m.type === 'na')).toBe(true)
+      expect(result.source).toBe('schedule')
+      expect(result.meetings).toHaveLength(3)
     })
 
-    it('returns both AA and NA meetings when type is both', async () => {
-      const result = await findMeetings.execute({ type: 'both' })
+    it('filters by fellowship', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          count: 2,
+          liveCount: 2,
+          meetings: [
+            { id: '1', name: 'AA Meeting', fellowship: 'AA' },
+            { id: '2', name: 'NA Meeting', fellowship: 'NA' },
+          ],
+        }),
+      })
+
+      const result = await findMeetings.execute({
+        fellowship: 'aa',
+        when: 'now',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
 
       expect(result.success).toBe(true)
-      expect(result.meetings.length).toBeGreaterThan(0)
-      expect(result.meetings.some((m: { type: string }) => m.type === 'aa')).toBe(true)
-      expect(result.meetings.some((m: { type: string }) => m.type === 'na')).toBe(true)
+      expect(result.meetings).toHaveLength(1)
+      expect(result.meetings[0].fellowship).toBe('AA')
     })
 
-    it('uses provided location', async () => {
-      const result = await findMeetings.execute({ type: 'aa', location: 'Seattle, WA' })
+    it('filters by format (online)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          count: 2,
+          liveCount: 2,
+          meetings: [
+            { id: '1', name: 'Online AA', fellowship: 'AA', url: 'https://zoom.us/j/123' },
+            { id: '2', name: 'In-Person NA', fellowship: 'NA', location: 'Community Center' },
+          ],
+        }),
+      })
+
+      const result = await findMeetings.execute({
+        fellowship: 'all',
+        when: 'now',
+        format: 'online',
+        timezone: 'America/New_York',
+      })
 
       expect(result.success).toBe(true)
-      expect(result.meetings[0].location).toBe('Seattle, WA')
-    })
-
-    it('uses provided day', async () => {
-      const result = await findMeetings.execute({ type: 'aa', day: 'monday' })
-
-      expect(result.success).toBe(true)
-      expect(result.meetings[0].day).toBe('monday')
-    })
-
-    it('uses provided format', async () => {
-      const result = await findMeetings.execute({ type: 'aa', format: 'online' })
-
-      expect(result.success).toBe(true)
+      expect(result.meetings).toHaveLength(1)
       expect(result.meetings[0].format).toBe('online')
     })
 
-    it('includes meeting details', async () => {
-      const result = await findMeetings.execute({ type: 'both' })
+    it('handles API errors gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: () => Promise.resolve({ message: 'Database error' }),
+      })
 
-      const meeting = result.meetings[0]
-      expect(meeting.name).toBeDefined()
-      expect(meeting.type).toBeDefined()
-      expect(meeting.time).toBeDefined()
-      expect(meeting.day).toBeDefined()
-      expect(meeting.location).toBeDefined()
-      expect(meeting.format).toBeDefined()
-      expect(meeting.description).toBeDefined()
+      const result = await findMeetings.execute({
+        fellowship: 'all',
+        when: 'now',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.meetings).toHaveLength(0)
+      expect(result.error).toBeDefined()
+      expect(result.message).toContain('Unable to fetch')
     })
 
-    it('returns message with count', async () => {
-      const result = await findMeetings.execute({ type: 'aa' })
+    it('handles network errors gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
 
-      expect(result.message).toContain('Found')
+      const result = await findMeetings.execute({
+        fellowship: 'all',
+        when: 'now',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Network error')
+    })
+
+    it('formats meeting time correctly', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          count: 1,
+          liveCount: 1,
+          meetings: [
+            {
+              id: '1',
+              name: 'Evening AA',
+              fellowship: 'AA',
+              trex: { hour: 19, minute: 30, dow: 2 },
+            },
+          ],
+        }),
+      })
+
+      const result = await findMeetings.execute({
+        fellowship: 'all',
+        when: 'now',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
+
+      expect(result.meetings[0].time).toBe('7:30 PM')
+      expect(result.meetings[0].day).toBe('Tuesday')
+    })
+
+    it('returns appropriate message for empty results', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          count: 0,
+          liveCount: 0,
+          meetings: [],
+        }),
+      })
+
+      const result = await findMeetings.execute({
+        fellowship: 'aa',
+        when: 'now',
+        format: 'both',
+        timezone: 'America/New_York',
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.meetings).toHaveLength(0)
+      expect(result.message).toContain('No')
       expect(result.message).toContain('AA')
+    })
+  })
+
+  describe('getLiveMeetings', () => {
+    it('has correct description', () => {
+      expect(getLiveMeetings.description).toContain('RIGHT NOW')
+    })
+
+    it('returns live meetings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          timestamp: '2025-12-07T12:00:00Z',
+          count: 2,
+          liveCount: 2,
+          meetings: [
+            { id: '1', name: 'AA Meeting', fellowship: 'AA' },
+            { id: '2', name: 'NA Meeting', fellowship: 'NA' },
+          ],
+        }),
+      })
+
+      const result = await getLiveMeetings.execute({ fellowship: 'all' })
+
+      expect(result.success).toBe(true)
+      expect(result.meetings).toHaveLength(2)
+      expect(result.timestamp).toBeDefined()
+    })
+
+    it('filters by fellowship', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          count: 2,
+          liveCount: 2,
+          meetings: [
+            { id: '1', name: 'AA Meeting', fellowship: 'AA' },
+            { id: '2', name: 'NA Meeting', fellowship: 'NA' },
+          ],
+        }),
+      })
+
+      const result = await getLiveMeetings.execute({ fellowship: 'na' })
+
+      expect(result.meetings).toHaveLength(1)
+      expect(result.meetings[0].fellowship).toBe('NA')
+    })
+
+    it('handles errors gracefully', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'))
+
+      const result = await getLiveMeetings.execute({ fellowship: 'all' })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Connection refused')
     })
   })
 
@@ -293,13 +484,14 @@ describe('tools/definitions', () => {
   describe('recoveryTools', () => {
     it('exports all tools', () => {
       expect(recoveryTools.findMeetings).toBe(findMeetings)
+      expect(recoveryTools.getLiveMeetings).toBe(getLiveMeetings)
       expect(recoveryTools.logMood).toBe(logMood)
       expect(recoveryTools.getCrisisResources).toBe(getCrisisResources)
       expect(recoveryTools.getResources).toBe(getResources)
     })
 
-    it('has 4 tools', () => {
-      expect(Object.keys(recoveryTools)).toHaveLength(4)
+    it('has 5 tools', () => {
+      expect(Object.keys(recoveryTools)).toHaveLength(5)
     })
   })
 })

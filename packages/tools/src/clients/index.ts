@@ -1,13 +1,4 @@
 export {
-  findMeetings,
-  getLiveMeetings,
-  logMood,
-  getCrisisResources,
-  getResources,
-  recoveryTools,
-} from './definitions.js'
-
-export {
   MeetingClient,
   getMeetingClient,
   resetMeetingClient,
@@ -16,4 +7,4 @@ export {
   type ScheduleResponse,
   type Periodicity,
   type MeetingClientConfig,
-} from './clients/index.js'
+} from './meetingClient.js'
