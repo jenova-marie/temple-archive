@@ -28,6 +28,7 @@
     "@recoverysky/observability": "workspace:*",
     "@recoverysky/types": "workspace:*",
     "ioredis": "^5.8.2",
+    "nanoid": "^5.1.6",
     "neo4j-driver": "^6.0.1",
     "openai": "^6.10.0"
   },

@@ -46,6 +46,12 @@ export {
 // Store implementations
 export { RedisContextStore, type RedisContextStoreConfig } from './stores/index.js'
 export { QdrantVectorStore, type QdrantVectorStoreConfig } from './stores/index.js'
+
+// MCP-compatible Memory Store (new)
+export { Neo4jMemoryStore, type Neo4jMemoryStoreConfig } from './stores/Neo4jMemoryStore.js'
+export { InMemoryMemoryStore } from './stores/InMemoryMemoryStore.js'
+
+// Legacy Knowledge Store (deprecated - use Neo4jMemoryStore instead)
 export { Neo4jKnowledgeStore } from './stores/Neo4jKnowledgeStore.js'
 
 // Entity extraction
