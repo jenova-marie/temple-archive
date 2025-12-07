@@ -14,6 +14,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@recoverysky/types": "workspace:*",
     "@recoverysky/observability": "workspace:*",
     "@recoverysky/db": "workspace:*",
