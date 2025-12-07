@@ -81,6 +81,17 @@ export type {
   IEvaluator,
 } from './providers.js'
 
+// Diagnostics types
+export type {
+  TimingDiagnostics,
+  CrisisDiagnostics,
+  MemoryDiagnostics,
+  AgentDiagnostics,
+  SafetyDiagnostics,
+  EvaluationDiagnostics,
+  PipelineDiagnostics,
+} from './diagnostics.js'
+
 // Result types
 export type {
   Ok,

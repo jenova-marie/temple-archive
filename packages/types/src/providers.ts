@@ -81,6 +81,8 @@ export interface AgentResponse {
   model: string
   /** Stop reason */
   stopReason: 'end_turn' | 'max_tokens' | 'tool_use' | 'stop_sequence'
+  /** Number of agentic loop iterations (if using tools) */
+  stepsCount?: number
 }
 
 /**

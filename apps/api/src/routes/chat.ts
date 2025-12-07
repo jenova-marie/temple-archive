@@ -79,17 +79,22 @@ export function createChatRouter(pipeline: Pipeline): Router {
         return
       }
 
-      // Return response
+      // Return response with full diagnostics
       res.json({
         response: result.value.response,
         conversationId,
         messageId: result.value.messages.assistant.id,
         metrics: {
           totalDuration: result.value.metrics.totalDuration,
+          memoryDuration: result.value.metrics.memoryDuration,
+          agentDuration: result.value.metrics.agentDuration,
+          tokensUsed: result.value.metrics.tokensUsed,
           memorySource: result.value.metrics.memorySource,
         },
         crisisLevel: result.value.crisisLevel,
         emergencyTriggered: result.value.emergencyTriggered,
+        safetyViolations: result.value.safetyViolations,
+        diagnostics: result.value.diagnostics,
       })
     } catch (error) {
       logger.error({ error }, 'Unexpected error in chat endpoint')

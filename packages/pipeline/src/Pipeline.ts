@@ -25,6 +25,10 @@ import type {
   IEmbeddingProvider,
   CrisisCheckResult,
   ToolDefinition,
+  AgentResponse,
+  PipelineDiagnostics,
+  SafetyValidationResult,
+  EvaluationResult,
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
@@ -187,11 +191,15 @@ export class Pipeline {
           })
         }
 
-        // STAGE 4 & 5: Safety validation and evaluation (parallel)
-        const [safetyResult, _evaluationResult] = await Promise.all([
+        // STAGE 4 & 5: Safety validation and evaluation (parallel with timing)
+        const safetyStart = Date.now()
+        const [safetyResult, evaluationResult] = await Promise.all([
           this.deps.safety.validate(agentResult.value.content, ctx.memory!, ctx),
           this.deps.evaluator.evaluate(input.message, agentResult.value.content, ctx.memory!, ctx),
         ])
+        // Note: Combined timing for parallel operations
+        ctx.metrics.stageDurations.safety = Date.now() - safetyStart
+        ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart
 
         // Handle safety violations
         let finalContent = agentResult.value.content
@@ -235,6 +243,17 @@ export class Pipeline {
           'Pipeline processing completed'
         )
 
+        // Build diagnostics
+        const diagnostics = this.buildDiagnostics(
+          totalDuration,
+          ctx,
+          crisisResult.value,
+          memoryResult.ok ? memoryResult.value.source : 'NONE',
+          agentResult.value,
+          safetyResult.ok ? safetyResult.value : undefined,
+          evaluationResult.ok ? evaluationResult.value : undefined
+        )
+
         return ok({
           response: finalContent,
           messages: { user: userMessage, assistant: assistantMessage },
@@ -251,6 +270,7 @@ export class Pipeline {
           safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
           crisisLevel: crisisResult.value.level,
           emergencyTriggered: false,
+          diagnostics,
         })
       } catch (error) {
         logger.error({ error }, 'Unexpected pipeline error')
@@ -320,7 +340,7 @@ export class Pipeline {
   private async runAgentProcessing(
     input: PipelineInput,
     ctx: PipelineContext
-  ): Promise<Result<{ content: string; usage: { inputTokens: number; outputTokens: number } }, { kind: string; message: string }>> {
+  ): Promise<Result<AgentResponse, { kind: string; message: string }>> {
     const stageStart = Date.now()
 
     const systemPrompt = buildSystemPrompt(ctx.memory!, ctx.crisisCheck)
@@ -350,10 +370,8 @@ export class Pipeline {
     pipelineMetrics.tokensUsed.add(result.value.usage.inputTokens, { direction: 'input' })
     pipelineMetrics.tokensUsed.add(result.value.usage.outputTokens, { direction: 'output' })
 
-    return ok({
-      content: result.value.content,
-      usage: result.value.usage,
-    })
+    // Return full agent response for diagnostics
+    return ok(result.value)
   }
 
   /**
@@ -378,6 +396,81 @@ export class Pipeline {
     }
 
     return tools
+  }
+
+  /**
+   * Build comprehensive diagnostics from pipeline execution data
+   */
+  private buildDiagnostics(
+    totalDuration: number,
+    ctx: PipelineContext,
+    crisisCheck: CrisisCheckResult,
+    memorySource: string,
+    agentResponse: AgentResponse,
+    safetyResult?: SafetyValidationResult,
+    evaluationResult?: EvaluationResult
+  ): PipelineDiagnostics {
+    return {
+      timing: {
+        totalDuration,
+        crisisDuration: ctx.metrics.stageDurations.crisis || 0,
+        memoryDuration: ctx.metrics.stageDurations.memory || 0,
+        agentDuration: ctx.metrics.stageDurations.agent || 0,
+        persistDuration: ctx.metrics.stageDurations.persist || 0,
+        safetyDuration: ctx.metrics.stageDurations.safety,
+        evaluationDuration: ctx.metrics.stageDurations.evaluation,
+      },
+      crisis: {
+        level: crisisCheck.level,
+        emergencyTriggered: crisisCheck.triggerEmergency,
+        patterns: crisisCheck.patterns.map(p => ({
+          type: p.type,
+          confidence: p.confidence,
+          matchedText: p.matchedText,
+        })),
+        action: crisisCheck.action,
+        processingTimeMs: crisisCheck.processingTimeMs,
+      },
+      memory: {
+        sourceTier: memorySource,
+        cacheHits: ctx.metrics.cacheHits,
+        cacheMisses: ctx.metrics.cacheMisses,
+        messagesRetrieved: ctx.memory?.messages.length || 0,
+        userProfileLoaded: ctx.memory?.userProfile !== null,
+        previousSessionsCount: ctx.memory?.previousSessions.length || 0,
+        semanticMatchesCount: ctx.memory?.semanticMatches?.length || 0,
+        latencyMs: ctx.metrics.stageDurations.memory || 0,
+      },
+      agent: {
+        model: agentResponse.model,
+        inputTokens: agentResponse.usage.inputTokens,
+        outputTokens: agentResponse.usage.outputTokens,
+        toolCalls: agentResponse.toolCalls.map(tc => ({
+          name: tc.name,
+          arguments: tc.arguments,
+          result: tc.result,
+        })),
+        stopReason: agentResponse.stopReason,
+        stepsCount: agentResponse.stepsCount ?? 1,
+      },
+      safety: safetyResult ? {
+        passed: safetyResult.passed,
+        violations: safetyResult.violations.map(v => ({
+          type: v.type,
+          severity: v.severity,
+          description: v.description,
+        })),
+        processingTimeMs: safetyResult.processingTimeMs,
+      } : undefined,
+      evaluation: evaluationResult ? {
+        qualityScore: evaluationResult.qualityScore,
+        relevanceScore: evaluationResult.relevanceScore,
+        empathyScore: evaluationResult.empathyScore,
+        recoveryScore: evaluationResult.recoveryScore,
+        overallScore: evaluationResult.overallScore,
+        feedback: evaluationResult.feedback,
+      } : undefined,
+    }
   }
 
   private async persistMessages(

@@ -90,6 +90,8 @@ export interface PipelineInput {
   sessionMetadata?: Record<string, unknown>
 }
 
+import type { PipelineDiagnostics } from './diagnostics.js'
+
 /**
  * Result from pipeline processing
  */
@@ -109,6 +111,8 @@ export interface PipelineResult {
   crisisLevel: number
   /** Whether emergency response was triggered */
   emergencyTriggered: boolean
+  /** Full diagnostic information (for CLI/debugging) */
+  diagnostics?: PipelineDiagnostics
 }
 
 /**

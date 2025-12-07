@@ -106,6 +106,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@recoverysky/types':
+        specifier: workspace:*
+        version: link:../types
       chalk:
         specifier: ^5.3.0
         version: 5.6.2

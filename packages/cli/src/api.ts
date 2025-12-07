@@ -3,6 +3,7 @@
  */
 
 import { getApiUrl, getUserId, getConversationId } from './config.js'
+import type { PipelineDiagnostics, SafetyViolation } from '@recoverysky/types'
 
 export interface ChatRequest {
   message: string
@@ -13,6 +14,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   response: string
   conversationId: string
+  messageId: string
   crisisLevel: number
   emergencyTriggered: boolean
   metrics: {
@@ -25,6 +27,8 @@ export interface ChatResponse {
     }
     memorySource: string
   }
+  safetyViolations?: SafetyViolation[]
+  diagnostics?: PipelineDiagnostics
 }
 
 export interface HealthResponse {
