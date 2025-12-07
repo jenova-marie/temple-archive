@@ -14,8 +14,25 @@ export {
   RedisDefaults,
 } from './redis/index.js'
 
+// Qdrant client and utilities
+export {
+  createQdrantClient,
+  getQdrantClient,
+  closeQdrantClient,
+  checkQdrantHealth,
+  type QdrantClientConfig,
+  type QdrantClient,
+  COLLECTION_NAME,
+  VECTOR_SIZE,
+  DISTANCE_METRIC,
+  ensureCollection,
+  messageIdToPointId,
+  type MessagePayload,
+} from './qdrant/index.js'
+
 // Store implementations
 export { RedisContextStore, type RedisContextStoreConfig } from './stores/index.js'
+export { QdrantVectorStore, type QdrantVectorStoreConfig } from './stores/index.js'
 
 // Embedding providers
 export { OpenAIEmbeddingProvider, type OpenAIEmbeddingConfig } from './providers/index.js'

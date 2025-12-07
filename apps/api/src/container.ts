@@ -5,7 +5,7 @@
  * based on configuration.
  */
 
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -16,6 +16,8 @@ import {
   RedisContextStore,
   createRedisClient,
   OpenAIEmbeddingProvider,
+  QdrantVectorStore,
+  createQdrantClient,
 } from '@recoverysky/memory'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler } from '@recoverysky/crisis'
@@ -51,7 +53,17 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
   // Create stores
   const knowledgeStore = new InMemoryKnowledgeStore()
-  const vectorStore = new InMemoryVectorStore()
+
+  // L4 Vector Store - Qdrant when QDRANT_URL is set, otherwise in-memory
+  let vectorStore: IVectorStore
+  if (!useStubs && process.env.QDRANT_URL) {
+    logger.info('Using QdrantVectorStore (L4)')
+    const qdrant = createQdrantClient({ url: process.env.QDRANT_URL })
+    vectorStore = new QdrantVectorStore(qdrant)
+  } else {
+    logger.info('Using InMemoryVectorStore (L4 stub)')
+    vectorStore = new InMemoryVectorStore()
+  }
 
   // L1 Context Store - Redis when REDIS_URL is set, otherwise in-memory
   let contextStore: IContextStore

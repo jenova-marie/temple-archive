@@ -1,0 +1,464 @@
+/**
+ * Qdrant-backed L4 Vector Store
+ *
+ * Provides semantic search across all conversation history using Qdrant.
+ * Implements the IVectorStore interface for the memory orchestrator.
+ */
+
+import type { QdrantClient } from '@qdrant/js-client-rest'
+import type {
+  IVectorStore,
+  Message,
+  SemanticMatch,
+  VectorSearchOptions,
+  StoreError,
+  TraceContext,
+  Result,
+} from '@recoverysky/types'
+import { ok, err } from '@recoverysky/types'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+import {
+  COLLECTION_NAME,
+  VECTOR_SIZE,
+  ensureCollection,
+  messageIdToPointId,
+  type MessagePayload,
+} from '../qdrant/schema.js'
+
+export interface QdrantVectorStoreConfig {
+  /** Collection name (default: 'messages') */
+  collectionName?: string
+  /** Vector dimensions (default: 1536) */
+  vectorSize?: number
+  /** Minimum similarity score (default: 0.7) */
+  scoreThreshold?: number
+  /** Batch size for bulk operations (default: 100) */
+  batchSize?: number
+}
+
+/**
+ * Map Qdrant errors to StoreError types
+ */
+function mapQdrantError(error: unknown): StoreError {
+  const e = error as Error & { status?: number; code?: string }
+  const message = e?.message ?? 'Unknown Qdrant error'
+  const status = e?.status
+  const code = e?.code
+
+  // Connection errors
+  if (
+    code === 'ECONNREFUSED' ||
+    code === 'ENOTFOUND' ||
+    message.includes('ECONNRESET') ||
+    message.includes('fetch failed')
+  ) {
+    return {
+      kind: 'ConnectionError',
+      message: `Qdrant connection failed: ${message}`,
+      context: { code, status },
+      cause: error,
+    }
+  }
+
+  // Timeout errors
+  if (code === 'ETIMEDOUT' || message.includes('timeout') || message.includes('ETIMEDOUT')) {
+    return {
+      kind: 'TimeoutError',
+      message: `Qdrant operation timed out: ${message}`,
+      context: { code, status },
+      cause: error,
+    }
+  }
+
+  // Validation errors (400)
+  if (status === 400) {
+    return {
+      kind: 'ValidationError',
+      message: `Qdrant validation error: ${message}`,
+      context: { status },
+      cause: error,
+    }
+  }
+
+  // Not found (404)
+  if (status === 404) {
+    return {
+      kind: 'NotFoundError',
+      message: `Qdrant resource not found: ${message}`,
+      context: { status },
+      cause: error,
+    }
+  }
+
+  return {
+    kind: 'UnexpectedError',
+    message: `Qdrant error: ${message}`,
+    context: { code, status },
+    cause: error,
+  }
+}
+
+export class QdrantVectorStore implements IVectorStore {
+  private readonly collectionName: string
+  private readonly vectorSize: number
+  private readonly scoreThreshold: number
+  private readonly batchSize: number
+  private collectionInitialized = false
+
+  constructor(
+    private readonly client: QdrantClient,
+    config: QdrantVectorStoreConfig = {}
+  ) {
+    this.collectionName = config.collectionName ?? COLLECTION_NAME
+    this.vectorSize = config.vectorSize ?? VECTOR_SIZE
+    this.scoreThreshold = config.scoreThreshold ?? 0.7
+    this.batchSize = config.batchSize ?? 100
+  }
+
+  /**
+   * Ensure collection exists before operations
+   */
+  private async ensureCollectionExists(): Promise<void> {
+    if (this.collectionInitialized) return
+
+    await ensureCollection(this.client, this.collectionName, this.vectorSize)
+    this.collectionInitialized = true
+  }
+
+  /**
+   * Index a single message with its embedding
+   */
+  async indexMessage(
+    message: Message,
+    embedding: number[],
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('QdrantVectorStore.indexMessage', async () => {
+      const logger = getLogger().child({
+        messageId: message.id,
+        conversationId: message.conversationId,
+        requestId: ctx.requestId,
+      })
+
+      try {
+        await this.ensureCollectionExists()
+
+        const pointId = messageIdToPointId(message.id)
+        const payload = {
+          userId: message.userId,
+          conversationId: message.conversationId,
+          messageId: message.id,
+          role: message.role,
+          content: message.content,
+          timestamp: message.timestamp,
+          crisisLevel: message.metadata?.crisisLevel,
+          entities: message.metadata?.entities,
+          topics: message.metadata?.topics,
+        } as Record<string, unknown>
+
+        await this.client.upsert(this.collectionName, {
+          wait: true,
+          points: [
+            {
+              id: pointId,
+              vector: embedding,
+              payload,
+            },
+          ],
+        })
+
+        logger.debug('Message indexed in Qdrant L4')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to index message in Qdrant')
+        pipelineMetrics.errors.add(1, { error_kind: 'qdrant_index' })
+        return err(mapQdrantError(error))
+      }
+    })
+  }
+
+  /**
+   * Batch index multiple messages with their embeddings
+   */
+  async batchIndex(
+    messages: Message[],
+    embeddings: number[][],
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('QdrantVectorStore.batchIndex', async () => {
+      const logger = getLogger().child({
+        count: messages.length,
+        requestId: ctx.requestId,
+      })
+
+      if (messages.length === 0) {
+        logger.debug('No messages to batch index')
+        return ok(undefined)
+      }
+
+      if (messages.length !== embeddings.length) {
+        return err({
+          kind: 'ValidationError',
+          message: 'Messages and embeddings arrays must have the same length',
+          context: { messagesCount: messages.length, embeddingsCount: embeddings.length },
+        })
+      }
+
+      try {
+        await this.ensureCollectionExists()
+
+        // Process in batches
+        for (let i = 0; i < messages.length; i += this.batchSize) {
+          const batchMessages = messages.slice(i, i + this.batchSize)
+          const batchEmbeddings = embeddings.slice(i, i + this.batchSize)
+
+          const points = batchMessages.map((message, idx) => {
+            const payload = {
+              userId: message.userId,
+              conversationId: message.conversationId,
+              messageId: message.id,
+              role: message.role,
+              content: message.content,
+              timestamp: message.timestamp,
+              crisisLevel: message.metadata?.crisisLevel,
+              entities: message.metadata?.entities,
+              topics: message.metadata?.topics,
+            } as Record<string, unknown>
+
+            return {
+              id: messageIdToPointId(message.id),
+              vector: batchEmbeddings[idx],
+              payload,
+            }
+          })
+
+          await this.client.upsert(this.collectionName, {
+            wait: true,
+            points,
+          })
+
+          logger.debug(
+            { batchStart: i, batchEnd: i + batchMessages.length, total: messages.length },
+            'Batch indexed in Qdrant'
+          )
+        }
+
+        logger.info({ count: messages.length }, 'All messages batch indexed in Qdrant L4')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to batch index in Qdrant')
+        pipelineMetrics.errors.add(1, { error_kind: 'qdrant_batch_index' })
+        return err(mapQdrantError(error))
+      }
+    })
+  }
+
+  /**
+   * Search for semantically similar messages
+   */
+  async search(
+    queryEmbedding: number[],
+    options: VectorSearchOptions,
+    ctx: TraceContext
+  ): Promise<Result<SemanticMatch[], StoreError>> {
+    return withSpan('QdrantVectorStore.search', async () => {
+      const logger = getLogger().child({
+        requestId: ctx.requestId,
+        userId: options.userId,
+        conversationId: options.conversationId,
+      })
+
+      const {
+        userId,
+        conversationId,
+        daysBack = 90,
+        excludeCrisisLevels = [],
+        requiredTopics = [],
+        limit = 20,
+        scoreThreshold = this.scoreThreshold,
+      } = options
+
+      try {
+        await this.ensureCollectionExists()
+
+        // Build filter conditions
+        const mustConditions: Array<Record<string, unknown>> = []
+        const mustNotConditions: Array<Record<string, unknown>> = []
+
+        // Filter by userId (required for user-scoped searches)
+        if (userId) {
+          mustConditions.push({
+            key: 'userId',
+            match: { value: userId },
+          })
+        }
+
+        // Filter by conversationId (optional)
+        if (conversationId) {
+          mustConditions.push({
+            key: 'conversationId',
+            match: { value: conversationId },
+          })
+        }
+
+        // Filter by timestamp (daysBack)
+        const cutoffTimestamp = Date.now() - daysBack * 24 * 60 * 60 * 1000
+        mustConditions.push({
+          key: 'timestamp',
+          range: { gte: cutoffTimestamp },
+        })
+
+        // Exclude crisis levels
+        for (const level of excludeCrisisLevels) {
+          mustNotConditions.push({
+            key: 'crisisLevel',
+            match: { value: level },
+          })
+        }
+
+        // Required topics (any match)
+        if (requiredTopics.length > 0) {
+          mustConditions.push({
+            key: 'topics',
+            match: { any: requiredTopics },
+          })
+        }
+
+        // Build the filter object
+        const filter: Record<string, unknown> = {}
+        if (mustConditions.length > 0) {
+          filter.must = mustConditions
+        }
+        if (mustNotConditions.length > 0) {
+          filter.must_not = mustNotConditions
+        }
+
+        const searchResult = await this.client.search(this.collectionName, {
+          vector: queryEmbedding,
+          filter: Object.keys(filter).length > 0 ? filter : undefined,
+          limit,
+          score_threshold: scoreThreshold,
+          with_payload: true,
+        })
+
+        const results: SemanticMatch[] = searchResult.map((point) => {
+          const payload = point.payload as unknown as MessagePayload
+          return {
+            id: payload.messageId,
+            score: point.score,
+            content: payload.content,
+            metadata: {
+              conversationId: payload.conversationId,
+              timestamp: payload.timestamp,
+              role: payload.role,
+            },
+          }
+        })
+
+        logger.debug({ count: results.length }, 'Qdrant L4 search completed')
+        pipelineMetrics.memoryCacheHits.add(results.length > 0 ? 1 : 0, { tier: 'L4' })
+
+        return ok(results)
+      } catch (error) {
+        logger.error({ error }, 'Qdrant search failed')
+        pipelineMetrics.errors.add(1, { error_kind: 'qdrant_search' })
+        return err(mapQdrantError(error))
+      }
+    })
+  }
+
+  /**
+   * Prune vectors older than specified days
+   */
+  async prune(olderThanDays: number, ctx: TraceContext): Promise<Result<number, StoreError>> {
+    return withSpan('QdrantVectorStore.prune', async () => {
+      const logger = getLogger().child({
+        olderThanDays,
+        requestId: ctx.requestId,
+      })
+
+      try {
+        await this.ensureCollectionExists()
+
+        const cutoffTimestamp = Date.now() - olderThanDays * 24 * 60 * 60 * 1000
+
+        // Use scroll to find points to delete
+        let deletedCount = 0
+        let offset: string | number | undefined = undefined
+        const pointIdsToDelete: string[] = []
+
+        // Scroll through all points matching the timestamp filter
+        do {
+          const scrollResult = await this.client.scroll(this.collectionName, {
+            filter: {
+              must: [
+                {
+                  key: 'timestamp',
+                  range: { lt: cutoffTimestamp },
+                },
+              ],
+            },
+            limit: this.batchSize,
+            offset,
+            with_payload: false,
+            with_vector: false,
+          })
+
+          for (const point of scrollResult.points) {
+            pointIdsToDelete.push(point.id as string)
+          }
+
+          // next_page_offset can be string, number, or null/undefined
+          const nextOffset = scrollResult.next_page_offset
+          offset = typeof nextOffset === 'string' || typeof nextOffset === 'number'
+            ? nextOffset
+            : undefined
+        } while (offset !== undefined)
+
+        // Delete points in batches
+        if (pointIdsToDelete.length > 0) {
+          for (let i = 0; i < pointIdsToDelete.length; i += this.batchSize) {
+            const batch = pointIdsToDelete.slice(i, i + this.batchSize)
+            await this.client.delete(this.collectionName, {
+              wait: true,
+              points: batch,
+            })
+            deletedCount += batch.length
+          }
+        }
+
+        logger.info({ deleted: deletedCount }, 'Qdrant L4 pruning completed')
+        return ok(deletedCount)
+      } catch (error) {
+        logger.error({ error }, 'Qdrant pruning failed')
+        pipelineMetrics.errors.add(1, { error_kind: 'qdrant_prune' })
+        return err(mapQdrantError(error))
+      }
+    })
+  }
+
+  /**
+   * Get point count in collection (for monitoring)
+   */
+  async getPointCount(): Promise<number> {
+    try {
+      await this.ensureCollectionExists()
+      const info = await this.client.getCollection(this.collectionName)
+      return info.points_count ?? 0
+    } catch {
+      return 0
+    }
+  }
+
+  /**
+   * Check if collection exists
+   */
+  async collectionExists(): Promise<boolean> {
+    try {
+      const collections = await this.client.getCollections()
+      return collections.collections.some((c) => c.name === this.collectionName)
+    } catch {
+      return false
+    }
+  }
+}
