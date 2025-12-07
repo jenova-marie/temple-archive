@@ -38,6 +38,7 @@ import { createChatRouter } from "./routes/chat.js";
 import { createHealthRouter } from "./routes/health.js";
 import { tracingMiddleware } from "./middleware/tracing.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { getAuthMiddleware } from "./middleware/auth.js";
 
 // Initialize observability
 initializeObservability();
@@ -75,9 +76,20 @@ app.use(express.json({ limit: "1mb" }));
 // Tracing middleware
 app.use(tracingMiddleware);
 
+// Auth middleware (optional - only enabled if ZITADEL_ISSUER is set)
+const auth = getAuthMiddleware();
+
 // Routes
 app.use("/health", createHealthRouter());
-app.use("/api/chat", createChatRouter(container.pipeline));
+
+// Chat API - requires authentication if Zitadel is configured
+if (auth) {
+  app.use("/api/chat", auth.required, createChatRouter(container.pipeline));
+  logger.info("Zitadel JWT authentication enabled for /api/chat");
+} else {
+  app.use("/api/chat", createChatRouter(container.pipeline));
+  logger.warn("No authentication configured - API is unprotected");
+}
 
 // Error handling
 app.use(notFoundHandler);
@@ -126,6 +138,11 @@ const server = app.listen(port, () => {
       : "[NOT SET]",
     CRISIS_THRESHOLD_HIGH: process.env.CRISIS_THRESHOLD_HIGH || "7",
     CRISIS_THRESHOLD_CRITICAL: process.env.CRISIS_THRESHOLD_CRITICAL || "9",
+
+    // Authentication (Zitadel)
+    ZITADEL_ISSUER: process.env.ZITADEL_ISSUER || "[NOT SET]",
+    ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE || process.env.ZITADEL_CLIENT_ID || "[NOT SET]",
+    AUTH_ENABLED: auth ? "true" : "false",
   };
 
   logger.info(config, "RecoverySky Agent API started");

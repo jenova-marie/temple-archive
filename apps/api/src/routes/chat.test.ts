@@ -109,7 +109,7 @@ describe('chat routes', () => {
       expect(mockRes.status).toHaveBeenCalledWith(400)
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Bad Request',
-        message: 'userId is required and must be a string',
+        message: 'userId is required (from JWT or request body)',
       })
     })
 

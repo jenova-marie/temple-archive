@@ -14,13 +14,16 @@ export function createChatRouter(pipeline: Pipeline): Router {
    * POST /api/chat
    *
    * Process a chat message through the pipeline
+   *
+   * When auth is enabled (ZITADEL_ISSUER set), userId is extracted from JWT.
+   * When auth is disabled, userId must be provided in request body.
    */
   router.post('/', async (req: Request, res: Response) => {
     const logger = getLogger().child({ route: 'POST /api/chat' })
 
     try {
       // Validate request body
-      const { message, conversationId, userId } = req.body
+      const { message, conversationId, userId: bodyUserId } = req.body
 
       if (!message || typeof message !== 'string') {
         res.status(400).json({
@@ -38,10 +41,13 @@ export function createChatRouter(pipeline: Pipeline): Router {
         return
       }
 
+      // Get userId: prefer JWT user, fall back to body (when auth disabled)
+      const userId = req.user?.id || bodyUserId
+
       if (!userId || typeof userId !== 'string') {
         res.status(400).json({
           error: 'Bad Request',
-          message: 'userId is required and must be a string',
+          message: 'userId is required (from JWT or request body)',
         })
         return
       }
