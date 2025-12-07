@@ -23,6 +23,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@qdrant/js-client-rest": "^1.16.2",
     "@recoverysky/observability": "workspace:*",
     "@recoverysky/types": "workspace:*",
     "ioredis": "^5.8.2",
