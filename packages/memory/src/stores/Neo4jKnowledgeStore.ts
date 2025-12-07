@@ -3,6 +3,37 @@
  *
  * Implements IKnowledgeStore using Neo4j graph database for
  * entity storage and relationship tracking.
+ *
+ * ## Neo4j Version Compatibility
+ *
+ * This implementation uses standard Cypher without APOC dependencies.
+ *
+ * In Neo4j 5.x, the APOC plugin was restructured into two editions:
+ * - **APOC Core**: Included by default in Neo4j installation/Docker images
+ * - **APOC Extended**: Must be manually installed (contains external dependencies)
+ *
+ * We intentionally avoid APOC to ensure compatibility across all Neo4j deployments:
+ * - Neo4j Community Edition
+ * - Neo4j Enterprise Edition
+ * - Neo4j Aura (cloud)
+ * - Docker deployments without plugin configuration
+ *
+ * ## Properties Storage
+ *
+ * Entity properties are stored as JSON strings rather than native Neo4j maps.
+ * This simplifies the implementation and avoids APOC dependencies like
+ * `apoc.map.merge()` for property merging.
+ *
+ * Trade-off: On entity update, properties are fully replaced rather than merged.
+ * This is acceptable because:
+ * 1. EntityExtractor provides complete property objects on each extraction
+ * 2. Important fields (name, type, timestamps) are stored as node properties
+ * 3. The `properties` field contains supplementary metadata only
+ *
+ * If property merging becomes necessary, options include:
+ * - Install APOC Core and use `apoc.map.merge()`
+ * - Store properties as native Neo4j map and use Cypher map operations
+ * - Perform merge logic in TypeScript before upserting
  */
 
 import type { Driver, Session } from 'neo4j-driver'
@@ -28,6 +59,17 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
   /**
    * Create or update an entity in the knowledge graph
+   *
+   * Uses MERGE to upsert: creates new entity or updates existing one.
+   *
+   * On update (ON MATCH):
+   * - `lastMentioned` is updated to track recency
+   * - `properties` is fully replaced (not merged)
+   *
+   * Note: We intentionally replace properties rather than merge them to avoid
+   * APOC plugin dependency (`apoc.map.merge`). Since EntityExtractor provides
+   * complete property objects on each extraction, this is the correct behavior.
+   * See file header for detailed rationale.
    */
   async upsertEntity(entity: Entity, ctx: TraceContext): Promise<Result<void, StoreError>> {
     return withSpan('Neo4jKnowledgeStore.upsertEntity', async () => {
@@ -41,6 +83,8 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
       const session = this.getSession()
 
       try {
+        // Standard Cypher MERGE - no APOC dependencies
+        // Properties stored as JSON string for simplicity
         await session.run(
           `
           MERGE (e:Entity {entityId: $entityId})
@@ -53,10 +97,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
             e.properties = $properties
           ON MATCH SET
             e.lastMentioned = $lastMentioned,
-            e.properties = CASE
-              WHEN e.properties IS NULL THEN $properties
-              ELSE apoc.map.merge(e.properties, $properties)
-            END
+            e.properties = $properties
           `,
           {
             entityId: entity.entityId,
