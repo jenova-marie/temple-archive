@@ -1,0 +1,143 @@
+name: Build & Push Docker Image to AWS ECR
+on:
+  push:
+  workflow_dispatch: # Allows manual triggering
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read
+env:
+  ENV: ${{ github.ref_name }}
+  AWS_REGION: ${{ github.ref_name == 'dev' && 'us-east-2' || github.ref_name == 'staging' && 'us-west-2' || github.ref_name == 'prod' && 'us-east-1' || 'us-east-2' }}
+jobs:
+  docker-build-and-push:
+    runs-on: bob-builder # Runs directly on host
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set environment from branch
+        run: |
+          # Branch name is directly available from github.ref_name
+          BRANCH="${{ github.ref_name }}"
+          echo "ENV=$BRANCH" >> $GITHUB_ENV
+
+          # Set AWS region based on branch
+          case "$BRANCH" in
+            dev)     echo "AWS_REGION=us-east-2" >> $GITHUB_ENV ;;
+            staging) echo "AWS_REGION=us-west-2" >> $GITHUB_ENV ;;
+            prod)    echo "AWS_REGION=us-east-1" >> $GITHUB_ENV ;;
+          esac
+
+          echo "Branch: $BRANCH"
+
+      - name: Upload opt/ to rsync.net
+        run: |
+          set -euxo pipefail
+
+          # Start ssh-agent and load key
+          eval $(ssh-agent -s)
+          echo "${{ secrets.RSYNC_SSH_PRIVATE_KEY }}" | ssh-add -
+          ssh-add -l
+
+          # Setup known_hosts
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan ${{ secrets.RSYNC_HOST }} >> ~/.ssh/known_hosts
+
+          # Rsync upload
+          rsync -avz --times \
+            --exclude='._*' \
+            --exclude='.DS_Store' \
+            --exclude='__MACOSX' \
+            --mkpath \
+            opt/ \
+            ${{ secrets.RSYNC_USER }}@${{ secrets.RSYNC_HOST }}:recoverysky/containers/${{ env.ENV }}/${{ github.event.repository.name }}/
+
+          # Cleanup
+          eval $(ssh-agent -k)
+
+      # OIDC might not work in Forgejo - consider using access keys instead
+      - name: Configure AWS Credentials via OIDC
+        uses: https://github.com/aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup pnpm
+        uses: https://github.com/pnpm/action-setup@v2
+        with:
+          version: 10.11.0
+
+      - name: Setup Node.js
+        uses: https://github.com/actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Create .npmrc in project directory
+        run: |
+          cat > .npmrc << 'EOF'
+          strict-ssl=false
+          //git.rso/api/packages/trex/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
+          //git.rso/api/packages/jenova-marie/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
+          //git.rso/api/packages/recoverysky-org/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
+          @dt70s:registry=https://git.rso/api/packages/dt70s/npm/
+          @recoverysky-org:registry=https://git.rso/api/packages/recoverysky-org/npm/
+          @jenova-marie:registry=https://git.rso/api/packages/jenova-marie/npm/
+          @trex-ts:registry=https://git.rso/api/packages/trex/npm/
+          EOF
+          sed -i 's/^[[:space:]]*//' .npmrc
+          echo "=== Generated .npmrc ==="
+          cat .npmrc
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build source
+        run: pnpm build
+
+      - name: Run unit tests with coverage
+        run: CI=true pnpm test
+
+      # Store coverage as artifact in Forgejo
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v3
+        env:
+          NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+      - name: Extract metadata
+        id: meta
+        uses: https://github.com/docker/metadata-action@v5
+        with:
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          tags: |
+            type=raw,value=${{ env.ENV }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: https://github.com/aws-actions/amazon-ecr-login@v2
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Build and Push Docker Image
+        uses: https://github.com/docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          secret-files: |
+            npmrc=./.npmrc
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}:cache,mode=max
+
+      - name: Deploy to AWS Service (Optional)
+        run: |
+          echo "Trigger deployment here if needed"
