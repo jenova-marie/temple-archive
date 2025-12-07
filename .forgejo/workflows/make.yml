@@ -129,14 +129,11 @@ jobs:
         uses: https://github.com/docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           secret-files: |
             npmrc=./.npmrc
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}:cache,mode=max
 
       - name: Deploy to AWS Service (Optional)
         run: |
