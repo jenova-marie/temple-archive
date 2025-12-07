@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock chalk to return strings
 vi.mock('chalk', () => ({
@@ -45,7 +45,12 @@ const mockConsoleError = vi.fn()
 const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
 
 // Import after mocks
-import { chatCommand, displayDiagnostics, type ChatOptions, type DiagnosticsFlags } from './chat.js'
+import { chatCommand, displayDiagnostics } from './chat.js'
+import type { ChatOptions, DiagnosticsFlags } from './chat.js'
+
+// Ensure types are used (prevents TS6133)
+const _typeCheck: { opt: ChatOptions; flags: DiagnosticsFlags } | null = null
+void _typeCheck
 import { sendMessage } from '../api.js'
 import type { ChatResponse } from '../api.js'
 
