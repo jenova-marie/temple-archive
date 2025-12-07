@@ -11,15 +11,17 @@ vi.mock('@recoverysky/observability', () => ({
       warn: vi.fn(),
       error: vi.fn(),
     }),
+    info: vi.fn(),
   }),
   withSpan: vi.fn().mockImplementation((_name, fn) => fn()),
 }))
 
-const createTraceContext = (): TraceContext => ({
+const createTraceContext = (userId?: string): TraceContext => ({
   requestId: `req_${Date.now()}`,
   spanId: 'span-123',
   traceId: 'trace-123',
   startTime: Date.now(),
+  userId,
 })
 
 // Create mock session
@@ -45,6 +47,70 @@ describe('Neo4jKnowledgeStore', () => {
     vi.clearAllMocks()
     mockDriver = createMockDriver()
     store = new Neo4jKnowledgeStore(mockDriver as unknown as import('neo4j-driver').Driver)
+  })
+
+  describe('database-per-user mode', () => {
+    it('should use default database when databasePerUser is false', async () => {
+      const store = new Neo4jKnowledgeStore(
+        mockDriver as unknown as import('neo4j-driver').Driver,
+        { databasePerUser: false, defaultDatabase: 'mydb' }
+      )
+      mockDriver._mockSession.run.mockResolvedValue({ records: [] })
+
+      await store.searchEntities('test', createTraceContext('user-123'))
+
+      expect(mockDriver.session).toHaveBeenCalledWith({ database: 'mydb' })
+    })
+
+    it('should use userId as database name when databasePerUser is true', async () => {
+      const store = new Neo4jKnowledgeStore(
+        mockDriver as unknown as import('neo4j-driver').Driver,
+        { databasePerUser: true }
+      )
+      mockDriver._mockSession.run.mockResolvedValue({ records: [] })
+
+      await store.searchEntities('test', createTraceContext('user-123'))
+
+      expect(mockDriver.session).toHaveBeenCalledWith({ database: 'user-123' })
+    })
+
+    it('should sanitize userId for database name', async () => {
+      const store = new Neo4jKnowledgeStore(
+        mockDriver as unknown as import('neo4j-driver').Driver,
+        { databasePerUser: true }
+      )
+      mockDriver._mockSession.run.mockResolvedValue({ records: [] })
+
+      // userId with uppercase and special chars
+      await store.searchEntities('test', createTraceContext('User@123!ABC'))
+
+      // Should be sanitized to lowercase with underscores
+      expect(mockDriver.session).toHaveBeenCalledWith({ database: 'user_123_abc' })
+    })
+
+    it('should prefix numeric userId with u', async () => {
+      const store = new Neo4jKnowledgeStore(
+        mockDriver as unknown as import('neo4j-driver').Driver,
+        { databasePerUser: true }
+      )
+      mockDriver._mockSession.run.mockResolvedValue({ records: [] })
+
+      await store.searchEntities('test', createTraceContext('12345'))
+
+      expect(mockDriver.session).toHaveBeenCalledWith({ database: 'u12345' })
+    })
+
+    it('should fall back to default database when userId is missing', async () => {
+      const store = new Neo4jKnowledgeStore(
+        mockDriver as unknown as import('neo4j-driver').Driver,
+        { databasePerUser: true, defaultDatabase: 'fallback' }
+      )
+      mockDriver._mockSession.run.mockResolvedValue({ records: [] })
+
+      await store.searchEntities('test', createTraceContext()) // no userId
+
+      expect(mockDriver.session).toHaveBeenCalledWith({ database: 'fallback' })
+    })
   })
 
   describe('upsertEntity', () => {

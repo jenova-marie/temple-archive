@@ -47,14 +47,77 @@ import type {
 import { ok, err } from '@recoverysky/types'
 import { getLogger, withSpan } from '@recoverysky/observability'
 
+export interface Neo4jKnowledgeStoreConfig {
+  /**
+   * Enable database-per-user mode.
+   * When true, each user's data is stored in a separate database named by userId.
+   * Requires Neo4j Enterprise, Aura, or Dozer (multi-tenant Neo4j).
+   * Default: false (uses default database)
+   */
+  databasePerUser?: boolean
+  /**
+   * Default database name when databasePerUser is false.
+   * Default: 'neo4j' (Neo4j default)
+   */
+  defaultDatabase?: string
+}
+
 export class Neo4jKnowledgeStore implements IKnowledgeStore {
-  constructor(private readonly driver: Driver) {}
+  private readonly config: Neo4jKnowledgeStoreConfig
+
+  constructor(
+    private readonly driver: Driver,
+    config?: Neo4jKnowledgeStoreConfig
+  ) {
+    this.config = {
+      databasePerUser: false,
+      defaultDatabase: 'neo4j',
+      ...config,
+    }
+
+    const logger = getLogger().child({ component: 'Neo4jKnowledgeStore' })
+    if (this.config.databasePerUser) {
+      logger.info('Neo4j database-per-user mode enabled')
+    } else {
+      logger.info({ database: this.config.defaultDatabase }, 'Neo4j using shared database')
+    }
+  }
 
   /**
-   * Create a session for a query
+   * Create a session for a query.
+   * In database-per-user mode, uses userId as the database name.
+   * Dozer/Neo4j Enterprise will auto-create the database if it doesn't exist.
    */
-  private getSession(): Session {
-    return this.driver.session()
+  private getSession(ctx: TraceContext): Session {
+    if (this.config.databasePerUser && ctx.userId) {
+      // Sanitize userId for use as database name
+      // Neo4j database names: lowercase alphanumeric, dots, dashes, underscores
+      const databaseName = this.sanitizeDatabaseName(ctx.userId)
+      return this.driver.session({ database: databaseName })
+    }
+    return this.driver.session({ database: this.config.defaultDatabase })
+  }
+
+  /**
+   * Sanitize a userId for use as a Neo4j database name.
+   * Neo4j database names must be lowercase and can contain: a-z, 0-9, dots, dashes, underscores.
+   * Must start with a letter.
+   */
+  private sanitizeDatabaseName(userId: string): string {
+    // Convert to lowercase, replace invalid chars with underscore
+    let name = userId.toLowerCase().replace(/[^a-z0-9._-]/g, '_')
+
+    // Ensure starts with a letter (prefix with 'u' if starts with number)
+    if (/^[0-9]/.test(name)) {
+      name = `u${name}`
+    }
+
+    // Ensure not empty
+    if (!name || name === '_') {
+      name = 'default_user'
+    }
+
+    return name
   }
 
   /**
@@ -80,7 +143,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
-      const session = this.getSession()
+      const session = this.getSession(ctx)
 
       try {
         // Standard Cypher MERGE - no APOC dependencies
@@ -144,7 +207,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
-      const session = this.getSession()
+      const session = this.getSession(ctx)
 
       try {
         // Sanitize relationship type (Neo4j requires alphanumeric + underscore)
@@ -202,7 +265,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
-      const session = this.getSession()
+      const session = this.getSession(ctx)
 
       try {
         // Use variable-length path pattern for multi-hop traversal
@@ -263,7 +326,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
-      const session = this.getSession()
+      const session = this.getSession(ctx)
 
       try {
         const result = await session.run(
@@ -325,7 +388,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
-      const session = this.getSession()
+      const session = this.getSession(ctx)
 
       try {
         const typeFilter = options.type ? 'AND e.type = $type' : ''
@@ -386,7 +449,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
-      const session = this.getSession()
+      const session = this.getSession(ctx)
 
       try {
         await session.run(
@@ -415,9 +478,10 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
   /**
    * Get entity count (for monitoring)
+   * Note: In database-per-user mode, this counts entities in the user's database.
    */
-  async getEntityCount(_ctx: TraceContext): Promise<Result<number, StoreError>> {
-    const session = this.getSession()
+  async getEntityCount(ctx: TraceContext): Promise<Result<number, StoreError>> {
+    const session = this.getSession(ctx)
 
     try {
       const result = await session.run('MATCH (e:Entity) RETURN count(e) as count')
@@ -437,9 +501,10 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
   /**
    * Get relationship count (for monitoring)
+   * Note: In database-per-user mode, this counts relationships in the user's database.
    */
-  async getRelationshipCount(_ctx: TraceContext): Promise<Result<number, StoreError>> {
-    const session = this.getSession()
+  async getRelationshipCount(ctx: TraceContext): Promise<Result<number, StoreError>> {
+    const session = this.getSession(ctx)
 
     try {
       const result = await session.run('MATCH ()-[r]->() RETURN count(r) as count')

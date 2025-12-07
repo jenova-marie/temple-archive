@@ -58,20 +58,29 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // L3 Knowledge Store - Neo4j when NEO4J_URI is set, otherwise in-memory
+  // Database-per-user mode: each user gets their own database (requires Dozer or Neo4j Enterprise)
   let knowledgeStore: IKnowledgeStore
   if (!useStubs && process.env.NEO4J_URI) {
-    logger.info('Using Neo4jKnowledgeStore (L3)')
+    const databasePerUser = process.env.NEO4J_DATABASE_PER_USER === 'true'
+    logger.info({ databasePerUser }, 'Using Neo4jKnowledgeStore (L3)')
+
     const driver = createNeo4jDriver({
       uri: process.env.NEO4J_URI,
       user: process.env.NEO4J_USER || 'neo4j',
       password: process.env.NEO4J_PASSWORD || '',
     })
-    knowledgeStore = new Neo4jKnowledgeStore(driver)
+    knowledgeStore = new Neo4jKnowledgeStore(driver, {
+      databasePerUser,
+      defaultDatabase: process.env.NEO4J_DATABASE || 'neo4j',
+    })
 
     // Initialize schema in background (don't block startup)
-    initializeSchema(driver).catch((err) => {
-      logger.error({ err }, 'Failed to initialize Neo4j schema')
-    })
+    // Note: In database-per-user mode, schema is initialized per-database on first use
+    if (!databasePerUser) {
+      initializeSchema(driver).catch((err) => {
+        logger.error({ err }, 'Failed to initialize Neo4j schema')
+      })
+    }
   } else {
     logger.info('Using InMemoryKnowledgeStore (L3 stub)')
     knowledgeStore = new InMemoryKnowledgeStore()
