@@ -5,7 +5,7 @@
  * based on configuration.
  */
 
-import type { PipelineConfig, IAgentProvider } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -14,6 +14,7 @@ import {
   InMemoryKnowledgeStore,
   InMemoryVectorStore,
 } from '@recoverysky/memory'
+import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator } from '@recoverysky/safety'
 import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
@@ -45,11 +46,21 @@ export function createContainer(options: ContainerConfig = {}): Container {
     useStubs,
   }
 
-  // Create stores (stubs for now)
+  // Create stores
   const contextStore = new InMemoryContextStore()
-  const sessionStore = new InMemorySessionStore()
   const knowledgeStore = new InMemoryKnowledgeStore()
   const vectorStore = new InMemoryVectorStore()
+
+  // L2 Session Store - PostgreSQL when DATABASE_URL is set, otherwise in-memory
+  let sessionStore: ISessionStore
+  if (!useStubs && process.env.DATABASE_URL) {
+    logger.info('Using PostgresSessionStore (L2)')
+    const db = createDatabaseClient({ connectionString: process.env.DATABASE_URL })
+    sessionStore = new PostgresSessionStore(db)
+  } else {
+    logger.info('Using InMemorySessionStore (L2 stub)')
+    sessionStore = new InMemorySessionStore()
+  }
 
   // Create memory orchestrator
   const memory = new MemoryOrchestrator(

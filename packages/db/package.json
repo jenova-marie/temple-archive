@@ -1,0 +1,49 @@
+{
+  "name": "@recoverysky/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
+    "./stores": {
+      "types": "./dist/stores/index.d.ts",
+      "import": "./dist/stores/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.local.ts",
+    "db:generate:prod": "source ../../.env && drizzle-kit generate --config=drizzle.config.prod.ts",
+    "db:migrate:local": "drizzle-kit migrate --config=drizzle.config.local.ts",
+    "db:migrate:prod": "source ../../.env && drizzle-kit migrate --config=drizzle.config.prod.ts",
+    "db:push:local": "drizzle-kit push --config=drizzle.config.local.ts",
+    "db:push:prod": "source ../../.env && drizzle-kit push --config=drizzle.config.prod.ts",
+    "db:studio:local": "drizzle-kit studio --config=drizzle.config.local.ts",
+    "db:studio:prod": "source ../../.env && drizzle-kit studio --config=drizzle.config.prod.ts"
+  },
+  "dependencies": {
+    "@recoverysky/types": "workspace:*",
+    "@recoverysky/observability": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.30.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.6"
+  }
+}

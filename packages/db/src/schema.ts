@@ -1,0 +1,176 @@
+/**
+ * Consolidated Schema for Drizzle Kit
+ *
+ * This file contains all table definitions in a single file
+ * to work with drizzle-kit's module resolution.
+ *
+ * For runtime code, use the individual schema files in ./schema/
+ */
+
+import {
+  pgTable,
+  text,
+  timestamp,
+  jsonb,
+  index,
+  integer,
+  date,
+  foreignKey,
+} from 'drizzle-orm/pg-core'
+import { vector } from 'drizzle-orm/pg-core'
+
+// ============================================================================
+// Users
+// ============================================================================
+
+export const users = pgTable('users', {
+  userId: text('user_id').primaryKey(),
+  email: text('email').unique(),
+  displayName: text('display_name'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  metadata: jsonb('metadata').default({}),
+})
+
+// ============================================================================
+// Conversations
+// ============================================================================
+
+export const conversations = pgTable(
+  'conversations',
+  {
+    conversationId: text('conversation_id').primaryKey(),
+    userId: text('user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    status: text('status').default('active'),
+    summary: text('summary'),
+    metadata: jsonb('metadata').default({}),
+  },
+  (table) => [
+    foreignKey({
+      name: 'conversations_user_id_fk',
+      columns: [table.userId],
+      foreignColumns: [users.userId],
+    }),
+    index('idx_conversations_user_updated').on(table.userId, table.updatedAt),
+    index('idx_conversations_status').on(table.status),
+  ]
+)
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+export const messages = pgTable(
+  'messages',
+  {
+    messageId: text('message_id').primaryKey(),
+    conversationId: text('conversation_id').notNull(),
+    userId: text('user_id').notNull(),
+    role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
+    content: text('content').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb('metadata').default({}),
+  },
+  (table) => [
+    foreignKey({
+      name: 'messages_conversation_id_fk',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.conversationId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'messages_user_id_fk',
+      columns: [table.userId],
+      foreignColumns: [users.userId],
+    }),
+    index('idx_messages_conversation').on(table.conversationId, table.createdAt),
+    index('idx_messages_user').on(table.userId, table.createdAt),
+  ]
+)
+
+// ============================================================================
+// Session Summaries
+// ============================================================================
+
+export const sessionSummaries = pgTable(
+  'session_summaries',
+  {
+    summaryId: text('summary_id').primaryKey(),
+    conversationId: text('conversation_id').notNull(),
+    timeWindowStart: timestamp('time_window_start', { withTimezone: true }).notNull(),
+    timeWindowEnd: timestamp('time_window_end', { withTimezone: true }).notNull(),
+    summaryText: text('summary_text').notNull(),
+    summaryEmbedding: vector('summary_embedding', { dimensions: 1536 }),
+    keyTopics: text('key_topics').array().default([]),
+    entitiesMentioned: jsonb('entities_mentioned').default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'summaries_conversation_id_fk',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.conversationId],
+    }).onDelete('cascade'),
+    index('idx_summaries_conversation').on(table.conversationId, table.createdAt),
+  ]
+)
+
+// ============================================================================
+// User Profiles
+// ============================================================================
+
+export const userProfiles = pgTable(
+  'user_profiles',
+  {
+    userId: text('user_id').primaryKey(),
+    recoveryPhase: text('recovery_phase'),
+    sobrietyDate: date('sobriety_date'),
+    triggers: text('triggers').array().default([]),
+    copingStrategies: text('coping_strategies').array().default([]),
+    preferences: jsonb('preferences').default({}),
+    milestones: jsonb('milestones').default([]),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUpdated: timestamp('last_updated', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'user_profiles_user_id_fk',
+      columns: [table.userId],
+      foreignColumns: [users.userId],
+    }),
+  ]
+)
+
+// ============================================================================
+// Crisis Events
+// ============================================================================
+
+export const crisisEvents = pgTable(
+  'crisis_events',
+  {
+    eventId: text('event_id').primaryKey(),
+    conversationId: text('conversation_id'),
+    userId: text('user_id').notNull(),
+    crisisLevel: integer('crisis_level').notNull(),
+    patterns: jsonb('patterns').notNull(),
+    actionTaken: text('action_taken').notNull(),
+    handledAt: timestamp('handled_at', { withTimezone: true }).notNull().defaultNow(),
+    notes: text('notes'),
+  },
+  (table) => [
+    foreignKey({
+      name: 'crisis_conversation_id_fk',
+      columns: [table.conversationId],
+      foreignColumns: [conversations.conversationId],
+    }).onDelete('set null'),
+    foreignKey({
+      name: 'crisis_user_id_fk',
+      columns: [table.userId],
+      foreignColumns: [users.userId],
+    }),
+    index('idx_crisis_events_user').on(table.userId, table.handledAt),
+    index('idx_crisis_events_level').on(table.crisisLevel),
+  ]
+)

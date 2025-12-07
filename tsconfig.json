@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/types" },
     { "path": "packages/observability" },
+    { "path": "packages/db" },
     { "path": "packages/memory" },
     { "path": "packages/crisis" },
     { "path": "packages/safety" },

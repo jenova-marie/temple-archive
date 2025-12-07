@@ -16,6 +16,7 @@
   "dependencies": {
     "@recoverysky/types": "workspace:*",
     "@recoverysky/observability": "workspace:*",
+    "@recoverysky/db": "workspace:*",
     "@recoverysky/memory": "workspace:*",
     "@recoverysky/crisis": "workspace:*",
     "@recoverysky/safety": "workspace:*",
