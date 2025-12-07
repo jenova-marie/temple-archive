@@ -17,6 +17,9 @@ export {
 // Store implementations
 export { RedisContextStore, type RedisContextStoreConfig } from './stores/index.js'
 
+// Embedding providers
+export { OpenAIEmbeddingProvider, type OpenAIEmbeddingConfig } from './providers/index.js'
+
 // Re-export stubs for easy access
 export {
   InMemoryContextStore,

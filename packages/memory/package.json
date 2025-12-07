@@ -25,7 +25,8 @@
   "dependencies": {
     "@recoverysky/observability": "workspace:*",
     "@recoverysky/types": "workspace:*",
-    "ioredis": "^5.8.2"
+    "ioredis": "^5.8.2",
+    "openai": "^6.10.0"
   },
   "devDependencies": {
     "@types/ioredis": "^5.0.0",

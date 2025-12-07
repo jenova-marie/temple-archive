@@ -5,7 +5,7 @@
  * based on configuration.
  */
 
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -15,6 +15,7 @@ import {
   InMemoryVectorStore,
   RedisContextStore,
   createRedisClient,
+  OpenAIEmbeddingProvider,
 } from '@recoverysky/memory'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler } from '@recoverysky/crisis'
@@ -113,6 +114,15 @@ export function createContainer(options: ContainerConfig = {}): Container {
   const safety = new StubSafetyValidator()
   const evaluator = new StubEvaluator()
 
+  // Create embedding provider - requires OPENAI_API_KEY
+  let embedding: IEmbeddingProvider | undefined
+  if (!useStubs && process.env.OPENAI_API_KEY) {
+    logger.info('Using OpenAIEmbeddingProvider for semantic search')
+    embedding = new OpenAIEmbeddingProvider()
+  } else if (!useStubs) {
+    logger.warn('OPENAI_API_KEY not set - semantic search disabled')
+  }
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -121,7 +131,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     agent,
     safety,
     evaluator,
-    // embedding: undefined - would be real embedding provider in production
+    embedding,
   }
 
   // Create pipeline
