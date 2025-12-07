@@ -5,9 +5,14 @@
  * This package wraps wonder-logger with project-specific defaults.
  */
 
+import { existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import {
   createLogger,
   createTelemetry,
+  createLoggerFromConfig,
+  createTelemetryFromConfig,
+  loadConfig,
   createMemoryTransport,
   createConsoleTransport,
   withSpan,
@@ -25,6 +30,23 @@ import {
   getServiceName,
 } from './config.js'
 
+/**
+ * Find the monorepo root by looking for pnpm-workspace.yaml
+ */
+function findMonorepoRoot(startDir: string = process.cwd()): string | null {
+  let dir = resolve(startDir)
+
+  // Walk up until we hit the filesystem root
+  while (dir !== dirname(dir)) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+      return dir
+    }
+    dir = dirname(dir)
+  }
+
+  return null
+}
+
 // Logger type from pino (wonder-logger re-exports this)
 type Logger = ReturnType<typeof createLogger>
 
@@ -35,6 +57,9 @@ let _logger: Logger | null = null
 /**
  * Initialize the observability stack (telemetry + logger)
  * Call this once at application startup
+ *
+ * Attempts to load wonder-logger.yaml config file first,
+ * falls back to programmatic configuration if not found.
  */
 export function initializeObservability(): void {
   if (_sdk || _logger) {
@@ -52,6 +77,26 @@ export function initializeObservability(): void {
     })
     return
   }
+
+  // Try to load from config file first
+  // Look for wonder-logger.yaml in monorepo root
+  const monorepoRoot = findMonorepoRoot()
+  const configPath = monorepoRoot ? join(monorepoRoot, 'wonder-logger.yaml') : undefined
+  const configResult = loadConfig({ configPath })
+
+  if (configResult.ok) {
+    // Initialize telemetry SDK first (required for trace context in logs)
+    _sdk = createTelemetryFromConfig({ configPath })
+
+    // Initialize logger from config
+    _logger = createLoggerFromConfig({ configPath })
+
+    // Log after logger is ready
+    _logger.info({ configPath }, 'Observability initialized from config')
+    return
+  }
+
+  // Fall back to programmatic configuration - will log after logger is created
 
   // Initialize telemetry SDK first (required for trace context in logs)
   if (isTracingEnabled() || isMetricsEnabled()) {
@@ -77,6 +122,8 @@ export function initializeObservability(): void {
       createMemoryTransport({ name: serviceName, maxSize: 10000 }),
     ],
   })
+
+  _logger.info({ configPath: configPath || 'none' }, 'Observability initialized with programmatic config')
 }
 
 /**

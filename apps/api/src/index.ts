@@ -4,7 +4,27 @@
  * Express server for the RecoverySky AI chatbot agent
  */
 
-import "dotenv/config";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { config as dotenvConfig } from "dotenv";
+
+// Find monorepo root and load .env from there
+function findMonorepoRoot(): string | null {
+  let dir = resolve(process.cwd());
+  while (dir !== dirname(dir)) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+  return null;
+}
+
+const monorepoRoot = findMonorepoRoot();
+if (monorepoRoot) {
+  dotenvConfig({ path: join(monorepoRoot, ".env") });
+}
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -67,20 +87,48 @@ app.use(errorHandler);
 const port = parseInt(process.env.PORT || "3333", 10);
 
 const server = app.listen(port, () => {
-  logger.info({ port }, "Server started");
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   🌟 RecoverySky Agent API                                ║
-║                                                           ║
-║   Server running at: http://localhost:${port}               ║
-║   Health check:      http://localhost:${port}/health        ║
-║   Metrics:           http://localhost:${port}/health/metrics║
-║                                                           ║
-║   Mode: ${container.config.useStubs ? "STUB (development)" : "PRODUCTION"}                           ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
-  `);
+  // Log running configuration (sensitive values redacted)
+  const config = {
+    // Application
+    NODE_ENV: process.env.NODE_ENV || "development",
+    PORT: port,
+    LOG_LEVEL: process.env.LOG_LEVEL || "info",
+    USE_STUBS: process.env.USE_STUBS === "true",
+
+    // AI Providers (redacted)
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? "[SET]" : "[NOT SET]",
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "[SET]" : "[NOT SET]",
+
+    // L1: Redis
+    REDIS_URL: process.env.REDIS_URL || "[NOT SET]",
+
+    // L2: PostgreSQL (redact password)
+    DATABASE_URL: process.env.DATABASE_URL
+      ? process.env.DATABASE_URL.replace(/:([^:@]+)@/, ":***@")
+      : "[NOT SET]",
+
+    // L3: Neo4j (redact password)
+    NEO4J_URI: process.env.NEO4J_URI || "[NOT SET]",
+    NEO4J_USER: process.env.NEO4J_USER || "[NOT SET]",
+    NEO4J_PASSWORD: process.env.NEO4J_PASSWORD ? "[SET]" : "[NOT SET]",
+
+    // L4: Qdrant
+    QDRANT_URL: process.env.QDRANT_URL || "[NOT SET]",
+
+    // Observability
+    OTEL_EXPORTER_OTLP_ENDPOINT:
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "[NOT SET]",
+    OTEL_SERVICE_NAME: process.env.OTEL_SERVICE_NAME || "recoverysky-agent",
+
+    // Crisis Response
+    CRISIS_ALERT_WEBHOOK_URL: process.env.CRISIS_ALERT_WEBHOOK_URL
+      ? "[SET]"
+      : "[NOT SET]",
+    CRISIS_THRESHOLD_HIGH: process.env.CRISIS_THRESHOLD_HIGH || "7",
+    CRISIS_THRESHOLD_CRITICAL: process.env.CRISIS_THRESHOLD_CRITICAL || "9",
+  };
+
+  logger.info(config, "RecoverySky Agent API started");
 });
 
 // Graceful shutdown
