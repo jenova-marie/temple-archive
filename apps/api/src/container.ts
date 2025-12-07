@@ -5,7 +5,7 @@
  * based on configuration.
  */
 
-import type { PipelineConfig, IAgentProvider, ISessionStore } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -13,6 +13,8 @@ import {
   InMemorySessionStore,
   InMemoryKnowledgeStore,
   InMemoryVectorStore,
+  RedisContextStore,
+  createRedisClient,
 } from '@recoverysky/memory'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler } from '@recoverysky/crisis'
@@ -47,9 +49,19 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // Create stores
-  const contextStore = new InMemoryContextStore()
   const knowledgeStore = new InMemoryKnowledgeStore()
   const vectorStore = new InMemoryVectorStore()
+
+  // L1 Context Store - Redis when REDIS_URL is set, otherwise in-memory
+  let contextStore: IContextStore
+  if (!useStubs && process.env.REDIS_URL) {
+    logger.info('Using RedisContextStore (L1)')
+    const redis = createRedisClient({ url: process.env.REDIS_URL })
+    contextStore = new RedisContextStore(redis, { ttlSeconds: 4 * 60 * 60 }) // 4 hours
+  } else {
+    logger.info('Using InMemoryContextStore (L1 stub)')
+    contextStore = new InMemoryContextStore()
+  }
 
   // L2 Session Store - PostgreSQL when DATABASE_URL is set, otherwise in-memory
   let sessionStore: ISessionStore
