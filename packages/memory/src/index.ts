@@ -30,9 +30,36 @@ export {
   type MessagePayload,
 } from './qdrant/index.js'
 
+// Neo4j client and utilities
+export {
+  createNeo4jDriver,
+  createSession,
+  verifyConnectivity,
+  closeDriver,
+  initializeSchema,
+  dropSchema,
+  clearData,
+  SCHEMA_STATEMENTS,
+  type Neo4jConfig,
+} from './neo4j/index.js'
+
 // Store implementations
 export { RedisContextStore, type RedisContextStoreConfig } from './stores/index.js'
 export { QdrantVectorStore, type QdrantVectorStoreConfig } from './stores/index.js'
+export { Neo4jKnowledgeStore } from './stores/Neo4jKnowledgeStore.js'
+
+// Entity extraction
+export {
+  EntityExtractor,
+  DEFAULT_EXTRACTOR_CONFIG,
+  type ExtractionMode,
+  type EntityType,
+  type EntityExtractorConfig,
+  type ExtractedEntity,
+  type ExtractedRelationship,
+  type ExtractionResult,
+  type ExtractionError,
+} from './extraction/index.js'
 
 // Embedding providers
 export { OpenAIEmbeddingProvider, type OpenAIEmbeddingConfig } from './providers/index.js'

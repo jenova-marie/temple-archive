@@ -23,10 +23,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@qdrant/js-client-rest": "^1.16.2",
     "@recoverysky/observability": "workspace:*",
     "@recoverysky/types": "workspace:*",
     "ioredis": "^5.8.2",
+    "neo4j-driver": "^6.0.1",
     "openai": "^6.10.0"
   },
   "devDependencies": {

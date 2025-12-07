@@ -14,27 +14,28 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "@recoverysky/types": "workspace:*",
-    "@recoverysky/observability": "workspace:*",
-    "@recoverysky/db": "workspace:*",
-    "@recoverysky/memory": "workspace:*",
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@recoverysky/agent": "workspace:*",
     "@recoverysky/crisis": "workspace:*",
+    "@recoverysky/db": "workspace:*",
+    "@recoverysky/evaluation": "workspace:*",
+    "@recoverysky/memory": "workspace:*",
+    "@recoverysky/observability": "workspace:*",
+    "@recoverysky/pipeline": "workspace:*",
     "@recoverysky/safety": "workspace:*",
     "@recoverysky/tools": "workspace:*",
-    "@recoverysky/agent": "workspace:*",
-    "@recoverysky/evaluation": "workspace:*",
-    "@recoverysky/pipeline": "workspace:*",
-    "express": "^4.21.0",
+    "@recoverysky/types": "workspace:*",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
     "helmet": "^8.0.0",
-    "dotenv": "^16.4.5"
+    "jose": "^6.1.3"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
-    "typescript": "^5.7.2",
+    "@types/express": "^5.0.0",
     "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
     "vitest": "^2.1.6"
   }
 }

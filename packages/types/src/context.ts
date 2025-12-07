@@ -61,8 +61,10 @@ export interface AssembledContext {
   previousSessions: SessionSummary[]
   /** Semantic search results */
   semanticMatches?: SemanticMatch[]
+  /** Related entities from L3 knowledge graph */
+  relatedEntities?: Entity[]
 }
 
 import type { Message, PipelineInput } from './messages.js'
-import type { UserProfile, SessionEntities, SessionState, SessionSummary, SemanticMatch } from './memory.js'
+import type { UserProfile, SessionEntities, SessionState, SessionSummary, SemanticMatch, Entity } from './memory.js'
 import type { CrisisCheckResult } from './crisis.js'

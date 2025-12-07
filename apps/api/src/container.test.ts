@@ -27,6 +27,10 @@ vi.mock('@recoverysky/memory', () => ({
   OpenAIEmbeddingProvider: vi.fn().mockImplementation(() => ({})),
   QdrantVectorStore: vi.fn().mockImplementation(() => ({})),
   createQdrantClient: vi.fn().mockReturnValue({}),
+  Neo4jKnowledgeStore: vi.fn().mockImplementation(() => ({})),
+  createNeo4jDriver: vi.fn().mockReturnValue({}),
+  initializeSchema: vi.fn().mockResolvedValue(undefined),
+  EntityExtractor: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock('@recoverysky/db', () => ({

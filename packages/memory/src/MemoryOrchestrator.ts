@@ -18,6 +18,7 @@ import type {
   Result,
   SessionState,
   SessionEntities,
+  Entity,
 } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
@@ -31,6 +32,10 @@ export interface MemoryOrchestratorConfig {
   semanticSearchDays: number
   /** Minimum similarity score for semantic matches */
   semanticScoreThreshold: number
+  /** Maximum related entities to retrieve from L3 */
+  l3EntityLimit: number
+  /** Enable L3 knowledge graph queries */
+  enableL3Queries: boolean
 }
 
 export interface MemoryRetrievalResult {
@@ -56,19 +61,17 @@ export class MemoryOrchestrator {
   constructor(
     private readonly l1: IContextStore,
     private readonly l2: ISessionStore,
-    // L3 (Neo4j) - reserved for future knowledge graph integration
     private readonly l3: IKnowledgeStore,
     private readonly l4: IVectorStore,
     config?: Partial<MemoryOrchestratorConfig>
   ) {
-    // L3 will be used in future for knowledge graph queries
-    void this.l3
-
     this.config = {
       l1MessageLimit: 20,
       l2MessageLimit: 50,
       semanticSearchDays: 90,
       semanticScoreThreshold: 0.7,
+      l3EntityLimit: 20,
+      enableL3Queries: true,
       ...config,
     }
   }
@@ -121,12 +124,16 @@ export class MemoryOrchestrator {
         const profileResult = await this.l2.getUserProfile(userId, ctx)
         const userProfile = profileResult.ok ? profileResult.value : null
 
+        // Query L3 for related entities (non-blocking)
+        const relatedEntities = await this.queryL3Entities(userId, ctx)
+
         const context = this.assembleContext(
           l1Result.value,
           userProfile,
           sessionState,
           [],
-          []
+          [],
+          relatedEntities
         )
 
         return ok({
@@ -175,12 +182,16 @@ export class MemoryOrchestrator {
         // Warm L1 cache with recent messages
         await this.warmL1Cache(conversationId, l2Result.value.slice(-20), ctx)
 
+        // Query L3 for related entities (non-blocking)
+        const relatedEntities = await this.queryL3Entities(userId, ctx)
+
         const context = this.assembleContext(
           l2Result.value,
           userProfile,
           this.createDefaultSessionState(),
           previousSessions,
-          []
+          [],
+          relatedEntities
         )
 
         return ok({
@@ -214,12 +225,16 @@ export class MemoryOrchestrator {
           pipelineMetrics.memoryCacheHits.add(1, { tier: 'L4' })
           logger.debug({ count: l4Result.value.length }, 'L4 semantic matches found')
 
+          // Query L3 for related entities (non-blocking)
+          const relatedEntities = await this.queryL3Entities(userId, ctx)
+
           const context = this.assembleContext(
             [],
             userProfile,
             this.createDefaultSessionState(),
             previousSessions,
-            l4Result.value
+            l4Result.value,
+            relatedEntities
           )
 
           return ok({
@@ -235,12 +250,16 @@ export class MemoryOrchestrator {
       // No context found - return empty context
       logger.debug('No context found in any tier')
 
+      // Still query L3 for related entities even without messages
+      const relatedEntities = await this.queryL3Entities(userId, ctx)
+
       const context = this.assembleContext(
         [],
         userProfile,
         this.createDefaultSessionState(),
         previousSessions,
-        []
+        [],
+        relatedEntities
       )
 
       return ok({
@@ -342,7 +361,8 @@ export class MemoryOrchestrator {
     userProfile: import('@recoverysky/types').UserProfile | null,
     sessionState: SessionState,
     previousSessions: import('@recoverysky/types').SessionSummary[],
-    semanticMatches: import('@recoverysky/types').SemanticMatch[]
+    semanticMatches: import('@recoverysky/types').SemanticMatch[],
+    relatedEntities?: Entity[]
   ): AssembledContext {
     return {
       messages,
@@ -351,6 +371,7 @@ export class MemoryOrchestrator {
       sessionState,
       previousSessions,
       semanticMatches,
+      relatedEntities,
     }
   }
 
@@ -384,6 +405,36 @@ export class MemoryOrchestrator {
       lastActivity: Date.now(),
       messageCount: 0,
       crisisLevel: 1,
+    }
+  }
+
+  /**
+   * Query L3 knowledge graph for user's related entities
+   */
+  private async queryL3Entities(
+    userId: string,
+    ctx: TraceContext
+  ): Promise<Entity[] | undefined> {
+    if (!this.config.enableL3Queries) {
+      return undefined
+    }
+
+    const logger = getLogger().child({ userId, requestId: ctx.requestId })
+
+    try {
+      // Search for recent entities related to this user
+      const result = await this.l3.searchEntities(userId, ctx)
+
+      if (result.ok && result.value.length > 0) {
+        pipelineMetrics.memoryCacheHits.add(1, { tier: 'L3' })
+        logger.debug({ count: result.value.length }, 'L3 entities found')
+        return result.value.slice(0, this.config.l3EntityLimit)
+      }
+
+      return undefined
+    } catch (error) {
+      logger.warn({ error }, 'L3 query failed, continuing without entities')
+      return undefined
     }
   }
 

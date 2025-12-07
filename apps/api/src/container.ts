@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, IKnowledgeStore, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -19,6 +19,11 @@ import {
   OpenAIEmbeddingProvider,
   QdrantVectorStore,
   createQdrantClient,
+  Neo4jKnowledgeStore,
+  createNeo4jDriver,
+  initializeSchema,
+  EntityExtractor,
+  type ExtractionMode,
 } from '@recoverysky/memory'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
@@ -52,8 +57,25 @@ export function createContainer(options: ContainerConfig = {}): Container {
     useStubs,
   }
 
-  // Create stores
-  const knowledgeStore = new InMemoryKnowledgeStore()
+  // L3 Knowledge Store - Neo4j when NEO4J_URI is set, otherwise in-memory
+  let knowledgeStore: IKnowledgeStore
+  if (!useStubs && process.env.NEO4J_URI) {
+    logger.info('Using Neo4jKnowledgeStore (L3)')
+    const driver = createNeo4jDriver({
+      uri: process.env.NEO4J_URI,
+      user: process.env.NEO4J_USER || 'neo4j',
+      password: process.env.NEO4J_PASSWORD || '',
+    })
+    knowledgeStore = new Neo4jKnowledgeStore(driver)
+
+    // Initialize schema in background (don't block startup)
+    initializeSchema(driver).catch((err) => {
+      logger.error({ err }, 'Failed to initialize Neo4j schema')
+    })
+  } else {
+    logger.info('Using InMemoryKnowledgeStore (L3 stub)')
+    knowledgeStore = new InMemoryKnowledgeStore()
+  }
 
   // L4 Vector Store - Qdrant when QDRANT_URL is set, otherwise in-memory
   let vectorStore: IVectorStore
@@ -154,7 +176,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     const anthropicForSafety = process.env.ANTHROPIC_API_KEY
       ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
       : null
-    logger.info('Using SafetyValidator', { llmEnabled: !!anthropicForSafety })
+    logger.info({ llmEnabled: !!anthropicForSafety }, 'Using SafetyValidator')
     safety = new SafetyValidator(anthropicForSafety, {
       enableLLMDetection: !!anthropicForSafety,
       redactPII: true,
@@ -171,7 +193,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
   } else if (process.env.ANTHROPIC_API_KEY) {
     const anthropicForEval = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const evalMode = (process.env.EVALUATION_MODE as EvaluationMode) || 'on_demand'
-    logger.info('Using LLMEvaluator', { mode: evalMode })
+    logger.info({ mode: evalMode }, 'Using LLMEvaluator')
     evaluator = new LLMEvaluator(anthropicForEval, stubEvaluator, {
       mode: evalMode,
       minCrisisLevelToTrigger: 4,
@@ -190,6 +212,41 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.warn('OPENAI_API_KEY not set - semantic search disabled')
   }
 
+  // Create entity extractor for knowledge graph
+  // Controlled by ENTITY_EXTRACTION_MODE env var (default: 'all')
+  let entityExtractor: EntityExtractor | undefined
+  const extractionMode = (process.env.ENTITY_EXTRACTION_MODE as ExtractionMode) || 'all'
+  if (extractionMode !== 'none' && !useStubs && process.env.ANTHROPIC_API_KEY) {
+    const anthropicForExtraction = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    // Parse entity types from env (comma-separated)
+    const enabledTypes = process.env.ENTITY_EXTRACTION_TYPES
+      ? process.env.ENTITY_EXTRACTION_TYPES.split(',').map((t) => t.trim())
+      : ['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication']
+
+    entityExtractor = new EntityExtractor(anthropicForExtraction, knowledgeStore, {
+      mode: extractionMode,
+      model: process.env.ENTITY_EXTRACTION_MODEL || 'claude-3-haiku-20240307',
+      enabledTypes: enabledTypes as Array<'person' | 'place' | 'event' | 'emotion' | 'trigger' | 'coping_strategy' | 'milestone' | 'medication'>,
+      minImportance: parseFloat(process.env.ENTITY_MIN_IMPORTANCE || '0.3'),
+      inferRelationships: process.env.ENTITY_INFER_RELATIONSHIPS !== 'false',
+    })
+
+    logger.info({
+      mode: extractionMode,
+      model: process.env.ENTITY_EXTRACTION_MODEL || 'claude-3-haiku-20240307',
+      types: enabledTypes.length,
+      minImportance: process.env.ENTITY_MIN_IMPORTANCE || '0.3',
+      inferRelationships: process.env.ENTITY_INFER_RELATIONSHIPS !== 'false',
+    }, 'Entity extraction enabled')
+  } else if (extractionMode === 'none') {
+    logger.info('Entity extraction disabled (mode=none)')
+  } else if (useStubs) {
+    logger.info('Entity extraction disabled (USE_STUBS=true)')
+  } else {
+    logger.info('Entity extraction disabled (no ANTHROPIC_API_KEY)')
+  }
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -200,6 +257,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     safety,
     evaluator,
     embedding,
+    entityExtractor,
   }
 
   // Create pipeline

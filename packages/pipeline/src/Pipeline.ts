@@ -33,7 +33,7 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator } from '@recoverysky/memory'
+import { MemoryOrchestrator, type EntityExtractor } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
 import { recoveryTools } from '@recoverysky/tools'
 
@@ -54,6 +54,8 @@ export interface PipelineDependencies {
   safety: ISafetyValidator
   evaluator: IEvaluator
   embedding?: IEmbeddingProvider
+  /** Entity extractor for knowledge graph (optional) */
+  entityExtractor?: EntityExtractor
 }
 
 export class Pipeline {
@@ -538,6 +540,7 @@ export class Pipeline {
     ctx: PipelineContext
   ): Promise<void> {
     const stageStart = Date.now()
+    const logger = getLogger().child({ requestId: ctx.requestId })
 
     // Generate embeddings if provider available
     let userEmbedding: number[] | null = null
@@ -568,6 +571,26 @@ export class Pipeline {
       },
       ctx
     )
+
+    // Entity extraction (fire and forget - don't block response)
+    if (this.deps.entityExtractor) {
+      this.deps.entityExtractor
+        .extract(userMessage, assistantMessage, ctx.crisisCheck?.level ?? 1, ctx)
+        .then((result) => {
+          if (result.ok && (result.value.entities.length > 0 || result.value.relationships.length > 0)) {
+            logger.info(
+              {
+                entities: result.value.entities.length,
+                relationships: result.value.relationships.length,
+              },
+              'Entities extracted and stored'
+            )
+          }
+        })
+        .catch((err) => {
+          logger.warn({ err }, 'Entity extraction failed')
+        })
+    }
 
     ctx.metrics.stageDurations.persist = Date.now() - stageStart
     pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, { stage: 'persist' })
