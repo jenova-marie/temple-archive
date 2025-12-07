@@ -33,9 +33,9 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator, type EntityExtractor } from '@recoverysky/memory'
+import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
-import { recoveryTools } from '@recoverysky/tools'
+import { recoveryTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, type MemoryToolAccessLevel } from '@recoverysky/tools'
 
 export interface PipelineError {
   kind: 'CrisisError' | 'MemoryError' | 'AgentError' | 'SafetyError' | 'ValidationError' | 'TimeoutError' | 'UnexpectedError'
@@ -56,6 +56,10 @@ export interface PipelineDependencies {
   embedding?: IEmbeddingProvider
   /** Entity extractor for knowledge graph (optional) */
   entityExtractor?: EntityExtractor
+  /** Memory context builder for pre-agent memory injection (optional) */
+  memoryContextBuilder?: MemoryContextBuilder
+  /** Memory tool access level (default: 'off') */
+  memoryToolAccess?: MemoryToolAccessLevel
 }
 
 export class Pipeline {
@@ -403,22 +407,61 @@ export class Pipeline {
     ctx: PipelineContext
   ): Promise<Result<AgentResponse, { kind: string; message: string }>> {
     const stageStart = Date.now()
+    const logger = getLogger().child({ requestId: ctx.requestId })
 
-    const systemPrompt = buildSystemPrompt(ctx.memory!, ctx.crisisCheck)
+    // Build memory context pre-agent (if configured)
+    let memoryContext: string | null = null
+    if (this.deps.memoryContextBuilder) {
+      try {
+        memoryContext = await this.deps.memoryContextBuilder.buildContext(
+          input.message,
+          input.userId,
+          ctx
+        )
+        if (memoryContext) {
+          logger.debug({ contextLength: memoryContext.length }, 'Memory context built')
+        }
+      } catch (error) {
+        logger.warn({ error }, 'Memory context builder failed, continuing without')
+      }
+    }
 
-    // Convert Vercel AI SDK tools to ToolDefinition format
+    // Check if memory tools are available
+    const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
+
+    const systemPrompt = buildSystemPrompt({
+      context: ctx.memory!,
+      crisisCheck: ctx.crisisCheck,
+      memoryContext,
+      hasMemoryTools,
+    })
+
+    // Convert Vercel AI SDK tools to ToolDefinition format (including memory tools if enabled)
     const tools = this.convertToolsToDefinitions()
 
-    const result = await this.deps.agent.generate(
-      {
-        userMessage: input.message,
-        context: ctx.memory!,
-        crisisCheck: ctx.crisisCheck,
-        systemPrompt,
-        tools,
-      },
-      ctx
-    )
+    // Set trace context for memory tools (so they have access to userId for database-per-user)
+    if (hasMemoryTools) {
+      setMemoryToolTraceContext(ctx)
+    }
+
+    let result: Result<AgentResponse, { kind: string; message: string }>
+    try {
+      result = await this.deps.agent.generate(
+        {
+          userMessage: input.message,
+          context: ctx.memory!,
+          crisisCheck: ctx.crisisCheck,
+          systemPrompt,
+          tools,
+        },
+        ctx
+      )
+    } finally {
+      // Always clear trace context after agent processing
+      if (hasMemoryTools) {
+        clearMemoryToolTraceContext()
+      }
+    }
 
     ctx.metrics.stageDurations.agent = Date.now() - stageStart
     pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.agent, { stage: 'agent' })
@@ -441,6 +484,7 @@ export class Pipeline {
   private convertToolsToDefinitions(): ToolDefinition[] {
     const tools: ToolDefinition[] = []
 
+    // Add recovery tools
     for (const [name, tool] of Object.entries(recoveryTools)) {
       const t = tool as {
         description?: string
@@ -454,6 +498,27 @@ export class Pipeline {
         parameters: t.parameters as Record<string, unknown>,
         execute: t.execute || (async () => ({ error: 'Not implemented' })),
       })
+    }
+
+    // Add memory tools based on access level
+    const memoryToolAccess = this.deps.memoryToolAccess || 'off'
+    if (memoryToolAccess !== 'off') {
+      const memoryTools = getMemoryTools(memoryToolAccess)
+
+      for (const [name, tool] of Object.entries(memoryTools)) {
+        const t = tool as {
+          description?: string
+          parameters?: unknown
+          execute?: (args: Record<string, unknown>) => Promise<unknown>
+        }
+
+        tools.push({
+          name,
+          description: t.description || `Memory Tool: ${name}`,
+          parameters: t.parameters as Record<string, unknown>,
+          execute: t.execute || (async () => ({ error: 'Not implemented' })),
+        })
+      }
     }
 
     return tools

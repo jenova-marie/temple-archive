@@ -31,6 +31,11 @@ vi.mock('@recoverysky/memory', () => ({
   createNeo4jDriver: vi.fn().mockReturnValue({}),
   initializeSchema: vi.fn().mockResolvedValue(undefined),
   EntityExtractor: vi.fn().mockImplementation(() => ({})),
+  MemoryContextBuilder: vi.fn().mockImplementation(() => ({})),
+}))
+
+vi.mock('@recoverysky/tools', () => ({
+  setMemoryToolProviders: vi.fn(),
 }))
 
 vi.mock('@recoverysky/db', () => ({

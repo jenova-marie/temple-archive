@@ -61,6 +61,16 @@ export {
   type ExtractionError,
 } from './extraction/index.js'
 
+// Memory context builder
+export {
+  MemoryContextBuilder,
+  DEFAULT_CONTEXT_CONFIG,
+  type MemoryContextMode,
+  type MemoryContextBuilderConfig,
+  type Subgraph,
+  type RetrievedRelationship,
+} from './context/index.js'
+
 // Embedding providers
 export { OpenAIEmbeddingProvider, type OpenAIEmbeddingConfig } from './providers/index.js'
 

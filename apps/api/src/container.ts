@@ -23,8 +23,11 @@ import {
   createNeo4jDriver,
   initializeSchema,
   EntityExtractor,
+  MemoryContextBuilder,
   type ExtractionMode,
+  type MemoryContextMode,
 } from '@recoverysky/memory'
+import { setMemoryToolProviders, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
@@ -256,6 +259,66 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info('Entity extraction disabled (no ANTHROPIC_API_KEY)')
   }
 
+  // Memory Context Builder for pre-agent memory injection
+  // Controlled by MEMORY_CONTEXT_MODE env var (default: 1 = template)
+  let memoryContextBuilder: MemoryContextBuilder | undefined
+  const memoryContextMode = parseInt(process.env.MEMORY_CONTEXT_MODE || '1', 10) as MemoryContextMode
+
+  if (memoryContextMode > 0 && !useStubs) {
+    // Haiku mode (2) and hybrid mode (3) require Anthropic API key
+    const anthropicForContext = (memoryContextMode >= 2 && process.env.ANTHROPIC_API_KEY)
+      ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      : null
+
+    memoryContextBuilder = new MemoryContextBuilder(knowledgeStore, anthropicForContext, {
+      mode: memoryContextMode,
+      maxEntities: 10,
+      maxRelationships: 15,
+      traversalDepth: 2,
+      hybridThreshold: 5,
+    })
+
+    logger.info({
+      mode: memoryContextMode,
+      modeName: ['off', 'template', 'haiku', 'hybrid'][memoryContextMode] || 'unknown',
+      hasLLM: !!anthropicForContext,
+    }, 'Memory context builder enabled')
+  } else if (memoryContextMode === 0) {
+    logger.info('Memory context builder disabled (mode=0)')
+  } else if (useStubs) {
+    logger.info('Memory context builder disabled (USE_STUBS=true)')
+  }
+
+  // Memory tool access level
+  // Controlled by MEMORY_TOOL_ACCESS env var (default: 'off')
+  const memoryToolAccess = (process.env.MEMORY_TOOL_ACCESS as MemoryToolAccessLevel) || 'off'
+
+  if (memoryToolAccess !== 'off' && !useStubs) {
+    // Set up memory tool providers so tools can access the knowledge store
+    // This needs to be set before the pipeline uses the tools
+    let currentTraceContext: import('@recoverysky/types').TraceContext | null = null
+
+    setMemoryToolProviders(
+      () => knowledgeStore,
+      () => {
+        if (!currentTraceContext) {
+          throw new Error('TraceContext not set - memory tools called outside of request context')
+        }
+        return currentTraceContext
+      }
+    )
+
+    // TODO: The trace context provider is a bit awkward - we need a way to set it per-request
+    // For now, memory tools will fail if called outside of the pipeline context
+    // This should be refactored when we add proper request-scoped DI
+
+    logger.info({ level: memoryToolAccess }, 'Memory tools enabled')
+  } else if (useStubs) {
+    logger.info('Memory tools disabled (USE_STUBS=true)')
+  } else {
+    logger.info('Memory tools disabled (MEMORY_TOOL_ACCESS=off)')
+  }
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -267,6 +330,8 @@ export function createContainer(options: ContainerConfig = {}): Container {
     evaluator,
     embedding,
     entityExtractor,
+    memoryContextBuilder,
+    memoryToolAccess,
   }
 
   // Create pipeline

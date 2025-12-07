@@ -21,36 +21,62 @@ import type { IKnowledgeStore, Entity, TraceContext } from '@recoverysky/types'
 export type MemoryToolAccessLevel = 'off' | 'read' | 'write' | 'full'
 
 /**
- * Context provider for memory tools
+ * Context providers for memory tools
  * Must be set before tools are used
  */
-let knowledgeStoreProvider: (() => IKnowledgeStore | null) | null = null
-let traceContextProvider: (() => TraceContext) | null = null
+let knowledgeStoreInstance: IKnowledgeStore | null = null
+let currentTraceContext: TraceContext | null = null
 
+/**
+ * Set the knowledge store instance for memory tools
+ * Called once during container initialization
+ */
+export function setMemoryToolKnowledgeStore(store: IKnowledgeStore): void {
+  knowledgeStoreInstance = store
+}
+
+/**
+ * Set the current trace context for memory tools
+ * Must be called at the start of each request/pipeline run
+ */
+export function setMemoryToolTraceContext(ctx: TraceContext): void {
+  currentTraceContext = ctx
+}
+
+/**
+ * Clear the current trace context
+ * Should be called after each request completes
+ */
+export function clearMemoryToolTraceContext(): void {
+  currentTraceContext = null
+}
+
+/**
+ * Legacy provider-based setup (deprecated, use setMemoryToolKnowledgeStore instead)
+ */
 export function setMemoryToolProviders(
   ksProvider: () => IKnowledgeStore | null,
-  tcProvider: () => TraceContext
+  _tcProvider: () => TraceContext
 ): void {
-  knowledgeStoreProvider = ksProvider
-  traceContextProvider = tcProvider
+  // For backwards compatibility, call the provider immediately
+  const store = ksProvider()
+  if (store) {
+    knowledgeStoreInstance = store
+  }
 }
 
 function getKnowledgeStore(): IKnowledgeStore {
-  if (!knowledgeStoreProvider) {
-    throw new Error('Memory tools not initialized - call setMemoryToolProviders first')
+  if (!knowledgeStoreInstance) {
+    throw new Error('Memory tools not initialized - call setMemoryToolKnowledgeStore first')
   }
-  const store = knowledgeStoreProvider()
-  if (!store) {
-    throw new Error('Knowledge store not available')
-  }
-  return store
+  return knowledgeStoreInstance
 }
 
 function getTraceContext(): TraceContext {
-  if (!traceContextProvider) {
-    throw new Error('Memory tools not initialized - call setMemoryToolProviders first')
+  if (!currentTraceContext) {
+    throw new Error('TraceContext not set - call setMemoryToolTraceContext before using memory tools')
   }
-  return traceContextProvider()
+  return currentTraceContext
 }
 
 // ============================================================================

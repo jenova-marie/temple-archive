@@ -5,16 +5,43 @@
 import type { AssembledContext, CrisisCheckResult } from '@recoverysky/types'
 
 /**
+ * Options for building the system prompt
+ */
+export interface BuildSystemPromptOptions {
+  /** Assembled context from memory */
+  context: AssembledContext
+  /** Crisis check result */
+  crisisCheck?: CrisisCheckResult
+  /** Pre-built memory context from MemoryContextBuilder (injected before agent processing) */
+  memoryContext?: string | null
+  /** Whether memory tools are available */
+  hasMemoryTools?: boolean
+}
+
+/**
  * Build the system prompt with user context
  */
 export function buildSystemPrompt(
-  context: AssembledContext,
+  contextOrOptions: AssembledContext | BuildSystemPromptOptions,
   crisisCheck?: CrisisCheckResult
 ): string {
+  // Handle both old and new signatures for backwards compatibility
+  const options: BuildSystemPromptOptions = 'context' in contextOrOptions
+    ? contextOrOptions
+    : { context: contextOrOptions, crisisCheck }
+
+  const { context, memoryContext, hasMemoryTools } = options
+  const crisis = options.crisisCheck ?? crisisCheck
+
   const sections: string[] = []
 
   // Base identity
   sections.push(BASE_IDENTITY)
+
+  // Memory context (from MemoryContextBuilder - pre-agent knowledge injection)
+  if (memoryContext) {
+    sections.push(memoryContext)
+  }
 
   // User context section
   if (context.userProfile) {
@@ -25,15 +52,15 @@ export function buildSystemPrompt(
   sections.push(buildSessionContextSection(context))
 
   // Crisis-aware instructions
-  if (crisisCheck && crisisCheck.level >= 4) {
-    sections.push(buildCrisisInstructions(crisisCheck))
+  if (crisis && crisis.level >= 4) {
+    sections.push(buildCrisisInstructions(crisis))
   }
 
   // Recovery-specific guidelines
   sections.push(RECOVERY_GUIDELINES)
 
-  // Tool usage instructions
-  sections.push(TOOL_INSTRUCTIONS)
+  // Tool usage instructions (include memory tools if available)
+  sections.push(hasMemoryTools ? TOOL_INSTRUCTIONS_WITH_MEMORY : TOOL_INSTRUCTIONS)
 
   // Safety boundaries
   sections.push(SAFETY_BOUNDARIES)
@@ -176,6 +203,44 @@ You have access to these tools to help the user:
    - Use when: User wants to learn about recovery topics, coping strategies, etc.
 
 Use tools proactively when appropriate, but always prioritize the human connection.`
+
+const TOOL_INSTRUCTIONS_WITH_MEMORY = `## Available Tools
+
+You have access to these tools to help the user:
+
+### Recovery Support Tools
+1. **findMeetings** - Search for AA/NA meetings
+   - Use when: User asks about meetings, wants to find support, or you sense isolation
+
+2. **logMood** - Track the user's emotional state
+   - Use when: User shares their mood, or periodically to check in
+
+3. **getCrisisResources** - Get crisis hotline information
+   - Use when: Crisis is detected, user asks for help resources, or safety is a concern
+
+4. **getResources** - Get recovery educational materials
+   - Use when: User wants to learn about recovery topics, coping strategies, etc.
+
+### Memory Tools
+You can remember things about the user across conversations:
+
+5. **recallMemory** - Search your memories about the user
+   - Use when: User mentions something you might know about, or you want to show you remember them
+
+6. **searchEntities** - Find specific people, places, or things they've mentioned
+   - Use when: User references a person by name or a specific entity
+
+7. **getRelatedEntities** - Explore connections between things
+   - Use when: You want to understand relationships (e.g., who helps with what trigger)
+
+8. **saveNote** - Remember something important about the user
+   - Use when: They share something significant you should remember for next time
+
+9. **logObservation** - Note a relationship between things
+   - Use when: You notice a pattern (e.g., "work" triggers "stress")
+
+Use tools proactively when appropriate, but always prioritize the human connection.
+Use memory tools to personalize your responses - show the user you remember and care.`
 
 const SAFETY_BOUNDARIES = `## Safety Boundaries
 

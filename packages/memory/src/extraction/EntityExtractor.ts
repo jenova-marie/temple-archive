@@ -61,13 +61,26 @@ export interface ExtractedEntity {
 }
 
 /**
- * Relationship between entities
+ * Relationship between entities with rich context
  */
 export interface ExtractedRelationship {
   from: string
   to: string
   type: string
   strength: number
+  /** Rich context about the relationship - graph-native properties */
+  properties?: {
+    /** How/why this relationship exists */
+    context?: string
+    /** When this relationship was established or observed */
+    when?: string
+    /** Method or way the relationship manifests */
+    method?: string
+    /** Frequency of the relationship (for triggers, etc.) */
+    frequency?: string
+    /** Additional notes */
+    notes?: string
+  }
 }
 
 /**
@@ -124,11 +137,33 @@ Respond with ONLY a JSON object (no other text):
     { "name": "entity name", "type": "entity_type", "importance": 0.0-1.0, "context": "brief context" }
   ],
   "relationships": [
-    { "from": "entity1", "to": "entity2", "type": "relationship_type", "strength": 0.0-1.0 }
+    {
+      "from": "entity1",
+      "to": "entity2",
+      "type": "RELATIONSHIP_TYPE",
+      "strength": 0.0-1.0,
+      "properties": {
+        "context": "why or how this relationship exists",
+        "when": "when it was mentioned/established (optional)",
+        "method": "how it manifests (optional)"
+      }
+    }
   ]
 }
 
 If no meaningful entities are found, return: { "entities": [], "relationships": [] }`
+
+const RELATIONSHIP_INSTRUCTIONS_ENABLED = `Also identify relationships between entities when clear. Use descriptive relationship types like:
+- SPONSORS, SUPPORTS, HELPS_WITH (for supportive relationships)
+- TRIGGERS, CAUSES, LEADS_TO (for trigger/consequence relationships)
+- SUGGESTED, RECOMMENDED (for advice/suggestions)
+- WORKS_AT, LIVES_AT, ATTENDS (for location relationships)
+- RELATED_TO (for general connections)
+
+IMPORTANT: For each relationship, include a "properties" object with:
+- context: Why/how this relationship exists (required)
+- when: When it was mentioned or established (if known)
+- method: How the relationship manifests (if applicable)`
 
 const TYPE_DESCRIPTIONS: Record<EntityType, string> = {
   person: 'person: People mentioned (sponsor, family, friends, therapist)',
@@ -251,7 +286,7 @@ export class EntityExtractor {
           .join('\n')
 
         const relationshipInstructions = this.config.inferRelationships
-          ? 'Also identify relationships between entities when clear (e.g., "triggers", "helps_with", "related_to", "supports", "mentioned_by").'
+          ? RELATIONSHIP_INSTRUCTIONS_ENABLED
           : 'Do not extract relationships, return an empty relationships array.'
 
         const prompt = EXTRACTION_PROMPT
@@ -308,6 +343,13 @@ export class EntityExtractor {
             to: string
             type: string
             strength: number
+            properties?: {
+              context?: string
+              when?: string
+              method?: string
+              frequency?: string
+              notes?: string
+            }
           }>
         }
 
@@ -325,8 +367,15 @@ export class EntityExtractor {
           ? (result.relationships ?? []).map((r) => ({
               from: r.from,
               to: r.to,
-              type: r.type,
+              type: r.type.toUpperCase().replace(/[^A-Z0-9_]/g, '_'), // Sanitize for Neo4j
               strength: Math.max(0, Math.min(1, r.strength)),
+              properties: r.properties ? {
+                context: r.properties.context,
+                when: r.properties.when,
+                method: r.properties.method,
+                frequency: r.properties.frequency,
+                notes: r.properties.notes,
+              } : undefined,
             }))
           : []
 
@@ -406,13 +455,23 @@ export class EntityExtractor {
       }
     }
 
-    // Store relationships
+    // Store relationships with rich properties
     for (const rel of result.relationships) {
       const relResult = await this.knowledgeStore.createRelationship(
         rel.from,
         rel.to,
         rel.type,
-        { strength: rel.strength, userId },
+        {
+          strength: rel.strength,
+          userId,
+          // Include rich context properties for graph-native storage
+          ...(rel.properties?.context && { context: rel.properties.context }),
+          ...(rel.properties?.when && { when: rel.properties.when }),
+          ...(rel.properties?.method && { method: rel.properties.method }),
+          ...(rel.properties?.frequency && { frequency: rel.properties.frequency }),
+          ...(rel.properties?.notes && { notes: rel.properties.notes }),
+          extractedAt: now,
+        },
         ctx
       )
       if (!relResult.ok) {
