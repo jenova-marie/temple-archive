@@ -8,8 +8,14 @@ import { Redis, type RedisOptions } from 'ioredis'
 import { getLogger } from '@recoverysky/observability'
 
 export interface RedisClientConfig {
-  /** Redis connection URL (e.g., redis://localhost:6379) */
+  /** Redis connection URL (e.g., redis://localhost:6379 or redis://:password@localhost:6379) */
   url?: string
+  /** Redis password (alternative to including in URL) */
+  password?: string
+  /** Redis username for ACL auth (Redis 6+) */
+  username?: string
+  /** Redis database number (0-15) */
+  db?: number
   /** Command timeout in milliseconds */
   commandTimeout?: number
   /** Maximum retry attempts for commands */
@@ -18,9 +24,11 @@ export interface RedisClientConfig {
   enableReadyCheck?: boolean
   /** Lazy connect - don't connect until first command */
   lazyConnect?: boolean
+  /** TLS/SSL options */
+  tls?: boolean
 }
 
-const DEFAULT_CONFIG: Required<Omit<RedisClientConfig, 'url'>> = {
+const DEFAULT_CONFIG: Required<Omit<RedisClientConfig, 'url' | 'password' | 'username' | 'db' | 'tls'>> = {
   commandTimeout: 5000,
   maxRetriesPerRequest: 3,
   enableReadyCheck: true,
@@ -38,13 +46,26 @@ export function createRedisClient(config: RedisClientConfig = {}): Redis {
   const url = config.url ?? process.env.REDIS_URL ?? 'redis://localhost:6379'
   const mergedConfig = { ...DEFAULT_CONFIG, ...config }
 
-  logger.info({ url: url.replace(/\/\/.*@/, '//***@') }, 'Creating Redis client')
+  // Get auth from config or environment variables
+  const password = config.password ?? process.env.REDIS_PASSWORD
+  const username = config.username ?? process.env.REDIS_USERNAME
+  const db = config.db ?? (process.env.REDIS_DB ? parseInt(process.env.REDIS_DB, 10) : undefined)
+  const tls = config.tls ?? process.env.REDIS_TLS === 'true'
+
+  // Mask credentials in logs
+  const safeUrl = url.replace(/\/\/.*@/, '//***@')
+  logger.info({ url: safeUrl, hasPassword: !!password, hasUsername: !!username, db, tls }, 'Creating Redis client')
 
   const options: RedisOptions = {
     maxRetriesPerRequest: mergedConfig.maxRetriesPerRequest,
     enableReadyCheck: mergedConfig.enableReadyCheck,
     lazyConnect: mergedConfig.lazyConnect,
     commandTimeout: mergedConfig.commandTimeout,
+    // Auth options (only set if provided, URL credentials take precedence)
+    ...(password && { password }),
+    ...(username && { username }),
+    ...(db !== undefined && { db }),
+    ...(tls && { tls: {} }), // Empty object enables TLS with defaults
     retryStrategy: (times: number) => {
       if (times > 10) {
         logger.error({ attempts: times }, 'Redis connection failed after max retries')
