@@ -1,1 +1,5 @@
 export { StubSafetyValidator } from './StubSafetyValidator.js'
+export { SafetyValidator, type SafetyValidatorConfig } from './SafetyValidator.js'
+export { PIIDetector, type PIIMatch, type PIIType } from './detectors/PIIDetector.js'
+export { MedicalAdviceDetector, type MedicalAdviceMatch, type MedicalAdviceResult } from './detectors/MedicalAdviceDetector.js'
+export { EnablingDetector, type EnablingMatch, type EnablingResult, type EnablingType } from './detectors/EnablingDetector.js'

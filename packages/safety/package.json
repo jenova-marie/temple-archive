@@ -18,6 +18,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
     "@recoverysky/types": "workspace:*",
     "@recoverysky/observability": "workspace:*"
   },
