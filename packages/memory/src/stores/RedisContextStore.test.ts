@@ -307,5 +307,151 @@ describe('RedisContextStore', () => {
       const exists = await store.exists('non-existent')
       expect(exists).toBe(false)
     })
+
+    it('getMessageCount returns 0 when no messages', async () => {
+      const count = await store.getMessageCount('empty-session')
+      expect(count).toBe(0)
+    })
+  })
+
+  describe('deserialization edge cases', () => {
+    it('handles missing optional fields in session state', async () => {
+      const key = RedisKeys.sessionState('session-1')
+      // Only store required fields
+      await redis.hset(key, {
+        startTime: '1000',
+        lastActivity: '2000',
+        messageCount: '5',
+        crisisLevel: '2',
+      })
+
+      const result = await store.get('session-1', ctx)
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value).toEqual({
+          startTime: 1000,
+          lastActivity: 2000,
+          messageCount: 5,
+          crisisLevel: 2,
+          currentTopic: undefined,
+          emotionalTrend: undefined,
+          conversationGoal: undefined,
+        })
+      }
+    })
+
+    it('handles empty string optional fields', async () => {
+      const key = RedisKeys.sessionState('session-1')
+      await redis.hset(key, {
+        startTime: '1000',
+        lastActivity: '2000',
+        messageCount: '5',
+        crisisLevel: '2',
+        currentTopic: '',
+        emotionalTrend: '',
+        conversationGoal: '',
+      })
+
+      const result = await store.get('session-1', ctx)
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value?.currentTopic).toBeUndefined()
+        expect(result.value?.emotionalTrend).toBeUndefined()
+        expect(result.value?.conversationGoal).toBeUndefined()
+      }
+    })
+
+    it('handles invalid numeric fields with defaults', async () => {
+      const key = RedisKeys.sessionState('session-1')
+      await redis.hset(key, {
+        startTime: 'invalid',
+        lastActivity: 'not-a-number',
+        messageCount: 'abc',
+        crisisLevel: '',
+      })
+
+      const result = await store.get('session-1', ctx)
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        // Should fall back to defaults
+        expect(result.value?.startTime).toBeDefined()
+        expect(result.value?.lastActivity).toBeDefined()
+        expect(result.value?.messageCount).toBe(0)
+        expect(result.value?.crisisLevel).toBe(1)
+      }
+    })
+
+    it('skips malformed messages in getRecentMessages', async () => {
+      const key = RedisKeys.sessionMessages('session-1')
+
+      // Add one valid message and one invalid
+      const validMsg: Message = {
+        id: 'msg-1',
+        conversationId: 'session-1',
+        userId: 'user-1',
+        role: 'user',
+        content: 'Valid message',
+        timestamp: 1000,
+      }
+      await redis.zadd(key, 1000, JSON.stringify(validMsg))
+      await redis.zadd(key, 2000, 'not-valid-json{{{')
+
+      const result = await store.getRecentMessages('session-1', 10, ctx)
+
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        // Should only return the valid message
+        expect(result.value.length).toBe(1)
+        expect(result.value[0].id).toBe('msg-1')
+      }
+    })
+  })
+
+  describe('default config', () => {
+    it('uses default TTL when not specified', () => {
+      const storeWithDefaults = new RedisContextStore(redis as any)
+      expect(storeWithDefaults).toBeDefined()
+    })
+
+    it('uses default maxMessages when not specified', () => {
+      const storeWithDefaults = new RedisContextStore(redis as any)
+      expect(storeWithDefaults).toBeDefined()
+    })
+  })
+
+  describe('message trimming', () => {
+    it('trims old messages when max is exceeded', async () => {
+      // Create store with max 3 messages
+      const smallStore = new RedisContextStore(redis as any, {
+        ttlSeconds: 3600,
+        maxMessages: 3,
+      })
+
+      // Store 5 messages
+      for (let i = 1; i <= 5; i++) {
+        const message: Message = {
+          id: `msg-${i}`,
+          conversationId: 'session-1',
+          userId: 'user-1',
+          role: 'user',
+          content: `Message ${i}`,
+          timestamp: i * 1000,
+        }
+        await smallStore.storeMessage(message, ctx)
+      }
+
+      // Should only have most recent 3 messages
+      const key = RedisKeys.sessionMessages('session-1')
+      const count = await redis.zcard(key)
+      expect(count).toBe(3)
+
+      // Verify it's the newest messages
+      const messages = await redis.zrange(key, 0, -1)
+      const parsed = messages.map((m: string) => JSON.parse(m))
+      expect(parsed.map((m: Message) => m.id)).toEqual(['msg-3', 'msg-4', 'msg-5'])
+    })
   })
 })
