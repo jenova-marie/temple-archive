@@ -5,7 +5,8 @@
  * based on configuration.
  */
 
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore } from '@recoverysky/types'
+import Anthropic from '@anthropic-ai/sdk'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, ICrisisHandler, ICrisisEvaluator } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -20,7 +21,7 @@ import {
   createQdrantClient,
 } from '@recoverysky/memory'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
-import { KeywordCrisisDetector, StubCrisisHandler } from '@recoverysky/crisis'
+import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator } from '@recoverysky/safety'
 import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator } from '@recoverysky/evaluation'
@@ -105,7 +106,27 @@ export function createContainer(options: ContainerConfig = {}): Container {
     emergencyThreshold: pipelineConfig.crisis.criticalThreshold as 9,
     resourceThreshold: pipelineConfig.crisis.highThreshold as 7,
   })
-  const crisisHandler = new StubCrisisHandler()
+
+  // Crisis Handler - webhook when CRISIS_WEBHOOK_URL is set, otherwise stub
+  let crisisHandler: ICrisisHandler
+  if (!useStubs && process.env.CRISIS_WEBHOOK_URL) {
+    logger.info('Using WebhookCrisisHandler')
+    crisisHandler = new WebhookCrisisHandler({
+      webhookUrl: process.env.CRISIS_WEBHOOK_URL,
+      webhookSecret: process.env.CRISIS_WEBHOOK_SECRET,
+    })
+  } else {
+    logger.info('Using StubCrisisHandler')
+    crisisHandler = new StubCrisisHandler()
+  }
+
+  // Crisis Evaluator (LLM-based deep analysis) - optional
+  let crisisEvaluator: ICrisisEvaluator | undefined
+  if (!useStubs && process.env.ANTHROPIC_API_KEY) {
+    logger.info('Using DeepCrisisEvaluator for LLM-based crisis detection')
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    crisisEvaluator = new DeepCrisisEvaluator(anthropic)
+  }
 
   // Create agent - real or mock based on USE_STUBS
   let agent: IAgentProvider
@@ -139,6 +160,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
   const deps: PipelineDependencies = {
     crisisDetector,
     crisisHandler,
+    crisisEvaluator,
     memory,
     agent,
     safety,

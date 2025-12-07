@@ -21,6 +21,22 @@ export interface CrisisPattern {
 }
 
 /**
+ * Common dampener phrases used across patterns to reduce false positives
+ */
+const COMMON_DAMPENERS = {
+  /** Past tense indicators - person is describing history, not current state */
+  pastTense: ['used to', 'in the past', 'years ago', 'back when', 'before', 'previously', 'when i was'],
+  /** Hypothetical indicators - person is asking questions, not stating intent */
+  hypothetical: ['what if', 'wondering if', 'just curious', 'hypothetically', 'asking for'],
+  /** Media references - person is describing fiction */
+  media: ['in the movie', 'in the book', 'in the show', 'the character', 'in the game', 'on tv'],
+  /** Helping others context - person is asking about someone else */
+  helpingOthers: ['my friend', 'someone i know', 'helping them', 'a family member', 'my sister', 'my brother', 'my parent'],
+  /** Negation - person explicitly denying the crisis indicator */
+  negation: ['not', 'never', "won't", "wouldn't", "don't want to", 'no longer', 'stopped'],
+}
+
+/**
  * Crisis detection patterns organized by severity
  */
 export const CRISIS_PATTERNS: CrisisPattern[] = [
@@ -37,8 +53,17 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\b(better|easier)\s+(off\s+)?dead\b/i,
       /\beveryone\s+(would be|will be)\s+better\s+off\s+without\s+me\b/i,
     ],
-    boostKeywords: ['tonight', 'today', 'now', 'soon', 'decided', 'goodbye', 'farewell', 'note', 'letter'],
-    dampeners: ['not', 'never', 'won\'t', 'wouldn\'t', 'don\'t want to'],
+    boostKeywords: [
+      'tonight', 'today', 'now', 'soon', 'decided', 'goodbye', 'farewell', 'note', 'letter',
+      'right now', 'at this moment', 'as we speak', 'final', 'last', 'goodbye forever',
+    ],
+    dampeners: [
+      ...COMMON_DAMPENERS.negation,
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      ...COMMON_DAMPENERS.helpingOthers,
+    ],
   },
   {
     type: 'self_harm',
@@ -49,8 +74,14 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\b(burn|burning)\s+(myself|my skin|my arm)\b/i,
       /\b(hitting|punching|scratching)\s+myself\b/i,
     ],
-    boostKeywords: ['blood', 'blade', 'razor', 'again', 'already'],
-    dampeners: ['used to', 'in the past', 'years ago', 'stopped'],
+    boostKeywords: ['blood', 'blade', 'razor', 'again', 'already', 'right now', 'tonight'],
+    dampeners: [
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'stopped', 'recovered', 'clean for',
+    ],
   },
   {
     type: 'overdose_risk',
@@ -61,8 +92,15 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bOD'?(d|ing)?\b/i,
       /\bmixed\s+(drugs?|medications?|substances?)\b/i,
     ],
-    boostKeywords: ['intentionally', 'on purpose', 'want to', 'enough', 'lethal'],
-    dampeners: ['accident', 'accidentally', 'mistake', 'prescribed'],
+    boostKeywords: ['intentionally', 'on purpose', 'want to', 'enough', 'lethal', 'right now', 'tonight'],
+    dampeners: [
+      'accident', 'accidentally', 'mistake', 'prescribed',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'survived', 'warning signs', 'symptoms of',
+    ],
   },
   {
     type: 'violence_risk',
@@ -72,8 +110,14 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bviolent\s+(thoughts?|urges?|feelings?)\b/i,
       /\bwant\s+to\s+(fight|hit|punch)\b/i,
     ],
-    boostKeywords: ['weapon', 'gun', 'knife', 'plan', 'target'],
-    dampeners: ['video game', 'movie', 'dream', 'nightmare'],
+    boostKeywords: ['weapon', 'gun', 'knife', 'plan', 'target', 'right now', 'tonight'],
+    dampeners: [
+      'video game', 'movie', 'dream', 'nightmare',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      'fiction', 'story', 'novel', 'intrusive thoughts',
+    ],
   },
 
   // HIGH (Level 7-8): Elevated risk
@@ -87,8 +131,14 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bhigh\s+right\s+now\b/i,
       /\bdrunk\s+right\s+now\b/i,
     ],
-    boostKeywords: ['just', 'now', 'today', 'tonight', 'can\'t stop', 'again'],
-    dampeners: ['almost', 'nearly', 'urge', 'craving', 'tempted'],
+    boostKeywords: ['just', 'now', 'today', 'tonight', "can't stop", 'again', 'right now', 'as we speak'],
+    dampeners: [
+      'almost', 'nearly', 'urge', 'craving', 'tempted',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'worried about', 'scared of', 'fear of',
+    ],
   },
   {
     type: 'imminent_relapse',
@@ -99,8 +149,33 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bcontacted\s+(my\s+)?(dealer|plug|connect)\b/i,
       /\bcan'?t\s+resist\s+(the\s+)?urge\b/i,
     ],
-    boostKeywords: ['now', 'today', 'tonight', 'already', 'on my way'],
-    dampeners: ['thinking about', 'wondering', 'curious'],
+    boostKeywords: ['now', 'today', 'tonight', 'already', 'on my way', 'right now'],
+    dampeners: [
+      'thinking about', 'wondering', 'curious',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'afraid i might', 'worried i might',
+    ],
+  },
+  {
+    type: 'withdrawal_symptoms',
+    baseLevel: 7,
+    patterns: [
+      /\b(shaking|trembling|sweating|vomiting)\s+(badly|uncontrollably|so much)?\b/i,
+      /\bcan'?t\s+stop\s+(shaking|sweating|trembling)\b/i,
+      /\bwithdrawal\s+(symptoms?|is killing|is bad|is terrible)\b/i,
+      /\bdetox(ing)?\s+(at home|alone|by myself)\b/i,
+      /\bseizures?\s+from\s+(stopping|quitting|withdrawal)\b/i,
+    ],
+    boostKeywords: ['bad', 'severe', 'hospital', 'scared', 'dying', 'alone', 'help', 'dangerous'],
+    dampeners: [
+      'cold', 'flu', 'nervous', 'presentation', 'interview', 'anxious about',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'medical supervision', 'doctor', 'treatment center',
+    ],
   },
 
   // ELEVATED (Level 4-6): Monitor closely
@@ -114,8 +189,14 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bpanic\s+(attack|mode)\b/i,
       /\bcrisis\b/i,
     ],
-    boostKeywords: ['help', 'emergency', 'desperate', 'scared', 'terrified'],
-    dampeners: ['a little', 'sometimes', 'occasionally'],
+    boostKeywords: ['help', 'emergency', 'desperate', 'scared', 'terrified', 'right now'],
+    dampeners: [
+      'a little', 'sometimes', 'occasionally',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      'midlife crisis', 'quarter-life crisis', 'identity crisis',
+    ],
   },
   {
     type: 'hopelessness',
@@ -127,8 +208,15 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bwhat'?s\s+the\s+point\b/i,
       /\bnever\s+(get|feel)\s+better\b/i,
     ],
-    boostKeywords: ['always', 'never', 'anymore', 'done'],
-    dampeners: ['sometimes feel', 'occasionally think'],
+    boostKeywords: ['always', 'never', 'anymore', 'done', 'completely'],
+    dampeners: [
+      'sometimes feel', 'occasionally think',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'momentarily', 'briefly',
+    ],
   },
   {
     type: 'isolation',
@@ -140,7 +228,50 @@ export const CRISIS_PATTERNS: CrisisPattern[] = [
       /\bhave\s+no\s+(friends|family|support)\b/i,
     ],
     boostKeywords: ['completely', 'totally', 'absolutely', 'always'],
-    dampeners: ['feel like', 'sometimes'],
+    dampeners: [
+      'feel like', 'sometimes',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      'during covid', 'pandemic', 'lockdown',
+    ],
+  },
+  {
+    type: 'medication_noncompliance',
+    baseLevel: 5,
+    patterns: [
+      /\bstopped\s+taking\s+(my\s+)?(meds?|medications?|pills?|prescriptions?)\b/i,
+      /\bflushed\s+(my\s+)?(meds?|medications?|pills?)\b/i,
+      /\boff\s+(my\s+)?(meds?|medications?)\b/i,
+      /\bdon'?t\s+need\s+(my\s+)?(meds?|medications?)\b/i,
+      /\bskipping\s+(my\s+)?(doses?|meds?|medications?)\b/i,
+    ],
+    boostKeywords: ['bipolar', 'schizophrenia', 'antipsychotic', 'mood stabilizer', 'suboxone', 'methadone'],
+    dampeners: [
+      'doctor told me', 'with my doctor', 'tapering', 'weaning off',
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'side effects', 'switching to',
+    ],
+  },
+  {
+    type: 'financial_crisis',
+    baseLevel: 4,
+    patterns: [
+      /\b(need|desperate for)\s+money\s+(for|to buy)\s+(drugs?|pills?|score)\b/i,
+      /\b(stealing|pawning|selling)\s+.+\s+(to|for)\s+(use|get high|score|drugs?)\b/i,
+      /\b(lost|losing)\s+(my\s+)?(job|house|apartment).+(using|drinking|addiction)\b/i,
+      /\bevicted.+(relapse|using|drinking)\b/i,
+    ],
+    boostKeywords: ['homeless', 'evicted', 'desperate', 'nowhere to go', 'on the street'],
+    dampeners: [
+      ...COMMON_DAMPENERS.pastTense,
+      ...COMMON_DAMPENERS.hypothetical,
+      ...COMMON_DAMPENERS.media,
+      ...COMMON_DAMPENERS.helpingOthers,
+      'documentary', 'news story', 'article about',
+    ],
   },
 ]
 

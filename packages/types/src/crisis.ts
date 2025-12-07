@@ -26,6 +26,9 @@ export type CrisisPatternType =
   | 'severe_distress'
   | 'hopelessness'
   | 'isolation'
+  | 'withdrawal_symptoms'
+  | 'medication_noncompliance'
+  | 'financial_crisis'
 
 /**
  * A detected crisis pattern

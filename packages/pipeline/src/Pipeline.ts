@@ -19,6 +19,7 @@ import type {
   Result,
   ICrisisDetector,
   ICrisisHandler,
+  ICrisisEvaluator,
   IAgentProvider,
   ISafetyValidator,
   IEvaluator,
@@ -47,6 +48,7 @@ export interface PipelineError {
 export interface PipelineDependencies {
   crisisDetector: ICrisisDetector
   crisisHandler: ICrisisHandler
+  crisisEvaluator?: ICrisisEvaluator
   memory: MemoryOrchestrator
   agent: IAgentProvider
   safety: ISafetyValidator
@@ -186,8 +188,28 @@ export class Pipeline {
           ctx.metrics.memoryTier = memoryResult.value.source
         }
 
-        // STAGE 3: Agent processing
-        const agentResult = await this.runAgentProcessing(input, ctx)
+        // STAGE 3: Agent processing + deep crisis evaluation (parallel)
+        // Run deep crisis evaluation in parallel with agent if:
+        // - Evaluator is available
+        // - Fast crisis check didn't trigger emergency (level < 7)
+        // - Message is substantial enough (> 20 chars)
+        const shouldRunDeepEval =
+          this.deps.crisisEvaluator &&
+          crisisResult.value.level < 7 &&
+          input.message.length > 20
+
+        // Build conversation history for deep evaluation
+        const conversationHistory = ctx.memory?.messages
+          .slice(-3)
+          .map((m) => `${m.role}: ${m.content}`) ?? []
+
+        const [agentResult, deepCrisisResult] = await Promise.all([
+          this.runAgentProcessing(input, ctx),
+          shouldRunDeepEval
+            ? this.deps.crisisEvaluator!.evaluate(input.message, conversationHistory, ctx)
+            : Promise.resolve(null),
+        ])
+
         if (!agentResult.ok) {
           return err({
             kind: 'AgentError',
@@ -196,6 +218,34 @@ export class Pipeline {
             context: { conversationId: input.conversationId },
             cause: agentResult.error,
           })
+        }
+
+        // Check if deep evaluation found a higher crisis level
+        let effectiveCrisisLevel = crisisResult.value.level
+        if (
+          deepCrisisResult &&
+          deepCrisisResult.ok &&
+          deepCrisisResult.value.level > crisisResult.value.level
+        ) {
+          logger.info(
+            {
+              fastLevel: crisisResult.value.level,
+              deepLevel: deepCrisisResult.value.level,
+            },
+            'Deep crisis evaluation detected elevated risk'
+          )
+
+          effectiveCrisisLevel = deepCrisisResult.value.level
+
+          // Handle the escalated crisis
+          if (deepCrisisResult.value.level >= 7) {
+            await this.deps.crisisHandler.handle(
+              deepCrisisResult.value,
+              input.userId,
+              input.conversationId,
+              ctx
+            )
+          }
         }
 
         // STAGE 4 & 5: Safety validation and evaluation (parallel with timing)
@@ -230,7 +280,7 @@ export class Pipeline {
           content: finalContent,
           timestamp: Date.now(),
           metadata: {
-            crisisLevel: crisisResult.value.level,
+            crisisLevel: effectiveCrisisLevel,
           },
         }
 
@@ -244,7 +294,7 @@ export class Pipeline {
         logger.info(
           {
             totalDuration,
-            crisisLevel: crisisResult.value.level,
+            crisisLevel: effectiveCrisisLevel,
             tokensUsed: agentResult.value.usage,
           },
           'Pipeline processing completed'
@@ -275,7 +325,7 @@ export class Pipeline {
             memorySource: memoryResult.ok ? memoryResult.value.source : 'none',
           },
           safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
-          crisisLevel: crisisResult.value.level,
+          crisisLevel: effectiveCrisisLevel,
           emergencyTriggered: false,
           diagnostics,
         })

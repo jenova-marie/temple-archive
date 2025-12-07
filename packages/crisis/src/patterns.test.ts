@@ -1,10 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { CRISIS_PATTERNS, CRISIS_RESOURCES, type CrisisPattern } from './patterns.js'
+import { KeywordCrisisDetector } from './KeywordCrisisDetector.js'
+
+const createTraceContext = () => ({
+  requestId: `req_${Date.now()}`,
+  spanId: 'span-123',
+  traceId: 'trace-123',
+})
 
 describe('CRISIS_PATTERNS', () => {
   it('is an array of patterns', () => {
     expect(Array.isArray(CRISIS_PATTERNS)).toBe(true)
     expect(CRISIS_PATTERNS.length).toBeGreaterThan(0)
+  })
+
+  it('should have 12 crisis patterns defined', () => {
+    expect(CRISIS_PATTERNS).toHaveLength(12)
   })
 
   it('contains all required pattern types', () => {
@@ -15,9 +26,12 @@ describe('CRISIS_PATTERNS', () => {
     expect(types).toContain('violence_risk')
     expect(types).toContain('active_relapse')
     expect(types).toContain('imminent_relapse')
+    expect(types).toContain('withdrawal_symptoms')
     expect(types).toContain('severe_distress')
     expect(types).toContain('hopelessness')
     expect(types).toContain('isolation')
+    expect(types).toContain('medication_noncompliance')
+    expect(types).toContain('financial_crisis')
   })
 
   describe('pattern structure', () => {
@@ -201,5 +215,160 @@ describe('CRISIS_RESOURCES', () => {
         })
       })
     })
+  })
+})
+
+describe('new patterns', () => {
+  const detector = new KeywordCrisisDetector()
+  const ctx = createTraceContext()
+
+  describe('withdrawal_symptoms', () => {
+    it('should detect withdrawal symptoms', async () => {
+      const result = await detector.detect(
+        'I cannot stop shaking badly and the sweating is uncontrollable',
+        ctx
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value.level).toBeGreaterThanOrEqual(7)
+        expect(result.value.patterns.some((p) => p.type === 'withdrawal_symptoms')).toBe(true)
+      }
+    })
+
+    it('should have withdrawal_symptoms at level 7', () => {
+      const pattern = CRISIS_PATTERNS.find((p) => p.type === 'withdrawal_symptoms')
+      expect(pattern?.baseLevel).toBe(7)
+    })
+  })
+
+  describe('medication_noncompliance', () => {
+    it('should detect stopping medication', async () => {
+      const result = await detector.detect(
+        'I stopped taking my medications because I feel fine now',
+        ctx
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        expect(result.value.level).toBeGreaterThanOrEqual(4)
+        expect(result.value.patterns.some((p) => p.type === 'medication_noncompliance')).toBe(true)
+      }
+    })
+
+    it('should have medication_noncompliance at level 5', () => {
+      const pattern = CRISIS_PATTERNS.find((p) => p.type === 'medication_noncompliance')
+      expect(pattern?.baseLevel).toBe(5)
+    })
+  })
+
+  describe('financial_crisis', () => {
+    it('should have financial_crisis at level 4', () => {
+      const pattern = CRISIS_PATTERNS.find((p) => p.type === 'financial_crisis')
+      expect(pattern?.baseLevel).toBe(4)
+    })
+  })
+})
+
+describe('improved dampeners', () => {
+  const detector = new KeywordCrisisDetector()
+  const ctx = createTraceContext()
+
+  describe('past tense dampeners', () => {
+    it('should dampen past suicide discussion', async () => {
+      const result = await detector.detect(
+        'Years ago I used to think about suicide but I do not anymore',
+        ctx
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        // Past tense should reduce or eliminate crisis detection
+        expect(result.value.level).toBeLessThan(9)
+      }
+    })
+  })
+
+  describe('hypothetical dampeners', () => {
+    it('should dampen hypothetical questions', async () => {
+      const result = await detector.detect(
+        'What if someone was thinking about suicide, what would you tell them?',
+        ctx
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        // "what if" is a hypothetical dampener
+        expect(result.value.level).toBeLessThan(9)
+      }
+    })
+  })
+
+  describe('media reference dampeners', () => {
+    it('should dampen movie references', async () => {
+      const result = await detector.detect(
+        'In the movie the character wanted to kill himself but was saved',
+        ctx
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        // "in the movie" and "the character" are media dampeners
+        expect(result.value.level).toBeLessThan(9)
+      }
+    })
+  })
+
+  describe('helping others dampeners', () => {
+    it('should dampen friend concern', async () => {
+      const result = await detector.detect(
+        'My friend is talking about suicide and I am worried about them',
+        ctx
+      )
+      expect(result.ok).toBe(true)
+      if (result.ok) {
+        // "my friend" is a helping-others dampener
+        expect(result.value.level).toBeLessThan(9)
+      }
+    })
+  })
+})
+
+describe('boost keywords', () => {
+  const detector = new KeywordCrisisDetector()
+  const ctx = createTraceContext()
+
+  it('should boost with immediacy keywords', async () => {
+    const withoutBoost = await detector.detect('I want to end it all', ctx)
+    const withBoost = await detector.detect('I want to end it all right now tonight', ctx)
+
+    expect(withoutBoost.ok).toBe(true)
+    expect(withBoost.ok).toBe(true)
+
+    if (withoutBoost.ok && withBoost.ok) {
+      expect(withBoost.value.level).toBeGreaterThanOrEqual(withoutBoost.value.level)
+    }
+  })
+})
+
+describe('false positive prevention', () => {
+  const detector = new KeywordCrisisDetector()
+  const ctx = createTraceContext()
+
+  it('should not flag normal recovery discussion', async () => {
+    const result = await detector.detect(
+      'I am doing well in my recovery journey and have 6 months sober',
+      ctx
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.level).toBeLessThanOrEqual(3)
+    }
+  })
+
+  it('should not flag general wellness check', async () => {
+    const result = await detector.detect(
+      'How are you feeling today? I wanted to check in with you.',
+      ctx
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.level).toBeLessThanOrEqual(3)
+    }
   })
 })
