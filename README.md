@@ -5,11 +5,14 @@ An AI-powered chatbot agent designed to support people in addiction recovery. Bu
 ## Features
 
 - **Multi-Tier Memory System**: L1 (Redis) + L2 (PostgreSQL) + L3 (Neo4j) + L4 (Qdrant) for contextual conversations
-- **Real-Time Crisis Detection**: Pre-flight keyword matching (<10ms) with 9 crisis pattern types
-- **Safety Validation**: Response sanitization and safety boundary enforcement
+- **Active Knowledge Graph**: Neo4j-powered entity extraction with memory tools Claude can use during conversations
+- **Real-Time Crisis Detection**: Pre-flight keyword matching (<10ms) + LLM deep evaluation with webhook alerting
+- **Safety Validation**: PII detection, medical advice filtering, enabling language detection
+- **JWT Authentication**: Zitadel-based authentication for API endpoints
 - **Observable Pipeline**: OpenTelemetry tracing + Prometheus metrics + structured logging
 - **Type-Safe Architecture**: Result-based error handling, no exceptions thrown
-- **CLI Tool**: Interactive command-line interface for chatting with the agent
+- **Meeting Discovery**: Integration with RecoverySky Meeting API for finding AA/NA meetings
+- **CLI Tool**: Interactive command-line interface with streaming support
 
 ## Quick Start
 
@@ -64,9 +67,17 @@ curl http://localhost:3333/health
 ### Send Message
 
 ```bash
+# Without authentication (when ZITADEL_ISSUER is not configured)
 curl -X POST http://localhost:3333/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "I am feeling anxious today", "conversationId": "conv_123", "userId": "user_456"}'
+
+# With JWT authentication (when Zitadel is configured)
+curl -X POST http://localhost:3333/api/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -d '{"message": "I am feeling anxious today", "conversationId": "conv_123"}'
+# Note: userId is extracted from JWT claims when authenticated
 ```
 
 ### Metrics
@@ -97,9 +108,16 @@ curl http://localhost:3333/health/metrics
 |  +-------+-------+                                          |
 |          |                                                  |
 |          v                                                  |
+|  +------------------+                                       |
+|  | 2.5 Memory       |   Build context from Neo4j           |
+|  |     Context      |   (if MEMORY_CONTEXT_MODE > 0)       |
+|  +--------+---------+                                       |
+|           |                                                 |
+|           v                                                 |
 |  +---------------+                                          |
 |  | 3. Agent      |   Claude (via Vercel AI SDK)            |
-|  |   Processing  |   Tools: findMeetings, logMood, etc.    |
+|  |   Processing  |   Tools: findMeetings, recallMemory,    |
+|  |               |          saveNote, etc.                  |
 |  +-------+-------+                                          |
 |          |                                                  |
 |          +---------------------+                            |
@@ -107,13 +125,13 @@ curl http://localhost:3333/health/metrics
 |          v                     v                            |
 |  +---------------+     +---------------+                    |
 |  | 4. Safety     |     | 5. Deep       |                    |
-|  |   Validation  |     |    Evaluation |                    |
+|  |   Validation  |     |   Crisis Eval |                    |
 |  +-------+-------+     +-------+-------+                    |
 |          |                     |                            |
 |          v                     |                            |
 |  +---------------+             |                            |
 |  | 6. Persist    |<------------+                            |
-|  |   + Response  |                                          |
+|  |   + Extract   |   Entity extraction -> Neo4j            |
 |  +---------------+                                          |
 +------------------------------------------------------------+
      |
@@ -150,7 +168,7 @@ recoverysky-agent/
 |------|-------|---------|----------------|----------------|
 | L1 | Redis | Active session cache | <10ms | RedisContextStore ✅ |
 | L2 | PostgreSQL + Drizzle | Session history, profiles | 10-50ms | PostgresSessionStore ✅ |
-| L3 | Neo4j | Entity relationships | 20-100ms | InMemoryKnowledgeStore (stub) |
+| L3 | Neo4j | Entity knowledge graph | 20-100ms | Neo4jKnowledgeStore ✅ |
 | L4 | Qdrant | Semantic similarity | 5-20ms | QdrantVectorStore ✅ |
 
 ### Redis L1 Features
@@ -159,15 +177,60 @@ recoverysky-agent/
 - Authentication support (password, username, TLS)
 - Connection pooling with exponential backoff retry
 
+### Neo4j L3 Knowledge Graph
+- **Entity extraction** from conversations using Claude Haiku
+- **Database-per-user** mode for multi-tenancy (Dozer/Enterprise)
+- **Rich relationships** with context properties (not summaries)
+- **Graph traversal** for related entities and patterns
+- Entity types: person, place, event, emotion, trigger, coping_strategy, milestone, medication
+
 ### Qdrant L4 Features
 - OpenAI embedding provider (text-embedding-3-small)
 - Semantic similarity search across conversation history
 - Automatic collection creation with HNSW indexing
 - Batch indexing for bulk operations
 
+## Active Memory System
+
+Neo4j is an **active participant** in conversations, not just an archive:
+
+### Pre-Agent Memory Context
+Before the agent processes a message, relevant memories are retrieved from Neo4j and injected into the prompt:
+
+| Mode | Description | Cost |
+|------|-------------|------|
+| 0 (off) | No memory context | Free |
+| 1 (template) | Format with templates | Free |
+| 2 (haiku) | Claude Haiku narrativizes | ~$0.0003/msg |
+| 3 (hybrid) | Templates + Haiku for complex | Variable |
+
+### Memory Tools for Claude
+The agent can query and update the knowledge graph during conversations:
+
+| Access Level | Tools Available |
+|--------------|-----------------|
+| `off` | None |
+| `read` | recallMemory, searchEntities, getRelatedEntities |
+| `write` | read + saveNote, logObservation |
+| `full` | write + updateEntity, deleteEntity, createRelationship |
+
+### Post-Agent Entity Extraction
+After responses, entities and relationships are extracted and stored:
+
+```
+User: "My sponsor John suggested I try the HALT technique"
+        ↓ Entity Extraction (Haiku)
+Neo4j: (John:Person {role: "sponsor"})
+       (HALT:CopingStrategy)
+       (John)-[:SUGGESTED {context: "for cravings"}]->(HALT)
+```
+
 ## Crisis Detection
 
-The system detects 9 types of crisis patterns with severity levels 1-10:
+Two-stage crisis detection for accuracy and speed:
+
+### Stage 1: Keyword Detection (<10ms)
+Fast regex-based pattern matching for 9 crisis types:
 
 | Level | Severity | Patterns Detected |
 |-------|----------|-------------------|
@@ -176,7 +239,38 @@ The system detects 9 types of crisis patterns with severity levels 1-10:
 | 4-6 | Elevated | Severe distress, hopelessness, isolation |
 | 1-3 | Normal | Routine conversation |
 
-When level >= 8, the pipeline triggers an emergency response with crisis resources.
+### Stage 2: Deep LLM Evaluation
+For messages that don't trigger emergency (level < 7), the `DeepCrisisEvaluator` runs in parallel with agent processing:
+- Analyzes context and nuance
+- Distinguishes past experiences from current crises
+- Can escalate crisis level if patterns are detected
+
+### Crisis Alerting
+When level >= 7, `WebhookCrisisHandler` sends alerts:
+- HTTP POST to configured webhook URL
+- HMAC-SHA256 signed payloads
+- Non-blocking (fire-and-forget)
+- Includes crisis resources in response
+
+## Authentication
+
+The API supports JWT authentication via [Zitadel](https://zitadel.com):
+
+```bash
+# Configure in environment
+ZITADEL_ISSUER=https://your-instance.zitadel.cloud
+ZITADEL_AUDIENCE=your-client-id@your-project
+```
+
+When configured:
+- `/api/*` endpoints require valid JWT in `Authorization: Bearer <token>` header
+- `/health` and `/health/metrics` remain public
+- User ID extracted from JWT `sub` claim
+- Roles extracted from `urn:zitadel:iam:org:project:roles` claim
+
+When not configured:
+- All endpoints are public
+- `userId` must be provided in request body
 
 ## Environment Variables
 
@@ -191,6 +285,10 @@ USE_STUBS=true
 ANTHROPIC_API_KEY=sk-ant-xxx
 OPENAI_API_KEY=sk-xxx
 
+# Authentication (Zitadel)
+ZITADEL_ISSUER=https://your-instance.zitadel.cloud
+ZITADEL_AUDIENCE=your-client-id@your-project
+
 # L1: Redis
 REDIS_URL=redis://localhost:6379
 REDIS_PASSWORD=              # Optional: for authenticated Redis
@@ -204,6 +302,8 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/recoverysky
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password123
+NEO4J_DATABASE=neo4j         # Default database name
+NEO4J_DATABASE_PER_USER=false # Enable database-per-user mode (Dozer/Enterprise)
 
 # L4: Qdrant
 QDRANT_URL=http://localhost:6333
@@ -214,9 +314,25 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=recoverysky-agent
 
 # Crisis Response
-CRISIS_ALERT_WEBHOOK_URL=
+CRISIS_WEBHOOK_URL=          # Webhook for crisis alerts
+CRISIS_WEBHOOK_SECRET=       # HMAC secret for webhook signing
 CRISIS_THRESHOLD_HIGH=7
 CRISIS_THRESHOLD_CRITICAL=9
+
+# Active Memory System
+MEMORY_CONTEXT_MODE=1        # 0=off, 1=template, 2=haiku, 3=hybrid
+MEMORY_TOOL_ACCESS=read      # off, read, write, full
+
+# Entity Extraction
+ENTITY_EXTRACTION_MODE=all   # all, none, sample:N, significant
+ENTITY_MIN_IMPORTANCE=0.3    # 0.0-1.0 threshold
+
+# Evaluation
+EVALUATION_MODE=on_demand    # all, sample:N, on_demand
+
+# Meeting API
+MEETING_API_URL=http://localhost:4000
+MEETING_API_TOKEN=           # Optional: Bearer token for API auth
 ```
 
 ## Docker Services
@@ -276,21 +392,21 @@ pnpm --filter @recoverysky/pipeline test
 
 The project maintains comprehensive unit test coverage using Vitest with mock-based testing:
 
-| Package | Coverage | Tests |
-|---------|----------|-------|
-| @recoverysky/types | 98% | 33 |
-| @recoverysky/observability | 76% | 48 |
-| @recoverysky/crisis | 98% | 126 |
-| @recoverysky/memory | 94% | 101 |
-| @recoverysky/db | 100% | 20 |
-| @recoverysky/agent | 71% | 50 |
-| @recoverysky/pipeline | 93% | 16 |
-| @recoverysky/safety | 98% | 13 |
-| @recoverysky/evaluation | 99% | 14 |
-| @recoverysky/tools | 100% | 37 |
-| **Total** | **~75%** | **474** |
+| Package | Tests | Key Areas |
+|---------|-------|-----------|
+| @recoverysky/types | 33 | Result types, domain errors |
+| @recoverysky/observability | 48 | Logging, tracing, metrics |
+| @recoverysky/crisis | 126 | Detection patterns, handlers, evaluators |
+| @recoverysky/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator |
+| @recoverysky/db | 20 | Schema, PostgresSessionStore |
+| @recoverysky/agent | 50 | VercelAIAgentProvider, prompt builder |
+| @recoverysky/safety | 13 | PII, medical, enabling detectors |
+| @recoverysky/evaluation | 14 | LLMEvaluator, scoring |
+| @recoverysky/tools | 37 | Recovery tools, meeting client, memory tools |
+| @recoverysky/cli | ~20 | Commands, chat, health |
+| **Total** | **470+** | |
 
-All tests use mocks for external dependencies (Redis, PostgreSQL, Qdrant, AI providers).
+All tests use mocks for external dependencies (Redis, PostgreSQL, Neo4j, Qdrant, AI providers).
 
 ### Type Check
 
@@ -311,39 +427,64 @@ pnpm typecheck
 
 ## Implementation Status
 
-### Phase 0: Foundation ✅
-- [x] Monorepo with pnpm workspaces
-- [x] All packages scaffolded with interfaces
-- [x] Stub implementations for all providers
-- [x] Pipeline orchestrator
-- [x] Express API with routes
-- [x] Docker Compose configuration
+### Phase 1: Agent Integration ✅
+- [x] VercelAIAgentProvider with Claude (claude-sonnet-4)
+- [x] Streaming support with AsyncGenerator
+- [x] Tool execution loop with argument conversion
+- [x] Token usage tracking and error handling
 
-### Phase 1: Core Infrastructure ✅
-- [x] Real crisis detection with 9 pattern types
-- [x] Vercel AI SDK integration with Claude
-- [x] CLI tool with streaming support
-- [x] Diagnostics and observability
-- [x] wonder-logger config file support
+### Phase 2: PostgreSQL L2 Memory ✅
+- [x] Drizzle ORM schema with migrations
+- [x] PostgresSessionStore with conversation history
+- [x] pgvector support for embeddings (1536 dims)
+- [x] User profiles and session summaries
 
-### Phase 2: Memory Layer ✅
-- [x] PostgreSQL session store with Drizzle ORM
-- [x] Redis L1 context store with auth support
-- [x] Qdrant L4 vector store for semantic search
-- [x] OpenAI embedding provider
-- [x] Memory orchestrator with tiered fallback
+### Phase 3: Redis L1 Cache ✅
+- [x] RedisContextStore with sorted sets
+- [x] Configurable TTL (4hr default)
+- [x] Authentication support (password, username, TLS)
+- [x] Cache warming from L2
 
-### Phase 3: Quality & Testing ✅
-- [x] Comprehensive unit test suite (474 tests)
-- [x] 75% code coverage across all packages
-- [x] Mock-based testing patterns established
-- [x] Vitest workspace configuration
+### Phase 4: Embeddings ✅
+- [x] OpenAIEmbeddingProvider (text-embedding-3-small)
+- [x] Batch processing with rate limiting
+- [x] Semantic search integration
 
-### Phase 4-7: See PLAN.md for roadmap
-- [ ] Neo4j L3 knowledge graph
-- [ ] LLM-based deep crisis evaluation
-- [ ] Real-time crisis alerting webhooks
-- [ ] User profile learning & adaptation
+### Phase 5: Qdrant L4 Vector Store ✅
+- [x] QdrantVectorStore with HNSW indexing
+- [x] Semantic similarity search
+- [x] Automatic collection management
+
+### Phase 6: Enhanced Crisis Detection ✅
+- [x] KeywordCrisisDetector with 9 pattern types
+- [x] DeepCrisisEvaluator (LLM-based)
+- [x] WebhookCrisisHandler with HMAC signing
+- [x] Parallel evaluation with agent processing
+
+### Phase 7: Safety & Evaluation ✅
+- [x] SafetyValidator with three detectors:
+  - PIIDetector (SSN, phone, email, credit card, etc.)
+  - MedicalAdviceDetector (dosage, diagnosis, treatment)
+  - EnablingDetector (glorification, minimization)
+- [x] LLMEvaluator with quality/relevance/empathy/recovery scores
+- [x] Configurable evaluation modes
+
+### Phase 8: Neo4j L3 Knowledge Graph ✅
+- [x] Neo4jKnowledgeStore with CRUD operations
+- [x] EntityExtractor with LLM-based extraction
+- [x] Database-per-user mode (Dozer/Enterprise)
+- [x] Memory tools for Claude (recallMemory, saveNote, etc.)
+- [x] MemoryContextBuilder for pre-agent injection
+- [x] Rich relationship properties (graph-native design)
+
+### Phase 9: Production Hardening (In Progress)
+- [x] Comprehensive unit test suite (470+ tests)
+- [x] JWT authentication (Zitadel)
+- [x] Observability (OpenTelemetry + Prometheus)
+- [x] Result-based error handling
+- [ ] CI/CD pipeline
+- [ ] Load testing
+- [ ] API documentation (OpenAPI)
 
 ## License
 

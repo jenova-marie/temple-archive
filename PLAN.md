@@ -2,30 +2,35 @@
 
 ## Current State
 
-**Phase 0 is complete.** The foundation is built and operational:
+**Phases 0-8 substantially complete.** Production-ready foundation with multi-tier memory:
 
 - 10 packages in pnpm monorepo (types, observability, memory, crisis, safety, tools, agent, evaluation, pipeline, cli)
-- 1 application (apps/api)
+- 1 application (apps/api) + @recoverysky/db package
 - Pipeline orchestrator with 6-stage processing
-- All providers using stub/mock implementations
-- CLI tool for API interaction
-- Docker Compose for infrastructure services
-- Build system working (`pnpm build` succeeds)
-- Server runs on port 3333
+- **1000 tests passing** with dedicated `tests/` directories
+- Vercel AI SDK integration with Claude (VercelAIAgentProvider)
+- Multi-tier memory: Redis (L1), PostgreSQL (L2), Neo4j (L3), Qdrant (L4)
+- LLM-based entity extraction to knowledge graph
+- Production safety validators (PII, Medical, Enabling detectors)
+- JWT authentication via Zitadel
+- Meeting discovery API integration (findMeetings tool)
 
 **What works today:**
-- Send messages via CLI or HTTP
-- Crisis detection with keyword patterns (9 categories)
-- Mock responses from agent
-- Stub safety validation and evaluation
-- In-memory storage (no persistence between restarts)
+- Send messages via CLI or HTTP with real Claude responses
+- Crisis detection with keyword patterns (9 categories) + deep LLM evaluation
+- Multi-tier memory with Redis caching, PostgreSQL persistence, Neo4j graph, Qdrant vectors
+- Entity extraction from conversations to knowledge graph
+- Memory tools for agent to query/save to knowledge graph
+- Safety validation (PII detection, medical advice, enabling language)
+- LLM-based response evaluation
+- JWT authentication (Zitadel)
+- Meeting discovery (AA, NA, CMA, RD)
 
-**What doesn't work yet:**
-- Real LLM responses (using MockAgentProvider)
-- Persistent memory (all in-memory stubs)
-- Production safety validation
-- Real evaluation metrics
-- Streaming responses
+**What needs work:**
+- Neo4j schema documentation (see Phase 8.6)
+- Streaming responses endpoint
+- Production hardening (Phase 9)
+- CI/CD pipeline
 
 ---
 
@@ -448,39 +453,91 @@ recoverysky chat -m "I'm having thoughts of hurting myself"
 
 ---
 
-### Phase 8: L3 Memory (Neo4j) - Optional
+### Phase 8: L3 Memory (Neo4j Knowledge Graph) ✅ COMPLETE
 
-**Why Last:** Knowledge graph is an enhancement, not core.
+**Status:** Implemented with LLM-based entity extraction
 
-**Goal:** Entity extraction and relationship tracking
+**What's Done:**
+- Neo4j driver installed and integrated
+- `Neo4jKnowledgeStore` implementing `IKnowledgeStore` interface
+- `EntityExtractor` using Claude Haiku for LLM-based extraction
+- Database-per-user mode support (for multi-tenant deployments)
+- Memory tools for agent to query/write to knowledge graph
+- Full test coverage (1000 tests passing)
 
-**Package:** `@recoverysky/memory`
-
-**Tasks:**
+**Current Implementation:**
 
 ```
-8.1 [ ] Neo4j Driver Installation
-        pnpm --filter @recoverysky/memory add neo4j-driver
+8.1 [x] Neo4j Driver Installation
+        neo4j-driver in @recoverysky/memory
 
-8.2 [ ] Neo4jKnowledgeStore Implementation
-        - Implement IKnowledgeStore interface
-        - CRUD for entities
-        - Relationship queries
-        - Temporal patterns
+8.2 [x] Neo4jKnowledgeStore Implementation
+        packages/memory/src/stores/Neo4jKnowledgeStore.ts
+        - upsertEntity(), createRelationship()
+        - getRelatedEntities() with multi-hop traversal
+        - searchEntities() with pattern matching
+        - Database-per-user mode (NEO4J_DATABASE_PER_USER)
 
-8.3 [ ] Entity Extraction Pipeline
-        - Extract entities from messages
-        - Identify people, places, events, emotions
-        - Create/update graph nodes
+8.3 [x] Entity Extraction Pipeline
+        packages/memory/src/extraction/EntityExtractor.ts
+        - LLM-based extraction using Claude Haiku
+        - Configurable via ENTITY_EXTRACTION_MODE (all/none/sample:N/significant)
+        - 8 entity types: person, place, event, emotion, trigger,
+          coping_strategy, milestone, medication
+        - Relationship inference between entities
 
-8.4 [ ] Graph Queries
-        - Related entities for context
-        - Temporal patterns
-        - Multi-hop relationships
+8.4 [x] Memory Tools for Agent
+        packages/tools/src/memoryTools.ts
+        - recallMemory, searchEntities, getRelatedEntities (read)
+        - saveNote, logObservation (write)
+        - updateEntity, deleteEntity, createRelationship (full)
+        - Access controlled via MEMORY_TOOL_ACCESS env var
 
-8.5 [ ] Integration with MemoryOrchestrator
-        - Enrich context with graph data
-        - Pattern detection
+8.5 [x] Integration with Pipeline
+        - Entity extraction runs after message persistence
+        - Non-blocking (fire-and-forget) for response latency
+```
+
+**Remaining Tasks:**
+
+```
+8.6 [ ] Define Neo4j Memory Schema Document
+        content/concept/neo4j-schema.md
+        - Node types and properties
+        - Relationship types and semantics
+        - Indexing strategy
+        - Query patterns for common operations
+        - Multi-tenant database naming conventions
+
+8.7 [ ] Graph Visualization & Admin
+        - Cypher queries for debugging
+        - Admin endpoints for graph inspection
+        - Export/import utilities
+
+8.8 [ ] Advanced Graph Queries
+        - Temporal pattern detection
+        - Trigger → coping strategy correlation
+        - Recovery journey timeline
+```
+
+**Environment Variables:**
+```bash
+# Neo4j Connection
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password123
+NEO4J_DATABASE=neo4j                    # Default database
+NEO4J_DATABASE_PER_USER=false           # Enable multi-tenant mode
+
+# Entity Extraction
+ENTITY_EXTRACTION_MODE=all              # all|none|sample:N|significant
+ENTITY_EXTRACTION_MODEL=claude-3-haiku-20240307
+ENTITY_EXTRACTION_TYPES=person,place,event,emotion,trigger,coping_strategy,milestone,medication
+ENTITY_MIN_IMPORTANCE=0.3
+ENTITY_INFER_RELATIONSHIPS=true
+
+# Memory Tools
+MEMORY_TOOL_ACCESS=write                # off|read|write|full
 ```
 
 ---
