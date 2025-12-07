@@ -37,6 +37,10 @@ export interface MemoryRetrievalResult {
   context: AssembledContext
   source: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED'
   latencyMs: number
+  /** Number of cache hits during retrieval */
+  cacheHits: number
+  /** Number of cache misses during retrieval */
+  cacheMisses: number
 }
 
 export interface MemoryError {
@@ -86,6 +90,10 @@ export class MemoryOrchestrator {
         requestId: ctx.requestId,
       })
 
+      // Track cache stats locally to return in result
+      let cacheHits = 0
+      let cacheMisses = 0
+
       // STAGE 1: Try L1 cache (Redis)
       const l1Result = await this.l1.getRecentMessages(
         conversationId,
@@ -99,6 +107,7 @@ export class MemoryOrchestrator {
       }
 
       if (l1Result.ok && l1Result.value.length > 0) {
+        cacheHits++
         pipelineMetrics.memoryCacheHits.add(1, { tier: 'L1' })
         logger.debug({ count: l1Result.value.length }, 'L1 cache hit')
 
@@ -124,9 +133,12 @@ export class MemoryOrchestrator {
           context,
           source: 'L1_REDIS' as const,
           latencyMs: Date.now() - startTime,
+          cacheHits,
+          cacheMisses,
         })
       }
 
+      cacheMisses++
       pipelineMetrics.memoryCacheMisses.add(1, { tier: 'L1' })
       logger.debug('L1 cache miss, trying L2')
 
@@ -156,6 +168,7 @@ export class MemoryOrchestrator {
       const previousSessions = summariesResult.ok ? summariesResult.value : []
 
       if (l2Result.value.length > 0) {
+        cacheHits++
         pipelineMetrics.memoryCacheHits.add(1, { tier: 'L2' })
         logger.debug({ count: l2Result.value.length }, 'L2 hit')
 
@@ -174,9 +187,12 @@ export class MemoryOrchestrator {
           context,
           source: 'L2_POSTGRESQL' as const,
           latencyMs: Date.now() - startTime,
+          cacheHits,
+          cacheMisses,
         })
       }
 
+      cacheMisses++
       pipelineMetrics.memoryCacheMisses.add(1, { tier: 'L2' })
       logger.debug('L2 miss, searching L3/L4')
 
@@ -194,6 +210,7 @@ export class MemoryOrchestrator {
         )
 
         if (l4Result.ok && l4Result.value.length > 0) {
+          cacheHits++
           pipelineMetrics.memoryCacheHits.add(1, { tier: 'L4' })
           logger.debug({ count: l4Result.value.length }, 'L4 semantic matches found')
 
@@ -209,6 +226,8 @@ export class MemoryOrchestrator {
             context,
             source: 'L3_NEO4J_L4_QDRANT' as const,
             latencyMs: Date.now() - startTime,
+            cacheHits,
+            cacheMisses,
           })
         }
       }
@@ -228,6 +247,8 @@ export class MemoryOrchestrator {
         context,
         source: 'COMBINED' as const,
         latencyMs: Date.now() - startTime,
+        cacheHits,
+        cacheMisses,
       })
     })
   }

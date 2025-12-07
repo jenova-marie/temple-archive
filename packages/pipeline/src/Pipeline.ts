@@ -179,6 +179,13 @@ export class Pipeline {
           previousSessions: [],
         }
 
+        // Update cache stats from memory retrieval
+        if (memoryResult.ok) {
+          ctx.metrics.cacheHits = memoryResult.value.cacheHits
+          ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
+          ctx.metrics.memoryTier = memoryResult.value.source
+        }
+
         // STAGE 3: Agent processing
         const agentResult = await this.runAgentProcessing(input, ctx)
         if (!agentResult.ok) {
@@ -305,7 +312,7 @@ export class Pipeline {
   private async runMemoryRetrieval(
     input: PipelineInput,
     ctx: PipelineContext
-  ): Promise<Result<{ context: PipelineContext['memory']; source: string }, { kind: string; message: string }>> {
+  ): Promise<Result<{ context: PipelineContext['memory']; source: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED'; cacheHits: number; cacheMisses: number }, { kind: string; message: string }>> {
     const stageStart = Date.now()
 
     // Generate embedding for semantic search (if provider available)
@@ -334,6 +341,8 @@ export class Pipeline {
     return ok({
       context: result.value.context,
       source: result.value.source,
+      cacheHits: result.value.cacheHits,
+      cacheMisses: result.value.cacheMisses,
     })
   }
 
