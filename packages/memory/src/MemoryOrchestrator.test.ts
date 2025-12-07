@@ -92,9 +92,10 @@ function createMockL3Store(overrides: Partial<IKnowledgeStore> = {}): IKnowledge
 
 function createMockL4Store(overrides: Partial<IVectorStore> = {}): IVectorStore {
   return {
-    search: vi.fn().mockResolvedValue(ok([])),
     indexMessage: vi.fn().mockResolvedValue(ok(undefined)),
-    deleteByConversation: vi.fn().mockResolvedValue(ok(undefined)),
+    batchIndex: vi.fn().mockResolvedValue(ok(undefined)),
+    search: vi.fn().mockResolvedValue(ok([])),
+    prune: vi.fn().mockResolvedValue(ok(0)),
     ...overrides,
   }
 }
