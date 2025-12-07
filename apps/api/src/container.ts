@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, ICrisisHandler, ICrisisEvaluator } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -22,9 +22,9 @@ import {
 } from '@recoverysky/memory'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
-import { StubSafetyValidator } from '@recoverysky/safety'
+import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
 import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
-import { StubEvaluator } from '@recoverysky/evaluation'
+import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
 import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
 
@@ -143,9 +143,43 @@ export function createContainer(options: ContainerConfig = {}): Container {
     })
   }
 
-  // Create safety and evaluation components
-  const safety = new StubSafetyValidator()
-  const evaluator = new StubEvaluator()
+  // Create safety validator
+  // Uses SafetyValidator with PII detection, medical advice detection, and enabling language detection
+  // LLM-based detection is enabled when ANTHROPIC_API_KEY is set
+  let safety: ISafetyValidator
+  if (useStubs) {
+    logger.info('Using StubSafetyValidator')
+    safety = new StubSafetyValidator()
+  } else {
+    const anthropicForSafety = process.env.ANTHROPIC_API_KEY
+      ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      : null
+    logger.info('Using SafetyValidator', { llmEnabled: !!anthropicForSafety })
+    safety = new SafetyValidator(anthropicForSafety, {
+      enableLLMDetection: !!anthropicForSafety,
+      redactPII: true,
+    })
+  }
+
+  // Create evaluator
+  // Uses LLMEvaluator when ANTHROPIC_API_KEY is set, otherwise StubEvaluator
+  const stubEvaluator = new StubEvaluator()
+  let evaluator: IEvaluator
+  if (useStubs) {
+    logger.info('Using StubEvaluator')
+    evaluator = stubEvaluator
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    const anthropicForEval = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const evalMode = (process.env.EVALUATION_MODE as EvaluationMode) || 'on_demand'
+    logger.info('Using LLMEvaluator', { mode: evalMode })
+    evaluator = new LLMEvaluator(anthropicForEval, stubEvaluator, {
+      mode: evalMode,
+      minCrisisLevelToTrigger: 4,
+    })
+  } else {
+    logger.info('Using StubEvaluator (no ANTHROPIC_API_KEY)')
+    evaluator = stubEvaluator
+  }
 
   // Create embedding provider - requires OPENAI_API_KEY
   let embedding: IEmbeddingProvider | undefined

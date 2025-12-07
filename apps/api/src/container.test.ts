@@ -43,6 +43,7 @@ vi.mock('@recoverysky/crisis', () => ({
 
 vi.mock('@recoverysky/safety', () => ({
   StubSafetyValidator: vi.fn().mockImplementation(() => ({})),
+  SafetyValidator: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock('@recoverysky/agent', () => ({
@@ -52,6 +53,7 @@ vi.mock('@recoverysky/agent', () => ({
 
 vi.mock('@recoverysky/evaluation', () => ({
   StubEvaluator: vi.fn().mockImplementation(() => ({})),
+  LLMEvaluator: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock('@recoverysky/pipeline', () => ({
