@@ -84,31 +84,34 @@ describe('auth middleware', () => {
 
   describe('createAuthMiddleware', () => {
     describe('required middleware', () => {
-      // Note: Auth enforcement is temporarily disabled for development (see auth.ts TODO)
-      // These tests reflect the current "allow all" behavior
-      // When auth is re-enabled, update these tests to expect 401 responses
-
-      it('allows request without auth header (dev mode)', async () => {
+      it('returns 401 when auth header is missing', async () => {
         const auth = createAuthMiddleware(mockConfig)
 
         await auth.required(mockReq as Request, mockRes as Response, mockNext)
 
-        // Currently allowing unauthenticated requests for development
-        expect(mockNext).toHaveBeenCalled()
-        expect(mockReq.user).toBeUndefined()
+        expect(mockRes.status).toHaveBeenCalledWith(401)
+        expect(mockRes.json).toHaveBeenCalledWith({
+          error: 'Unauthorized',
+          message: 'Valid authentication token required',
+        })
+        expect(mockNext).not.toHaveBeenCalled()
       })
 
-      it('allows request with invalid auth header (dev mode)', async () => {
+      it('returns 401 when auth header is not Bearer', async () => {
         mockReq.headers = { authorization: 'Basic abc123' }
         const auth = createAuthMiddleware(mockConfig)
 
         await auth.required(mockReq as Request, mockRes as Response, mockNext)
 
-        // Currently allowing unauthenticated requests for development
-        expect(mockNext).toHaveBeenCalled()
+        expect(mockRes.status).toHaveBeenCalledWith(401)
+        expect(mockRes.json).toHaveBeenCalledWith({
+          error: 'Unauthorized',
+          message: 'Valid authentication token required',
+        })
+        expect(mockNext).not.toHaveBeenCalled()
       })
 
-      it('allows request when JWT verification fails (dev mode)', async () => {
+      it('returns 401 when JWT verification fails', async () => {
         mockReq.headers = { authorization: 'Bearer invalid-token' }
         vi.mocked(jose.jwtVerify).mockRejectedValue(new Error('Invalid token'))
 
@@ -116,8 +119,12 @@ describe('auth middleware', () => {
 
         await auth.required(mockReq as Request, mockRes as Response, mockNext)
 
-        // Currently allowing unauthenticated requests for development
-        expect(mockNext).toHaveBeenCalled()
+        expect(mockRes.status).toHaveBeenCalledWith(401)
+        expect(mockRes.json).toHaveBeenCalledWith({
+          error: 'Unauthorized',
+          message: 'Valid authentication token required',
+        })
+        expect(mockNext).not.toHaveBeenCalled()
       })
 
       it('attaches user and calls next when JWT is valid', async () => {

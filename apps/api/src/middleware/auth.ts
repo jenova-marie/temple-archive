@@ -167,18 +167,14 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
     ): Promise<void> => {
       const isAuthenticated = await verifyAndAttachUser(req);
 
-      // TODO: Enable auth enforcement when Zitadel is fully configured
       if (!isAuthenticated) {
-        // For now, just log and continue - uncomment to enforce
-        logger.debug("Request without valid auth, allowing for development");
-        // res.status(401).json({
-        //   error: 'Unauthorized',
-        //   message: 'Valid authentication token required',
-        // })
-        // return
+        res.status(401).json({
+          error: "Unauthorized",
+          message: "Valid authentication token required",
+        });
+        return;
       }
 
-      void res; // Suppress unused variable warning
       next();
     },
 

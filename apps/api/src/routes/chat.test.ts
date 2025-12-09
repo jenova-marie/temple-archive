@@ -25,9 +25,22 @@ function createValidBody(overrides: Record<string, unknown> = {}) {
     messages: [
       { role: 'user', parts: [{ type: 'text', text: 'Hello' }], id: 'msg-1' }
     ],
-    metadata: { userId: 'user-456' },
     ...overrides,
   }
+}
+
+/**
+ * Helper to create authenticated user (simulates JWT auth)
+ */
+function createAuthUser(overrides: Partial<Request['user']> = {}) {
+  return {
+    id: 'user-456',
+    email: 'test@example.com',
+    name: 'Test User',
+    roles: [],
+    claims: { sub: 'user-456' },
+    ...overrides,
+  } as Request['user']
 }
 
 describe('chat routes', () => {
@@ -42,6 +55,7 @@ describe('chat routes', () => {
     mockReq = {
       body: createValidBody(),
       headers: {},
+      user: createAuthUser(),
     }
 
     mockRes = {
@@ -139,19 +153,6 @@ describe('chat routes', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Bad Request',
         message: 'No user message found in messages array',
-      })
-    })
-
-    it('returns 400 if userId is missing from metadata and no JWT user', async () => {
-      mockReq.body = createValidBody({ metadata: {} })
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Bad Request',
-        message: 'userId is required (from JWT or metadata.userId)',
       })
     })
 
@@ -352,10 +353,9 @@ describe('chat routes', () => {
       )
     })
 
-    it('uses userId from JWT user when available', async () => {
-      // Simulate authenticated request with JWT user
-      mockReq.user = { id: 'jwt-user-123' } as Request['user']
-      mockReq.body = createValidBody({ metadata: {} }) // No userId in metadata
+    it('uses userId from authenticated JWT user', async () => {
+      // Auth middleware ensures req.user is present
+      mockReq.user = createAuthUser({ id: 'jwt-user-123' })
 
       const mockResult = {
         response: 'Response',

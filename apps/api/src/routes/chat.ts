@@ -57,15 +57,17 @@ export function createChatRouter(pipeline: Pipeline): Router {
    * Process a chat message through the pipeline.
    * Expects Vercel AI SDK format with id, messages[], and optional trigger.
    *
-   * When auth is enabled (ZITADEL_ISSUER set), userId is extracted from JWT.
-   * When auth is disabled, userId must be provided in metadata.
+   * Requires JWT authentication - userId is extracted from the token.
    */
   router.post('/', async (req: Request, res: Response) => {
     const logger = getLogger().child({ route: 'POST /api/chat' })
 
     try {
+      // Auth middleware ensures req.user is present
+      const userId = req.user!.id
+
       const body = req.body as VercelAIChatRequest
-      const { id: conversationId, messages, metadata } = body
+      const { id: conversationId, messages } = body
 
       // Validate conversation ID
       if (!conversationId || typeof conversationId !== 'string') {
@@ -91,17 +93,6 @@ export function createChatRouter(pipeline: Pipeline): Router {
         res.status(400).json({
           error: 'Bad Request',
           message: 'No user message found in messages array',
-        })
-        return
-      }
-
-      // Get userId: prefer JWT user, fall back to metadata
-      const userId = req.user?.id || (metadata?.userId as string)
-
-      if (!userId || typeof userId !== 'string') {
-        res.status(400).json({
-          error: 'Bad Request',
-          message: 'userId is required (from JWT or metadata.userId)',
         })
         return
       }

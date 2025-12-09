@@ -67,21 +67,11 @@ curl http://localhost:3333/health
 
 ### Send Message
 
-The API uses [Vercel AI SDK](https://sdk.vercel.ai/docs) message format for compatibility with `useChat` hooks:
+The API uses [Vercel AI SDK](https://sdk.vercel.ai/docs) message format for compatibility with `useChat` hooks.
+
+**Authentication required** - Include a valid JWT in the `Authorization` header:
 
 ```bash
-# Without authentication (when ZITADEL_ISSUER is not configured)
-curl -X POST http://localhost:3333/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id": "conv_123",
-    "messages": [
-      {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
-    ],
-    "metadata": {"userId": "user_456"}
-  }'
-
-# With JWT authentication (when Zitadel is configured)
 curl -X POST http://localhost:3333/api/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT_TOKEN" \
@@ -91,8 +81,9 @@ curl -X POST http://localhost:3333/api/chat \
       {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
     ]
   }'
-# Note: userId is extracted from JWT claims when authenticated
 ```
+
+The `userId` is automatically extracted from the JWT `sub` claim.
 
 #### Request Format
 
@@ -100,7 +91,6 @@ curl -X POST http://localhost:3333/api/chat \
 |-------|------|----------|-------------|
 | `id` | string | Yes | Conversation/thread ID |
 | `messages` | UIMessage[] | Yes | Array of messages with `role`, `parts`, `id` |
-| `metadata` | object | No | Additional data (e.g., `userId` when not using JWT) |
 | `trigger` | string | No | Action trigger type (e.g., "submit-message") |
 
 #### Response Format
@@ -306,8 +296,8 @@ When configured:
 - Roles extracted from `urn:zitadel:iam:org:project:roles` claim
 
 When not configured:
-- All endpoints are public
-- `userId` must be provided in `metadata.userId`
+- Auth middleware is not applied
+- Requests to `/api/*` will fail (no user context)
 
 ## Environment Variables
 
