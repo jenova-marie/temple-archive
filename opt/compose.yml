@@ -77,7 +77,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost:3000/health",
+          "http://localhost:${PORT}/health",
         ]
       interval: 30s
       timeout: 10s
