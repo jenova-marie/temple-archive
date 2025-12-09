@@ -4,6 +4,7 @@ An AI-powered chatbot agent designed to support people in addiction recovery. Bu
 
 ## Features
 
+- **Vercel AI SDK Compatible**: Native support for `useChat` hooks with UIMessage format
 - **Multi-Tier Memory System**: L1 (Redis) + L2 (PostgreSQL) + L3 (Neo4j) + L4 (Qdrant) for contextual conversations
 - **Active Knowledge Graph**: Neo4j-powered entity extraction with memory tools Claude can use during conversations
 - **Real-Time Crisis Detection**: Pre-flight keyword matching (<10ms) + LLM deep evaluation with webhook alerting
@@ -66,18 +67,54 @@ curl http://localhost:3333/health
 
 ### Send Message
 
+The API uses [Vercel AI SDK](https://sdk.vercel.ai/docs) message format for compatibility with `useChat` hooks:
+
 ```bash
 # Without authentication (when ZITADEL_ISSUER is not configured)
 curl -X POST http://localhost:3333/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "I am feeling anxious today", "conversationId": "conv_123", "userId": "user_456"}'
+  -d '{
+    "id": "conv_123",
+    "messages": [
+      {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
+    ],
+    "metadata": {"userId": "user_456"}
+  }'
 
 # With JWT authentication (when Zitadel is configured)
 curl -X POST http://localhost:3333/api/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT_TOKEN" \
-  -d '{"message": "I am feeling anxious today", "conversationId": "conv_123"}'
+  -d '{
+    "id": "conv_123",
+    "messages": [
+      {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
+    ]
+  }'
 # Note: userId is extracted from JWT claims when authenticated
+```
+
+#### Request Format
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Conversation/thread ID |
+| `messages` | UIMessage[] | Yes | Array of messages with `role`, `parts`, `id` |
+| `metadata` | object | No | Additional data (e.g., `userId` when not using JWT) |
+| `trigger` | string | No | Action trigger type (e.g., "submit-message") |
+
+#### Response Format
+
+```json
+{
+  "id": "msg_abc123",
+  "role": "assistant",
+  "content": "I hear you. Feeling anxious is...",
+  "conversationId": "conv_123",
+  "metrics": { "totalDuration": 245, "tokensUsed": { "input": 50, "output": 120 } },
+  "crisisLevel": 2,
+  "emergencyTriggered": false
+}
 ```
 
 ### Metrics
@@ -270,7 +307,7 @@ When configured:
 
 When not configured:
 - All endpoints are public
-- `userId` must be provided in request body
+- `userId` must be provided in `metadata.userId`
 
 ## Environment Variables
 
