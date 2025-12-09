@@ -65,6 +65,9 @@ importers:
       '@recoverysky/types':
         specifier: workspace:*
         version: link:../../packages/types
+      ai:
+        specifier: ^4.0.0
+        version: 4.3.19(react@19.2.1)(zod@4.1.13)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
