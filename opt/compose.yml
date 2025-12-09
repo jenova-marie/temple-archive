@@ -1,19 +1,20 @@
 # RecoverySky Agent - Production Compose
 #
-# Build (requires BuildKit secret for private registry):
-#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t recoverysky-agent ..
-#
-# Run:
-#   docker-compose -f opt/compose.yml up -d
+# Build and run:
+#   docker-compose -f opt/compose.yml up -d --build
 #
 # Requires:
-#   - Pre-built image (see build command above)
 #   - Environment variables set on host
 #   - External services (Redis, PostgreSQL, Neo4j, Qdrant)
 
 services:
   agent:
-    image: ${DOCKER_IMAGE}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      secrets:
+        - npmrc
+    image: ${DOCKER_IMAGE:-recoverysky-agent:latest}
     container_name: recoverysky-agent
     restart: unless-stopped
     ports:
@@ -39,6 +40,8 @@ services:
 
       # L1: Redis
       - REDIS_URL
+      - REDIS_USERNAME=agent-sky
+      - REDIS_PASSWORD=${REDIS_AGENT_SKY_PASSWORD}
 
       # L2: PostgreSQL
       - DATABASE_URL
@@ -87,3 +90,7 @@ services:
         reservations:
           cpus: ${DOCKER_CPUS_RESERVATION}
           memory: ${DOCKER_MEMORY_RESERVATION}
+
+secrets:
+  npmrc:
+    file: ${HOME}/.npmrc
