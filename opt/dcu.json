@@ -1,12 +1,11 @@
 {
   "name": "agent",
   "description": "Starting Docker Compose services for RecoverySky Agent",
-  "vault":
-    [
-      "docker-config:SkyAgent",
-      "app-config:SkyAgent",
-      "app-secrets:SkyAgent/JSON",
-      "db-users:SkyAgent/JSON",
-      "redis-users:SkyAgent/JSON",
-    ],
+  "vault": [
+    "docker-config:SkyAgent",
+    "app-config:SkyAgent",
+    "app-secrets:SkyAgent/JSON",
+    "db-users:SkyAgent/JSON",
+    "redis-users:SkyAgent/JSON"
+  ]
 }
