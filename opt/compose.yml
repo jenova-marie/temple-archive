@@ -17,6 +17,8 @@ services:
     image: ${DOCKER_IMAGE:-recoverysky-agent:latest}
     container_name: recoverysky-agent
     restart: unless-stopped
+    networks:
+      - recoverysky
     ports:
       - "${PORT:-3000}:3000"
     environment:
@@ -90,6 +92,10 @@ services:
         reservations:
           cpus: ${DOCKER_CPUS_RESERVATION}
           memory: ${DOCKER_MEMORY_RESERVATION}
+
+networks:
+  recoverysky:
+    external: true
 
 secrets:
   npmrc:

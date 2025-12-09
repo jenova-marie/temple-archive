@@ -6,6 +6,6 @@
     "app-config:SkyAgent",
     "app-secrets:SkyAgent/JSON",
     "db-users:SkyAgent/JSON",
-    "redis-users:SkyAgent/JSON"
+    "redis-passwords:SkyAgent/JSON"
   ]
 }
