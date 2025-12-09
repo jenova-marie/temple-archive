@@ -17,9 +17,15 @@ pnpm build:all
 # Start dev server (uses tsx watch)
 pnpm dev
 
+# Run with real services (requires docker-compose up -d first)
+USE_STUBS=false pnpm dev
+
 # Run tests
 pnpm test
 pnpm test:watch
+
+# Run a single test file
+pnpm vitest run packages/memory/src/qdrant/client.test.ts
 
 # Type check all packages
 pnpm typecheck
@@ -49,9 +55,10 @@ This is a **pnpm monorepo** for an AI chatbot agent supporting addiction recover
 ```
 apps/api
     └── @recoverysky/pipeline
-            ├── @recoverysky/memory
+            ├── @recoverysky/memory ─── @recoverysky/db
             ├── @recoverysky/crisis
             ├── @recoverysky/safety
+            ├── @recoverysky/tools
             ├── @recoverysky/agent
             └── @recoverysky/evaluation
                     └── @recoverysky/observability
@@ -64,10 +71,14 @@ apps/api
 |---------|---------|
 | `types` | Shared interfaces, Result type, domain errors |
 | `observability` | Logging (Pino), tracing (OpenTelemetry), metrics via wonder-logger |
-| `memory` | Multi-tier memory orchestration (L1-L4) with in-memory stubs |
-| `crisis` | Keyword-based crisis detection (<10ms), 9 pattern types |
+| `db` | Drizzle ORM schema, PostgreSQL session store |
+| `memory` | Multi-tier memory orchestration (L1-L4), entity extraction, bootstrap system |
+| `crisis` | Keyword-based crisis detection (<10ms), deep LLM evaluation, webhook alerting |
+| `safety` | PII detection, medical advice filtering, enabling language detection |
+| `tools` | Vercel AI SDK tool definitions (findMeetings, memory tools) |
+| `agent` | System prompt builder, VercelAIAgentProvider with Claude |
+| `evaluation` | LLM-based response quality scoring |
 | `pipeline` | Main orchestrator coordinating all stages |
-| `agent` | System prompt builder, agent provider interface |
 | `cli` | Command-line interface for API interaction |
 
 ### Pipeline Flow
@@ -83,7 +94,19 @@ Crisis level ≥8 triggers emergency response, bypassing normal flow.
 - **L3 (Neo4j)**: Entity graph (reserved for future)
 - **L4 (Qdrant)**: Semantic similarity search
 
-Currently all tiers use in-memory stub implementations.
+All tiers have real implementations (Redis, PostgreSQL, Neo4j, Qdrant) plus in-memory stubs for testing. Set `USE_STUBS=true` (default) for stub mode.
+
+### Dependency Injection
+
+All external services are injected via `apps/api/src/container.ts`. Environment variables control which implementations are used:
+
+- `USE_STUBS=true` → All in-memory stubs (default for dev)
+- `REDIS_URL` → Real Redis L1 cache
+- `DATABASE_URL` → Real PostgreSQL L2 session store
+- `NEO4J_URI` → Real Neo4j L3 knowledge graph
+- `QDRANT_URL` → Real Qdrant L4 vector store
+- `ANTHROPIC_API_KEY` → Real agent, crisis evaluator, entity extraction
+- `OPENAI_API_KEY` → Real embeddings for semantic search
 
 ## Key Patterns
 
@@ -146,3 +169,10 @@ All imports must include `.js` extension for local files.
 - `POST /api/chat` - Process message (requires `message`, `conversationId`, `userId`)
 - `GET /health` - Health check
 - `GET /health/metrics` - Prometheus metrics
+
+## Adding a New Package
+
+1. Create `packages/<name>/` with `package.json`, `tsconfig.json`, `src/index.ts`
+2. Add reference to root `tsconfig.json`
+3. Add workspace dependency: `pnpm --filter @recoverysky/<consumer> add @recoverysky/<name>`
+4. Export via `src/index.ts` and ensure `.js` extensions on local imports
