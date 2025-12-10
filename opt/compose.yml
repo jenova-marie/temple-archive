@@ -58,6 +58,7 @@ services:
       - NEO4J_URI
       - NEO4J_USER
       - NEO4J_PASSWORD
+      - NEO4J_DATABASE_PER_USER
 
       # L4: Qdrant
       - QDRANT_URL
