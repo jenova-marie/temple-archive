@@ -6,7 +6,7 @@
  */
 
 import { anthropic } from '@ai-sdk/anthropic'
-import { generateText, streamText, type CoreTool } from 'ai'
+import { generateText, streamText, stepCountIs, type ToolSet } from 'ai'
 import type {
   IAgentProvider,
   AgentInput,
@@ -88,19 +88,22 @@ export class VercelAIAgentProvider implements IAgentProvider {
           system: input.systemPrompt,
           messages,
           tools,
-          maxSteps: this.config.maxSteps,
-          maxTokens: this.config.maxTokens,
+          stopWhen: stepCountIs(this.config.maxSteps),
+          maxOutputTokens: this.config.maxTokens,
           temperature: this.config.temperature,
         })
 
         const duration = Date.now() - startTime
 
+        const inputTokens = result.usage.inputTokens ?? 0
+        const outputTokens = result.usage.outputTokens ?? 0
+
         logger.info(
           {
             duration,
             finishReason: result.finishReason,
-            inputTokens: result.usage.promptTokens,
-            outputTokens: result.usage.completionTokens,
+            inputTokens,
+            outputTokens,
             toolCallCount: result.toolCalls?.length ?? 0,
             stepCount: result.steps?.length ?? 1,
           },
@@ -108,8 +111,8 @@ export class VercelAIAgentProvider implements IAgentProvider {
         )
 
         // Record metrics
-        pipelineMetrics.tokensUsed.add(result.usage.promptTokens, { direction: 'input' })
-        pipelineMetrics.tokensUsed.add(result.usage.completionTokens, { direction: 'output' })
+        pipelineMetrics.tokensUsed.add(inputTokens, { direction: 'input' })
+        pipelineMetrics.tokensUsed.add(outputTokens, { direction: 'output' })
 
         // Convert tool calls to our format
         const toolCalls = this.convertToolCalls(result.toolCalls ?? [])
@@ -121,8 +124,8 @@ export class VercelAIAgentProvider implements IAgentProvider {
           content: result.text,
           toolCalls,
           usage: {
-            inputTokens: result.usage.promptTokens,
-            outputTokens: result.usage.completionTokens,
+            inputTokens,
+            outputTokens,
           },
           model: this.config.model,
           stopReason,
@@ -173,8 +176,8 @@ export class VercelAIAgentProvider implements IAgentProvider {
         system: input.systemPrompt,
         messages,
         tools,
-        maxSteps: this.config.maxSteps,
-        maxTokens: this.config.maxTokens,
+        stopWhen: stepCountIs(this.config.maxSteps),
+        maxOutputTokens: this.config.maxTokens,
         temperature: this.config.temperature,
       })
 
@@ -196,20 +199,23 @@ export class VercelAIAgentProvider implements IAgentProvider {
 
       const duration = Date.now() - startTime
 
+      const inputTokens = usage.inputTokens ?? 0
+      const outputTokens = usage.outputTokens ?? 0
+
       logger.info(
         {
           duration,
           finishReason,
-          inputTokens: usage.promptTokens,
-          outputTokens: usage.completionTokens,
+          inputTokens,
+          outputTokens,
           toolCallCount: toolCallsResult?.length ?? 0,
         },
         'Agent streaming completed'
       )
 
       // Record metrics
-      pipelineMetrics.tokensUsed.add(usage.promptTokens, { direction: 'input' })
-      pipelineMetrics.tokensUsed.add(usage.completionTokens, { direction: 'output' })
+      pipelineMetrics.tokensUsed.add(inputTokens, { direction: 'input' })
+      pipelineMetrics.tokensUsed.add(outputTokens, { direction: 'output' })
 
       // Convert tool calls to our format
       const toolCalls = this.convertToolCalls(toolCallsResult ?? [])
@@ -220,8 +226,8 @@ export class VercelAIAgentProvider implements IAgentProvider {
         content: fullText,
         toolCalls,
         usage: {
-          inputTokens: usage.promptTokens,
-          outputTokens: usage.completionTokens,
+          inputTokens,
+          outputTokens,
         },
         model: this.config.model,
         stopReason: this.mapFinishReason(finishReason),
@@ -267,34 +273,34 @@ export class VercelAIAgentProvider implements IAgentProvider {
    */
   private convertTools(
     tools?: ToolDefinition[]
-  ): Record<string, CoreTool> | undefined {
+  ): ToolSet | undefined {
     if (!tools || tools.length === 0) {
       return undefined
     }
 
-    const converted: Record<string, CoreTool> = {}
+    const converted: Record<string, unknown> = {}
 
     for (const tool of tools) {
       converted[tool.name] = {
         description: tool.description,
-        parameters: tool.parameters as CoreTool['parameters'],
-        execute: tool.execute as CoreTool['execute'],
+        inputSchema: tool.parameters,
+        execute: tool.execute,
       }
     }
 
-    return converted
+    return converted as ToolSet
   }
 
   /**
    * Convert Vercel AI SDK tool calls to our ToolCall format
    */
   private convertToolCalls(
-    sdkToolCalls: Array<{ toolCallId: string; toolName: string; args: unknown }>
+    sdkToolCalls: Array<{ toolCallId: string; toolName: string; input: unknown }>
   ): ToolCall[] {
     return sdkToolCalls.map(tc => ({
       toolId: tc.toolCallId,
       name: tc.toolName,
-      arguments: tc.args as Record<string, unknown>,
+      arguments: tc.input as Record<string, unknown>,
       // Result would be populated during agentic loop execution
       result: undefined,
     }))

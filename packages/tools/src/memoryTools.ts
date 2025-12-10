@@ -529,7 +529,7 @@ Different from logObservation in that this is for explicit relationship creation
     toEntity: z.string().describe('Target entity name'),
     relationshipType: z.string().describe('Type of relationship'),
     strength: z.number().min(0).max(1).default(0.5).describe('Relationship strength 0-1'),
-    properties: z.record(z.unknown()).optional().describe('Additional properties'),
+    properties: z.record(z.string(), z.unknown()).optional().describe('Additional properties'),
   }),
   execute: async ({ fromEntity, toEntity, relationshipType, strength, properties }) => {
     return withSpan('tool.createRelationship', async () => {

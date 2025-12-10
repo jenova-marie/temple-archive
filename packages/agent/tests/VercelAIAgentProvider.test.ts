@@ -25,6 +25,7 @@ const mockStreamText = vi.fn()
 vi.mock('ai', () => ({
   generateText: (...args: unknown[]) => mockGenerateText(...args),
   streamText: (...args: unknown[]) => mockStreamText(...args),
+  stepCountIs: (n: number) => ({ type: 'stepCount', count: n }),
 }))
 
 // Mock Anthropic
@@ -106,8 +107,8 @@ describe('VercelAIAgentProvider', () => {
         text: 'Hello! I am doing well, thank you for asking.',
         finishReason: 'stop',
         usage: {
-          promptTokens: 50,
-          completionTokens: 20,
+          inputTokens: 50,
+          outputTokens: 20,
         },
         toolCalls: [],
         steps: [],
@@ -130,7 +131,7 @@ describe('VercelAIAgentProvider', () => {
       mockGenerateText.mockResolvedValue({
         text: 'Response',
         finishReason: 'stop',
-        usage: { promptTokens: 100, completionTokens: 10 },
+        usage: { inputTokens: 100, outputTokens: 10 },
         toolCalls: [],
       })
 
@@ -168,12 +169,12 @@ describe('VercelAIAgentProvider', () => {
       mockGenerateText.mockResolvedValue({
         text: 'Let me find meetings for you.',
         finishReason: 'tool-calls',
-        usage: { promptTokens: 60, completionTokens: 30 },
+        usage: { inputTokens: 60, outputTokens: 30 },
         toolCalls: [
           {
             toolCallId: 'call-123',
             toolName: 'findMeetings',
-            args: { type: 'aa', location: 'Seattle' },
+            input: { type: 'aa', location: 'Seattle' },
           },
         ],
       })
@@ -285,7 +286,7 @@ describe('VercelAIAgentProvider', () => {
         mockGenerateText.mockResolvedValue({
           text: 'Response',
           finishReason: reason,
-          usage: { promptTokens: 10, completionTokens: 5 },
+          usage: { inputTokens: 10, outputTokens: 5 },
           toolCalls: [],
         })
 
@@ -304,8 +305,8 @@ describe('VercelAIAgentProvider', () => {
      * Helper to create a mock streamText result
      */
     function createMockStreamResult(chunks: string[], options: {
-      usage?: { promptTokens: number; completionTokens: number }
-      toolCalls?: Array<{ toolCallId: string; toolName: string; args: unknown }>
+      usage?: { inputTokens: number; outputTokens: number }
+      toolCalls?: Array<{ toolCallId: string; toolName: string; input: unknown }>
       finishReason?: string
     } = {}) {
       const textStreamGenerator = async function* () {
@@ -316,7 +317,7 @@ describe('VercelAIAgentProvider', () => {
 
       return {
         textStream: textStreamGenerator(),
-        usage: Promise.resolve(options.usage ?? { promptTokens: 10, completionTokens: 5 }),
+        usage: Promise.resolve(options.usage ?? { inputTokens: 10, outputTokens: 5 }),
         toolCalls: Promise.resolve(options.toolCalls ?? []),
         finishReason: Promise.resolve(options.finishReason ?? 'stop'),
       }
@@ -342,7 +343,7 @@ describe('VercelAIAgentProvider', () => {
       mockStreamText.mockReturnValue(createMockStreamResult(
         ['Hello'],
         {
-          usage: { promptTokens: 100, completionTokens: 50 },
+          usage: { inputTokens: 100, outputTokens: 50 },
           toolCalls: [],
           finishReason: 'stop',
         }
@@ -370,7 +371,7 @@ describe('VercelAIAgentProvider', () => {
         textStream: (async function* () {
           throw new Error('API error')
         })(),
-        usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+        usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
         toolCalls: Promise.resolve([]),
         finishReason: Promise.resolve('error'),
       })

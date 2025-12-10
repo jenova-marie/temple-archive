@@ -4,6 +4,11 @@
   "private": true,
   "description": "RecoverySky AI chatbot agent with multi-tier memory system",
   "type": "module",
+  "pnpm": {
+    "overrides": {
+      "zod": "^4.1.13"
+    }
+  },
   "scripts": {
     "build": "pnpm -r --filter=!api build",
     "build:all": "pnpm -r build",

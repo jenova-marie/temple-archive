@@ -20,8 +20,8 @@
   "dependencies": {
     "@recoverysky/types": "workspace:*",
     "@recoverysky/observability": "workspace:*",
-    "@ai-sdk/anthropic": "^1.0.0",
-    "ai": "^4.0.0"
+    "@ai-sdk/anthropic": "^2.0.53",
+    "ai": "^5.0.106"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
