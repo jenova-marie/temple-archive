@@ -1,7 +1,8 @@
 # Dependencies
 node_modules/
 .pnpm-store/
-
+.mcp.json
+iris-mcp-*
 # Build outputs
 dist/
 *.tsbuildinfo
