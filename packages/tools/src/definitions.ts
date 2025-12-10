@@ -98,7 +98,7 @@ Can search for:
 - Meetings scheduled for today, tomorrow, or a specific day of the week
 - Filter by fellowship type (AA, NA, CMA, RD, or all)
 - Filter by format (online, in-person, or both)`,
-  parameters: z.object({
+  inputSchema: z.object({
     fellowship: z.enum(['aa', 'na', 'cma', 'rd', 'all'])
       .describe('Fellowship type to search for (AA=Alcoholics Anonymous, NA=Narcotics Anonymous, CMA=Crystal Meth Anonymous, RD=Recover Dharma)'),
     when: z.enum(['now', 'today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
@@ -215,7 +215,7 @@ Can search for:
  */
 export const getLiveMeetings = tool({
   description: 'Get recovery meetings that are happening RIGHT NOW. Returns all live meetings across all fellowships.',
-  parameters: z.object({
+  inputSchema: z.object({
     fellowship: z.enum(['aa', 'na', 'cma', 'rd', 'all'])
       .default('all')
       .describe('Optional: filter by fellowship type'),
@@ -271,7 +271,7 @@ export const getLiveMeetings = tool({
  */
 export const logMood = tool({
   description: 'Log the user\'s current mood or emotional state for tracking over time',
-  parameters: z.object({
+  inputSchema: z.object({
     mood: z.enum(['great', 'good', 'okay', 'struggling', 'bad', 'crisis'])
       .describe('Current mood level'),
     notes: z.string().optional().describe('Optional notes about the mood'),
@@ -315,7 +315,7 @@ export const logMood = tool({
  */
 export const getCrisisResources = tool({
   description: 'Get crisis hotlines and emergency resources for immediate support',
-  parameters: z.object({
+  inputSchema: z.object({
     type: z.enum(['general', 'suicide', 'substance', 'domestic-violence', 'all'])
       .optional()
       .describe('Type of crisis resources needed'),
@@ -392,7 +392,7 @@ export const getCrisisResources = tool({
  */
 export const getResources = tool({
   description: 'Get recovery resources, educational materials, and support information',
-  parameters: z.object({
+  inputSchema: z.object({
     topic: z.enum([
       'relapse-prevention',
       'coping-strategies',

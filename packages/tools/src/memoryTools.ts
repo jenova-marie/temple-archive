@@ -107,7 +107,7 @@ export const recallMemory = tool({
 - Past events or experiences they've shared
 - Triggers and coping strategies discussed
 - Milestones and achievements`,
-  parameters: z.object({
+  inputSchema: z.object({
     query: z.string().describe('What to search for (name, topic, keyword)'),
     type: z.enum(['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication', 'any'])
       .default('any')
@@ -181,7 +181,7 @@ export const recallMemory = tool({
 export const searchEntities = tool({
   description: `Search for specific people, places, or things the user has mentioned.
 Use when you need to find exact entities rather than general memories.`,
-  parameters: z.object({
+  inputSchema: z.object({
     name: z.string().describe('Name or partial name to search for'),
     type: z.enum(['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication'])
       .optional()
@@ -241,7 +241,7 @@ Use this to understand relationships, like:
 - Who is connected to a person
 - What triggers are related to a place
 - What coping strategies are linked to certain triggers`,
-  parameters: z.object({
+  inputSchema: z.object({
     entityName: z.string().describe('Name of the entity to find connections for'),
     depth: z.number().min(1).max(3).default(1).describe('How many relationship hops to traverse (1-3)'),
   }),
@@ -299,7 +299,7 @@ Use this when you learn something significant that should be remembered, like:
 - A coping strategy that worked
 - A milestone they achieved
 - An important life event`,
-  parameters: z.object({
+  inputSchema: z.object({
     name: z.string().describe('Short name/title for this memory'),
     type: z.enum(['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication', 'note'])
       .describe('Category of information'),
@@ -360,7 +360,7 @@ For example:
 - "work" triggers "stress"
 - "sponsor John" helps with "cravings"
 - "morning routine" includes "meditation"`,
-  parameters: z.object({
+  inputSchema: z.object({
     from: z.string().describe('The source entity name'),
     to: z.string().describe('The target entity name'),
     relationship: z.string().describe('Type of relationship (e.g., "triggers", "helps_with", "related_to")'),
@@ -412,7 +412,7 @@ For example:
 export const updateEntity = tool({
   description: `Update information about an existing entity.
 Use when you need to correct or add information about something already in memory.`,
-  parameters: z.object({
+  inputSchema: z.object({
     entityId: z.string().describe('ID of the entity to update'),
     updates: z.object({
       name: z.string().optional().describe('New name'),
@@ -480,7 +480,7 @@ export const deleteEntity = tool({
 - The information is incorrect
 - The user explicitly asks to forget something
 - The entity was created by mistake`,
-  parameters: z.object({
+  inputSchema: z.object({
     entityId: z.string().describe('ID of the entity to delete'),
     reason: z.string().describe('Why this entity should be deleted'),
   }),
@@ -524,7 +524,7 @@ export const deleteEntity = tool({
 export const createRelationship = tool({
   description: `Create a specific relationship between two entities in memory.
 Different from logObservation in that this is for explicit relationship creation.`,
-  parameters: z.object({
+  inputSchema: z.object({
     fromEntity: z.string().describe('Source entity name'),
     toEntity: z.string().describe('Target entity name'),
     relationshipType: z.string().describe('Type of relationship'),
@@ -580,7 +580,7 @@ Levels:
 - L1: Current session cache (Redis)
 - L2: Persisted conversation cache (PostgreSQL)
 - L4: Topic embeddings (Qdrant)`,
-  parameters: z.object({
+  inputSchema: z.object({
     conversationId: z.string().describe('The conversation ID to clear cache for'),
     levels: z.array(z.enum(['L1', 'L2', 'L4']))
       .min(1)
