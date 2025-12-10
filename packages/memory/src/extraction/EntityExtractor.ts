@@ -353,30 +353,78 @@ export class EntityExtractor {
           }>
         }
 
-        // Validate and normalize
-        const entities: ExtractedEntity[] = (result.entities ?? [])
-          .filter((e) => this.config.enabledTypes.includes(e.type as EntityType))
+        // Validate and normalize - filter out entities with missing/null names
+        const rawEntities = result.entities ?? []
+        const invalidEntities = rawEntities.filter((e) =>
+          e.name == null ||
+          typeof e.name !== 'string' ||
+          e.name.trim().length === 0
+        )
+        if (invalidEntities.length > 0) {
+          logger.warn(
+            { count: invalidEntities.length, samples: invalidEntities.slice(0, 3) },
+            'Filtered out entities with invalid/null names from LLM response'
+          )
+        }
+
+        const entities: ExtractedEntity[] = rawEntities
+          .filter((e) =>
+            e.name != null &&
+            typeof e.name === 'string' &&
+            e.name.trim().length > 0 &&
+            this.config.enabledTypes.includes(e.type as EntityType)
+          )
           .map((e) => ({
-            name: e.name,
+            name: e.name.trim(),
             type: e.type as EntityType,
-            importance: Math.max(0, Math.min(1, e.importance)),
-            context: e.context,
+            importance: Math.max(0, Math.min(1, e.importance ?? 0.5)),
+            context: e.context ?? '',
           }))
 
+        // Validate and normalize relationships - filter out those with missing from/to/type
+        const rawRelationships = result.relationships ?? []
+        const invalidRelationships = rawRelationships.filter((r) =>
+          r.from == null ||
+          typeof r.from !== 'string' ||
+          r.from.trim().length === 0 ||
+          r.to == null ||
+          typeof r.to !== 'string' ||
+          r.to.trim().length === 0 ||
+          r.type == null ||
+          typeof r.type !== 'string'
+        )
+        if (invalidRelationships.length > 0) {
+          logger.warn(
+            { count: invalidRelationships.length, samples: invalidRelationships.slice(0, 3) },
+            'Filtered out relationships with invalid/null from/to/type from LLM response'
+          )
+        }
+
         const relationships: ExtractedRelationship[] = this.config.inferRelationships
-          ? (result.relationships ?? []).map((r) => ({
-              from: r.from,
-              to: r.to,
-              type: r.type.toUpperCase().replace(/[^A-Z0-9_]/g, '_'), // Sanitize for Neo4j
-              strength: Math.max(0, Math.min(1, r.strength)),
-              properties: r.properties ? {
-                context: r.properties.context,
-                when: r.properties.when,
-                method: r.properties.method,
-                frequency: r.properties.frequency,
-                notes: r.properties.notes,
-              } : undefined,
-            }))
+          ? rawRelationships
+              .filter((r) =>
+                r.from != null &&
+                typeof r.from === 'string' &&
+                r.from.trim().length > 0 &&
+                r.to != null &&
+                typeof r.to === 'string' &&
+                r.to.trim().length > 0 &&
+                r.type != null &&
+                typeof r.type === 'string'
+              )
+              .map((r) => ({
+                from: r.from.trim(),
+                to: r.to.trim(),
+                type: r.type.toUpperCase().replace(/[^A-Z0-9_]/g, '_'), // Sanitize for Neo4j
+                strength: Math.max(0, Math.min(1, r.strength ?? 0.5)),
+                properties: r.properties ? {
+                  context: r.properties.context,
+                  when: r.properties.when,
+                  method: r.properties.method,
+                  frequency: r.properties.frequency,
+                  notes: r.properties.notes,
+                } : undefined,
+              }))
           : []
 
         return ok({ entities, relationships })
