@@ -8,7 +8,7 @@
 
 import { Command } from 'commander'
 import chalk from 'chalk'
-import { chatCommand, interactiveChat, type DiagnosticsFlags, type ChatOptions } from './commands/chat.js'
+import { chatCommand, interactiveChat, type ChatOptions } from './commands/chat.js'
 import { showConfig, setConfigValue, resetConfigCommand, newConversationCommand } from './commands/config.js'
 import { healthCommand, metricsCommand } from './commands/health.js'
 
@@ -24,18 +24,12 @@ program
   .command('chat')
   .description('Send a message to the RecoverySky agent')
   .argument('[message]', 'Message to send (omit for interactive mode)')
-  .option('-v, --verbose', 'Show detailed response metrics')
-  .option('-s, --stream', 'Stream response tokens as they arrive')
-  .option('-d, --diagnostics', 'Show all diagnostic information')
-  .option('--timing', 'Show timing breakdown only')
-  .option('--memory', 'Show memory tier/cache info only')
-  .option('--crisis', 'Show crisis detection details only')
-  .option('--agent', 'Show agent/LLM details only')
+  .option('-v, --verbose', 'Show conversation ID')
   .action(async (message: string | undefined, options: ChatOptions) => {
     if (message) {
       await chatCommand(message, options)
     } else {
-      await interactiveChat(options)
+      await interactiveChat()
     }
   })
 
@@ -43,13 +37,8 @@ program
 program
   .command('interactive', { isDefault: true })
   .description('Start an interactive chat session')
-  .option('-d, --diagnostics', 'Show all diagnostic information')
-  .option('--timing', 'Show timing breakdown only')
-  .option('--memory', 'Show memory tier/cache info only')
-  .option('--crisis', 'Show crisis detection details only')
-  .option('--agent', 'Show agent/LLM details only')
-  .action(async (options: DiagnosticsFlags) => {
-    await interactiveChat(options)
+  .action(async () => {
+    await interactiveChat()
   })
 
 // Health check

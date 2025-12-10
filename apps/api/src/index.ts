@@ -84,10 +84,10 @@ app.use("/health", createHealthRouter());
 
 // Chat API - requires authentication if Zitadel is configured
 if (auth) {
-  app.use("/api/chat", auth.required, createChatRouter(container.pipeline));
-  logger.info("Zitadel JWT authentication enabled for /api/chat");
+  app.use("/api/v1/chat", auth.required, createChatRouter(container.pipeline));
+  logger.info("Zitadel JWT authentication enabled for /api/v1/chat");
 } else {
-  app.use("/api/chat", createChatRouter(container.pipeline));
+  app.use("/api/v1/chat", createChatRouter(container.pipeline));
   logger.warn("No authentication configured - API is unprotected");
 }
 

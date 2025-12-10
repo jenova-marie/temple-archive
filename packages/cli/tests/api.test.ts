@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // Mock config module that src/api.ts imports
 vi.mock("../src/config.js", () => ({
   getApiUrl: () => "http://localhost:3333",
-  getUserId: () => "test-user-id",
   getConversationId: () => "test-conversation-id",
 }));
 
@@ -13,6 +12,65 @@ global.fetch = mockFetch;
 
 // Import after mocks
 import { sendMessage, checkHealth, getMetrics } from "../src/api.js";
+
+/**
+ * Helper to create a mock UI Message Stream (SSE with JSON)
+ * UI Message Stream format:
+ * - `data: {"type":"text-delta","id":"0","delta":"text"}`
+ * - `data: {"type":"finish","finishReason":"stop"}`
+ * - `data: [DONE]`
+ */
+function createMockUIStream(chunks: string[]) {
+  const encoder = new TextEncoder();
+  // Create SSE format lines
+  const lines = [
+    'data: {"type":"start"}\n\n',
+    'data: {"type":"start-step"}\n\n',
+    'data: {"type":"text-start","id":"0"}\n\n',
+    ...chunks.map(chunk => `data: {"type":"text-delta","id":"0","delta":"${chunk}"}\n\n`),
+    'data: {"type":"text-end","id":"0"}\n\n',
+    'data: {"type":"finish-step"}\n\n',
+    'data: {"type":"finish","finishReason":"stop"}\n\n',
+    'data: [DONE]\n\n',
+  ];
+
+  let index = 0;
+
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < lines.length) {
+        controller.enqueue(encoder.encode(lines[index]));
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+/**
+ * Create a simple success stream with complete text
+ */
+function createSuccessStream(text: string) {
+  const encoder = new TextEncoder();
+  const content = [
+    'data: {"type":"start"}\n\n',
+    'data: {"type":"start-step"}\n\n',
+    'data: {"type":"text-start","id":"0"}\n\n',
+    `data: {"type":"text-delta","id":"0","delta":"${text}"}\n\n`,
+    'data: {"type":"text-end","id":"0"}\n\n',
+    'data: {"type":"finish-step"}\n\n',
+    'data: {"type":"finish","finishReason":"stop"}\n\n',
+    'data: [DONE]\n\n',
+  ].join('');
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(content));
+      controller.close();
+    },
+  });
+}
 
 describe("api", () => {
   beforeEach(() => {
@@ -24,57 +82,42 @@ describe("api", () => {
   });
 
   describe("sendMessage", () => {
-    it("sends message to correct endpoint", async () => {
-      const mockResponse = {
-        response: "Hello! How can I help?",
-        conversationId: "test-conversation-id",
-        messageId: "msg-123",
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        metrics: {
-          totalDuration: 100,
-          memoryDuration: 10,
-          agentDuration: 80,
-          tokensUsed: { input: 50, output: 100 },
-          memorySource: "L1",
-        },
-      };
-
+    it("sends message to correct endpoint with new format", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockResponse),
+        body: createSuccessStream("Hello! How can I help?"),
       });
 
       const result = await sendMessage("Hello");
 
-      expect(mockFetch).toHaveBeenCalledWith("http://localhost:3333/api/chat", {
+      expect(mockFetch).toHaveBeenCalledWith("http://localhost:3333/api/v1/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          message: "Hello",
-          conversationId: "test-conversation-id",
-          userId: "test-user-id",
-        }),
+        body: expect.any(String),
       });
 
-      expect(result).toEqual(mockResponse);
+      // Verify the request body format
+      const callArgs = mockFetch.mock.calls[0][1];
+      const body = JSON.parse(callArgs.body);
+      expect(body.messages).toBeInstanceOf(Array);
+      expect(body.messages[0].role).toBe("user");
+      expect(body.messages[0].parts[0].text).toBe("Hello");
+
+      expect(result.response).toBe("Hello! How can I help?");
+      expect(result.conversationId).toBe("test-conversation-id");
     });
 
-    it("uses config values from config module", async () => {
+    it("buffers streamed text and returns complete response", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ response: "test" }),
+        body: createMockUIStream(["Hello ", "world", "!"]),
       });
 
-      await sendMessage("test");
+      const result = await sendMessage("test");
 
-      // Verify the fetch was called with the expected URL from config
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3333/api/chat",
-        expect.anything(),
-      );
+      expect(result.response).toBe("Hello world!");
     });
 
     it("throws error on non-ok response", async () => {
@@ -85,13 +128,13 @@ describe("api", () => {
         json: () =>
           Promise.resolve({
             error: "Bad Request",
-            message: "message is required",
+            message: "Invalid request body",
             statusCode: 400,
           }),
       });
 
       await expect(sendMessage("")).rejects.toThrow(
-        "API Error (400): message is required",
+        "API Error (400): Invalid request body",
       );
     });
 
@@ -108,33 +151,36 @@ describe("api", () => {
       );
     });
 
-    it("returns full ChatResponse structure", async () => {
-      const fullResponse = {
-        response: "Response text",
-        conversationId: "conv-123",
-        messageId: "msg-456",
-        crisisLevel: 5,
-        emergencyTriggered: false,
-        metrics: {
-          totalDuration: 200,
-          memoryDuration: 20,
-          agentDuration: 150,
-          tokensUsed: { input: 100, output: 200 },
-          memorySource: "L2",
-        },
-        safetyViolations: [],
-        diagnostics: { timing: {} },
-      };
-
+    it("returns ChatResponse structure", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(fullResponse),
+        body: createSuccessStream("Response text"),
       });
 
       const result = await sendMessage("test");
 
-      expect(result.diagnostics).toBeDefined();
-      expect(result.safetyViolations).toEqual([]);
+      expect(result.response).toBe("Response text");
+      expect(result.conversationId).toBe("test-conversation-id");
+    });
+
+    it("throws error on stream error event", async () => {
+      const encoder = new TextEncoder();
+      const errorStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`data: {"type":"text-delta","id":"0","delta":"Partial "}\n\n`));
+          controller.enqueue(encoder.encode(`data: {"type":"error","message":"Processing failed"}\n\n`));
+          controller.close();
+        },
+      });
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        body: errorStream,
+      });
+
+      await expect(sendMessage("test")).rejects.toThrow(
+        "Stream error:",
+      );
     });
   });
 

@@ -45,6 +45,14 @@ export interface PipelineError {
   cause?: unknown
 }
 
+/**
+ * Chunk types for streaming pipeline responses
+ */
+export type PipelineStreamChunk =
+  | { type: 'text'; content: string }
+  | { type: 'error'; error: string; kind?: string }
+  | { type: 'done'; result: PipelineResult }
+
 export interface PipelineDependencies {
   crisisDetector: ICrisisDetector
   crisisHandler: ICrisisHandler
@@ -62,6 +70,28 @@ export interface PipelineDependencies {
   memoryToolAccess?: MemoryToolAccessLevel
   /** Bootstrap orchestrator for conversation memory priming (optional) */
   bootstrapOrchestrator?: IBootstrapOrchestrator
+}
+
+/**
+ * Result from preflight checks before streaming
+ */
+export interface PreflightResult {
+  /** Built system prompt with context */
+  systemPrompt: string
+  /** Tool definitions for the model */
+  tools: ToolDefinition[]
+  /** Assembled context from memory */
+  context: PipelineContext['memory']
+  /** Crisis check result */
+  crisisCheck: CrisisCheckResult
+  /** Memory context string (if configured) */
+  memoryContext: string | null
+  /** Memory retrieval stats */
+  memoryStats: {
+    source: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED' | 'NONE'
+    cacheHits: number
+    cacheMisses: number
+  }
 }
 
 export class Pipeline {
@@ -347,6 +377,351 @@ export class Pipeline {
         })
       }
     })
+  }
+
+  /**
+   * Process a user message with streaming response
+   *
+   * Yields text chunks as the agent generates them, then yields a final
+   * 'done' chunk with the complete PipelineResult including metrics and diagnostics.
+   */
+  async *processStream(
+    input: PipelineInput,
+    traceCtx: TraceContext
+  ): AsyncGenerator<PipelineStreamChunk, void, unknown> {
+    const startTime = Date.now()
+    const logger = getLogger().child({
+      conversationId: input.conversationId,
+      userId: input.userId,
+      requestId: traceCtx.requestId,
+    })
+
+    logger.info('Starting streaming pipeline processing')
+
+    // Initialize pipeline context
+    const ctx: PipelineContext = {
+      ...traceCtx,
+      input,
+      metrics: {
+        stageDurations: {},
+        cacheHits: 0,
+        cacheMisses: 0,
+      },
+    }
+
+    // Create user message
+    const userMessage: Message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      conversationId: input.conversationId,
+      userId: input.userId,
+      role: 'user',
+      content: input.message,
+      timestamp: Date.now(),
+    }
+
+    try {
+      // STAGE 1: Pre-flight crisis check (<10ms target)
+      const crisisResult = await this.runCrisisCheck(input.message, ctx)
+      if (!crisisResult.ok) {
+        yield {
+          type: 'error',
+          error: 'Crisis detection failed',
+          kind: 'CrisisError',
+        }
+        return
+      }
+
+      ctx.crisisCheck = crisisResult.value
+
+      // Handle emergency if triggered
+      if (crisisResult.value.triggerEmergency) {
+        logger.warn(
+          { crisisLevel: crisisResult.value.level },
+          'Emergency crisis detected'
+        )
+
+        const handlerResult = await this.deps.crisisHandler.handle(
+          crisisResult.value,
+          input.userId,
+          input.conversationId,
+          ctx
+        )
+
+        if (handlerResult.ok && handlerResult.value.prependMessage) {
+          // Emergency response - yield the message and return early
+          const assistantMessage: Message = {
+            id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            conversationId: input.conversationId,
+            userId: input.userId,
+            role: 'assistant',
+            content: handlerResult.value.prependMessage,
+            timestamp: Date.now(),
+            metadata: {
+              crisisLevel: crisisResult.value.level,
+            },
+          }
+
+          yield { type: 'text', content: handlerResult.value.prependMessage }
+          yield {
+            type: 'done',
+            result: {
+              response: assistantMessage.content,
+              messages: { user: userMessage, assistant: assistantMessage },
+              metrics: {
+                totalDuration: Date.now() - startTime,
+                memoryDuration: 0,
+                agentDuration: 0,
+                tokensUsed: { input: 0, output: 0 },
+                memorySource: 'none',
+              },
+              crisisLevel: crisisResult.value.level,
+              emergencyTriggered: true,
+            },
+          }
+          return
+        }
+      }
+
+      // STAGE 2: Memory retrieval
+      const memoryResult = await this.runMemoryRetrieval(input, ctx)
+      if (!memoryResult.ok) {
+        logger.warn({ error: memoryResult.error }, 'Memory retrieval failed, continuing with empty context')
+      }
+
+      ctx.memory = memoryResult.ok ? memoryResult.value.context : {
+        messages: [],
+        userProfile: null,
+        sessionEntities: { people: [], places: [], events: [], emotions: [], medications: [] },
+        sessionState: { startTime: Date.now(), lastActivity: Date.now(), messageCount: 0, crisisLevel: 1 },
+        previousSessions: [],
+      }
+
+      // Update cache stats from memory retrieval
+      if (memoryResult.ok) {
+        ctx.metrics.cacheHits = memoryResult.value.cacheHits
+        ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
+        ctx.metrics.memoryTier = memoryResult.value.source
+      }
+
+      // STAGE 3: Build agent input and stream response
+      const agentStageStart = Date.now()
+
+      // Build memory context pre-agent (if configured)
+      let memoryContext: string | null = null
+      if (this.deps.memoryContextBuilder) {
+        try {
+          memoryContext = await this.deps.memoryContextBuilder.buildContext(
+            input.message,
+            input.userId,
+            ctx
+          )
+        } catch (error) {
+          logger.warn({ error }, 'Memory context builder failed, continuing without')
+        }
+      }
+
+      const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
+
+      const systemPrompt = buildSystemPrompt({
+        context: ctx.memory!,
+        crisisCheck: ctx.crisisCheck,
+        memoryContext,
+        hasMemoryTools,
+      })
+
+      const tools = this.convertToolsToDefinitions()
+
+      // Set trace context for memory tools
+      if (hasMemoryTools) {
+        setMemoryToolTraceContext(ctx)
+      }
+
+      let fullContent = ''
+      let agentResponse: AgentResponse | undefined
+
+      try {
+        // Stream agent response
+        const agentStream = this.deps.agent.stream(
+          {
+            userMessage: input.message,
+            context: ctx.memory!,
+            crisisCheck: ctx.crisisCheck,
+            systemPrompt,
+            tools,
+          },
+          ctx
+        )
+
+        // Yield text chunks as they arrive
+        for await (const chunk of agentStream) {
+          if (chunk.type === 'text' && chunk.content) {
+            fullContent += chunk.content
+            yield { type: 'text', content: chunk.content }
+          } else if (chunk.type === 'error') {
+            yield { type: 'error', error: chunk.error ?? 'Unknown agent error', kind: 'AgentError' }
+            return
+          }
+        }
+
+        // Get the return value from the generator (AgentResponse)
+        // Note: When the generator completes naturally, we need to get the return value
+        // This happens after the for-await loop exhausts the generator
+        const generatorResult = await agentStream.next()
+        if (generatorResult.done && generatorResult.value) {
+          agentResponse = generatorResult.value
+        }
+      } finally {
+        if (hasMemoryTools) {
+          clearMemoryToolTraceContext()
+        }
+      }
+
+      ctx.metrics.stageDurations.agent = Date.now() - agentStageStart
+
+      // If we didn't get an agentResponse, create a minimal one from fullContent
+      if (!agentResponse) {
+        agentResponse = {
+          content: fullContent,
+          toolCalls: [],
+          usage: { inputTokens: 0, outputTokens: 0 },
+          model: 'unknown',
+          stopReason: 'end_turn',
+        }
+      }
+
+      // STAGE 4: Run deep crisis evaluation in parallel with safety/evaluation
+      const shouldRunDeepEval =
+        this.deps.crisisEvaluator &&
+        crisisResult.value.level < 7 &&
+        input.message.length > 20
+
+      const conversationHistory = ctx.memory?.messages
+        .slice(-3)
+        .map((m) => `${m.role}: ${m.content}`) ?? []
+
+      // STAGE 4 & 5: Safety validation, evaluation, and deep crisis (parallel)
+      const safetyStart = Date.now()
+      const [safetyResult, evaluationResult, deepCrisisResult] = await Promise.all([
+        this.deps.safety.validate(agentResponse.content, ctx.memory!, ctx),
+        this.deps.evaluator.evaluate(input.message, agentResponse.content, ctx.memory!, ctx),
+        shouldRunDeepEval
+          ? this.deps.crisisEvaluator!.evaluate(input.message, conversationHistory, ctx)
+          : Promise.resolve(null),
+      ])
+
+      ctx.metrics.stageDurations.safety = Date.now() - safetyStart
+      ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart
+
+      // Check if deep evaluation found a higher crisis level
+      let effectiveCrisisLevel = crisisResult.value.level
+      if (
+        deepCrisisResult &&
+        deepCrisisResult.ok &&
+        deepCrisisResult.value.level > crisisResult.value.level
+      ) {
+        logger.info(
+          {
+            fastLevel: crisisResult.value.level,
+            deepLevel: deepCrisisResult.value.level,
+          },
+          'Deep crisis evaluation detected elevated risk'
+        )
+
+        effectiveCrisisLevel = deepCrisisResult.value.level
+
+        if (deepCrisisResult.value.level >= 7) {
+          await this.deps.crisisHandler.handle(
+            deepCrisisResult.value,
+            input.userId,
+            input.conversationId,
+            ctx
+          )
+        }
+      }
+
+      // Handle safety violations
+      let finalContent = agentResponse.content
+      if (safetyResult.ok && !safetyResult.value.passed) {
+        logger.warn(
+          { violations: safetyResult.value.violations },
+          'Safety violations detected'
+        )
+
+        if (safetyResult.value.sanitizedOutput) {
+          finalContent = safetyResult.value.sanitizedOutput
+        }
+      }
+
+      // Create assistant message
+      const assistantMessage: Message = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        conversationId: input.conversationId,
+        userId: input.userId,
+        role: 'assistant',
+        content: finalContent,
+        timestamp: Date.now(),
+        metadata: {
+          crisisLevel: effectiveCrisisLevel,
+        },
+      }
+
+      // STAGE 6: Persist messages
+      await this.persistMessages(userMessage, assistantMessage, ctx)
+
+      const totalDuration = Date.now() - startTime
+
+      pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
+
+      logger.info(
+        {
+          totalDuration,
+          crisisLevel: effectiveCrisisLevel,
+          tokensUsed: agentResponse.usage,
+        },
+        'Streaming pipeline processing completed'
+      )
+
+      // Build diagnostics
+      const diagnostics = this.buildDiagnostics(
+        totalDuration,
+        ctx,
+        crisisResult.value,
+        memoryResult.ok ? memoryResult.value.source : 'NONE',
+        agentResponse,
+        safetyResult.ok ? safetyResult.value : undefined,
+        evaluationResult.ok ? evaluationResult.value : undefined
+      )
+
+      // Yield final result
+      yield {
+        type: 'done',
+        result: {
+          response: finalContent,
+          messages: { user: userMessage, assistant: assistantMessage },
+          metrics: {
+            totalDuration,
+            memoryDuration: ctx.metrics.stageDurations.memory || 0,
+            agentDuration: ctx.metrics.stageDurations.agent || 0,
+            tokensUsed: {
+              input: agentResponse.usage.inputTokens,
+              output: agentResponse.usage.outputTokens,
+            },
+            memorySource: memoryResult.ok ? memoryResult.value.source : 'none',
+          },
+          safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
+          crisisLevel: effectiveCrisisLevel,
+          emergencyTriggered: false,
+          diagnostics,
+        },
+      }
+    } catch (error) {
+      logger.error({ error }, 'Unexpected streaming pipeline error')
+      yield {
+        type: 'error',
+        error: 'Unexpected error during pipeline processing',
+        kind: 'UnexpectedError',
+      }
+    }
   }
 
   private async runCrisisCheck(
@@ -679,5 +1054,275 @@ export class Pipeline {
 
     ctx.metrics.stageDurations.persist = Date.now() - stageStart
     pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, { stage: 'persist' })
+  }
+
+  /**
+   * Pre-flight checks before streaming (blocking)
+   *
+   * Runs crisis detection, memory retrieval, and builds the system prompt.
+   * Call this before starting to stream the response.
+   */
+  async preflight(
+    input: PipelineInput,
+    traceCtx: TraceContext
+  ): Promise<Result<PreflightResult, PipelineError>> {
+    return withSpan('Pipeline.preflight', async () => {
+      const logger = getLogger().child({
+        conversationId: input.conversationId,
+        userId: input.userId,
+        requestId: traceCtx.requestId,
+      })
+
+      logger.info('Starting preflight checks')
+
+      // Initialize pipeline context
+      const ctx: PipelineContext = {
+        ...traceCtx,
+        input,
+        metrics: {
+          stageDurations: {},
+          cacheHits: 0,
+          cacheMisses: 0,
+        },
+      }
+
+      try {
+        // STAGE 1: Pre-flight crisis check (<10ms target)
+        const crisisResult = await this.runCrisisCheck(input.message, ctx)
+        if (!crisisResult.ok) {
+          return err({
+            kind: 'CrisisError',
+            message: crisisResult.error.message,
+            stage: 'crisis',
+            context: {},
+          })
+        }
+
+        ctx.crisisCheck = crisisResult.value
+
+        // STAGE 2: Memory retrieval
+        const memoryResult = await this.runMemoryRetrieval(input, ctx)
+
+        let memorySource: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED' | 'NONE' = 'NONE'
+        let cacheHits = 0
+        let cacheMisses = 0
+
+        if (!memoryResult.ok) {
+          logger.warn({ error: memoryResult.error }, 'Memory retrieval failed, continuing with empty context')
+          ctx.memory = {
+            messages: [],
+            userProfile: null,
+            sessionEntities: { people: [], places: [], events: [], emotions: [], medications: [] },
+            sessionState: { startTime: Date.now(), lastActivity: Date.now(), messageCount: 0, crisisLevel: 1 },
+            previousSessions: [],
+          }
+        } else {
+          ctx.memory = memoryResult.value.context
+          memorySource = memoryResult.value.source
+          cacheHits = memoryResult.value.cacheHits
+          cacheMisses = memoryResult.value.cacheMisses
+        }
+
+        ctx.metrics.cacheHits = cacheHits
+        ctx.metrics.cacheMisses = cacheMisses
+        ctx.metrics.memoryTier = memorySource
+
+        // STAGE 3: Build memory context (if configured)
+        let memoryContext: string | null = null
+        if (this.deps.memoryContextBuilder) {
+          try {
+            memoryContext = await this.deps.memoryContextBuilder.buildContext(
+              input.message,
+              input.userId,
+              ctx
+            )
+            if (memoryContext) {
+              logger.debug({ contextLength: memoryContext.length }, 'Memory context built')
+            }
+          } catch (error) {
+            logger.warn({ error }, 'Memory context builder failed, continuing without')
+          }
+        }
+
+        // STAGE 4: Build system prompt
+        const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
+        const systemPrompt = buildSystemPrompt({
+          context: ctx.memory!,
+          crisisCheck: ctx.crisisCheck,
+          memoryContext,
+          hasMemoryTools,
+        })
+
+        // STAGE 5: Get tools
+        const tools = this.convertToolsToDefinitions()
+
+        logger.info(
+          {
+            crisisLevel: crisisResult.value.level,
+            memorySource,
+            hasMemoryContext: !!memoryContext,
+            toolCount: tools.length,
+          },
+          'Preflight checks completed'
+        )
+
+        return ok({
+          systemPrompt,
+          tools,
+          context: ctx.memory!,
+          crisisCheck: crisisResult.value,
+          memoryContext,
+          memoryStats: {
+            source: memorySource,
+            cacheHits,
+            cacheMisses,
+          },
+        })
+      } catch (error) {
+        logger.error({ error }, 'Unexpected preflight error')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Preflight checks failed unexpectedly',
+          stage: 'preflight',
+          context: {},
+          cause: error,
+        })
+      }
+    })
+  }
+
+  /**
+   * Post-process after streaming completes (async)
+   *
+   * Runs safety validation, evaluation, and persists messages.
+   * This should be called after the stream completes, and doesn't need to block the response.
+   */
+  async postProcess(
+    input: PipelineInput,
+    responseText: string,
+    preflightResult: PreflightResult,
+    traceCtx: TraceContext
+  ): Promise<void> {
+    return withSpan('Pipeline.postProcess', async () => {
+      const logger = getLogger().child({
+        conversationId: input.conversationId,
+        userId: input.userId,
+        requestId: traceCtx.requestId,
+      })
+
+      logger.info({ responseLength: responseText.length }, 'Starting post-process')
+
+      const { context, crisisCheck } = preflightResult
+
+      // Initialize pipeline context for post-processing
+      const ctx: PipelineContext = {
+        ...traceCtx,
+        input,
+        memory: context,
+        crisisCheck,
+        metrics: {
+          stageDurations: {},
+          cacheHits: preflightResult.memoryStats.cacheHits,
+          cacheMisses: preflightResult.memoryStats.cacheMisses,
+          memoryTier: preflightResult.memoryStats.source,
+        },
+      }
+
+      try {
+        // STAGE 1: Safety validation + Evaluation (parallel)
+        const safetyStart = Date.now()
+        const [safetyResult, evaluationResult] = await Promise.all([
+          this.deps.safety.validate(responseText, context!, ctx),
+          this.deps.evaluator.evaluate(input.message, responseText, context!, ctx),
+        ])
+
+        ctx.metrics.stageDurations.safety = Date.now() - safetyStart
+        ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart
+
+        // Log safety issues
+        if (safetyResult.ok && !safetyResult.value.passed) {
+          logger.warn(
+            { violations: safetyResult.value.violations },
+            'Safety violations detected in response'
+          )
+        }
+
+        // Log evaluation
+        if (evaluationResult.ok) {
+          logger.debug(
+            { overallScore: evaluationResult.value.overallScore },
+            'Evaluation completed'
+          )
+        }
+
+        // STAGE 2: Deep crisis evaluation (if enabled and initial level < 7)
+        if (this.deps.crisisEvaluator && crisisCheck.level < 7 && input.message.length > 20) {
+          const conversationHistory = context?.messages
+            .slice(-3)
+            .map((m) => `${m.role}: ${m.content}`) ?? []
+
+          const deepResult = await this.deps.crisisEvaluator.evaluate(
+            input.message,
+            conversationHistory,
+            ctx
+          )
+
+          if (deepResult.ok && deepResult.value.level >= 7) {
+            logger.warn(
+              { fastLevel: crisisCheck.level, deepLevel: deepResult.value.level },
+              'Deep crisis evaluation detected elevated risk'
+            )
+            await this.deps.crisisHandler.handle(
+              deepResult.value,
+              input.userId,
+              input.conversationId,
+              ctx
+            )
+          }
+        }
+
+        // STAGE 3: Persist messages
+        const userMessage: Message = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          conversationId: input.conversationId,
+          userId: input.userId,
+          role: 'user',
+          content: input.message,
+          timestamp: Date.now(),
+        }
+
+        const assistantMessage: Message = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          conversationId: input.conversationId,
+          userId: input.userId,
+          role: 'assistant',
+          content: responseText,
+          timestamp: Date.now(),
+          metadata: {
+            crisisLevel: crisisCheck.level,
+          },
+        }
+
+        await this.persistMessages(userMessage, assistantMessage, ctx)
+
+        logger.info(
+          {
+            safetyPassed: safetyResult.ok ? safetyResult.value.passed : false,
+            evaluationScore: evaluationResult.ok ? evaluationResult.value.overallScore : null,
+          },
+          'Post-process completed'
+        )
+      } catch (error) {
+        logger.error({ error }, 'Post-process failed')
+        // Don't throw - post-process errors shouldn't affect the response
+      }
+    })
+  }
+
+  /**
+   * Get pipeline dependencies (for direct access in routes)
+   */
+  getDeps(): PipelineDependencies {
+    return this.deps
   }
 }

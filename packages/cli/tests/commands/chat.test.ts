@@ -47,15 +47,15 @@ const mockExit = vi
   .mockImplementation(() => undefined as never);
 
 // Import after mocks
-import { chatCommand, displayDiagnostics } from "../../src/commands/chat.js";
-import type { ChatOptions, DiagnosticsFlags } from "../../src/commands/chat.js";
-
-// Ensure types are used (prevents TS6133)
-const _typeCheck: { opt: ChatOptions; flags: DiagnosticsFlags } | null = null;
-void _typeCheck;
+import { chatCommand } from "../../src/commands/chat.js";
+import type { ChatOptions } from "../../src/commands/chat.js";
 import { sendMessage } from "../../src/api.js";
 import type { ChatResponse } from "../../src/api.js";
 import type { Mock } from "vitest";
+
+// Ensure types are used (prevents TS6133)
+const _typeCheck: { opt: ChatOptions } | null = null;
+void _typeCheck;
 
 describe("chat command", () => {
   beforeEach(() => {
@@ -74,16 +74,6 @@ describe("chat command", () => {
   ): ChatResponse => ({
     response: "Hello! How can I help?",
     conversationId: "test-conv-id",
-    messageId: "msg-123",
-    crisisLevel: 1,
-    emergencyTriggered: false,
-    metrics: {
-      totalDuration: 100,
-      memoryDuration: 10,
-      agentDuration: 80,
-      tokensUsed: { input: 50, output: 100 },
-      memorySource: "L1",
-    },
     ...overrides,
   });
 
@@ -121,53 +111,15 @@ describe("chat command", () => {
       );
     });
 
-    it("shows crisis level when elevated (4+)", async () => {
+    it("shows conversation ID with --verbose flag", async () => {
       (sendMessage as Mock).mockResolvedValue(
-        createMockResponse({ crisisLevel: 5 }),
-      );
-
-      await chatCommand("Hello", {});
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("[Crisis Level: 5/10]"),
-      );
-    });
-
-    it("does not show crisis level when below 4", async () => {
-      (sendMessage as Mock).mockResolvedValue(
-        createMockResponse({ crisisLevel: 3 }),
-      );
-
-      await chatCommand("Hello", {});
-
-      const calls = mockConsoleLog.mock.calls.flat();
-      const hasCrisisLevel = calls.some(
-        (c: unknown) => typeof c === "string" && c.includes("Crisis Level"),
-      );
-      expect(hasCrisisLevel).toBe(false);
-    });
-
-    it("shows emergency message when triggered", async () => {
-      (sendMessage as Mock).mockResolvedValue(
-        createMockResponse({ emergencyTriggered: true, crisisLevel: 9 }),
-      );
-
-      await chatCommand("Hello", {});
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("EMERGENCY PROTOCOL TRIGGERED"),
-      );
-    });
-
-    it("shows verbose metrics when --verbose flag", async () => {
-      (sendMessage as Mock).mockResolvedValue(
-        createMockResponse(),
+        createMockResponse({ conversationId: "verbose-conv-123" }),
       );
 
       await chatCommand("Hello", { verbose: true });
 
       expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("--- Metrics ---"),
+        expect.stringContaining("Conversation: verbose-conv-123"),
       );
     });
 
@@ -183,235 +135,14 @@ describe("chat command", () => {
       expect(mockExit).toHaveBeenCalledWith(1);
     });
 
-    it("calls displayDiagnostics with flags", async () => {
-      const response = createMockResponse({
-        diagnostics: {
-          timing: {
-            totalDuration: 100,
-            crisisDuration: 5,
-            memoryDuration: 10,
-            agentDuration: 80,
-            persistDuration: 5,
-          },
-          crisis: {
-            level: 1,
-            action: "continue",
-            processingTimeMs: 5,
-            emergencyTriggered: false,
-            patterns: [],
-          },
-          memory: {
-            sourceTier: "L1",
-            cacheHits: 1,
-            cacheMisses: 0,
-            messagesRetrieved: 10,
-            userProfileLoaded: true,
-            previousSessionsCount: 0,
-            semanticMatchesCount: 0,
-            latencyMs: 10,
-          },
-          agent: {
-            model: "claude-sonnet-4",
-            inputTokens: 50,
-            outputTokens: 100,
-            stopReason: "end_turn",
-            stepsCount: 1,
-            toolCalls: [],
-          },
-        },
-      });
-
-      (sendMessage as Mock).mockResolvedValue(response);
-
-      await chatCommand("Hello", { diagnostics: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Timing ==="),
+    it("calls sendMessage with the provided message", async () => {
+      (sendMessage as Mock).mockResolvedValue(
+        createMockResponse(),
       );
-    });
-  });
 
-  describe("displayDiagnostics", () => {
-    const baseDiagnostics = {
-      timing: {
-        totalDuration: 100,
-        crisisDuration: 5,
-        memoryDuration: 10,
-        agentDuration: 80,
-        persistDuration: 5,
-      },
-      crisis: {
-        level: 1,
-        action: "continue",
-        processingTimeMs: 5,
-        emergencyTriggered: false,
-        patterns: [],
-      },
-      memory: {
-        sourceTier: "L1",
-        cacheHits: 1,
-        cacheMisses: 0,
-        messagesRetrieved: 10,
-        userProfileLoaded: true,
-        previousSessionsCount: 0,
-        semanticMatchesCount: 0,
-        latencyMs: 10,
-      },
-      agent: {
-        model: "claude-sonnet-4",
-        inputTokens: 50,
-        outputTokens: 100,
-        stopReason: "end_turn",
-        stepsCount: 1,
-        toolCalls: [],
-      },
-    };
+      await chatCommand("Test message", {});
 
-    it("shows message when no diagnostics available", () => {
-      const response = createMockResponse();
-
-      displayDiagnostics(response, { diagnostics: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith("No diagnostics available");
-    });
-
-    it("shows timing when --timing flag", () => {
-      const response = createMockResponse({ diagnostics: baseDiagnostics });
-
-      displayDiagnostics(response, { timing: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Timing ==="),
-      );
-    });
-
-    it("shows crisis when --crisis flag", () => {
-      const response = createMockResponse({ diagnostics: baseDiagnostics });
-
-      displayDiagnostics(response, { crisis: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Crisis Detection ==="),
-      );
-    });
-
-    it("shows memory when --memory flag", () => {
-      const response = createMockResponse({ diagnostics: baseDiagnostics });
-
-      displayDiagnostics(response, { memory: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Memory ==="),
-      );
-    });
-
-    it("shows agent when --agent flag", () => {
-      const response = createMockResponse({ diagnostics: baseDiagnostics });
-
-      displayDiagnostics(response, { agent: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Agent ==="),
-      );
-    });
-
-    it("shows all sections with --diagnostics flag", () => {
-      const response = createMockResponse({ diagnostics: baseDiagnostics });
-
-      displayDiagnostics(response, { diagnostics: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Timing ==="),
-      );
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Crisis Detection ==="),
-      );
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Memory ==="),
-      );
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Agent ==="),
-      );
-    });
-
-    it("shows crisis patterns when detected", () => {
-      const diagWithPatterns = {
-        ...baseDiagnostics,
-        crisis: {
-          ...baseDiagnostics.crisis,
-          level: 7,
-          patterns: [
-            {
-              type: "hopelessness",
-              confidence: 0.8,
-              matchedText: "feeling hopeless",
-            },
-          ],
-        },
-      };
-      const response = createMockResponse({ diagnostics: diagWithPatterns });
-
-      displayDiagnostics(response, { crisis: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("Patterns detected:"),
-      );
-    });
-
-    it("shows tool calls when present", () => {
-      const diagWithTools = {
-        ...baseDiagnostics,
-        agent: {
-          ...baseDiagnostics.agent,
-          toolCalls: [{ name: "findMeetings", arguments: { location: "NYC" } }],
-        },
-      };
-      const response = createMockResponse({ diagnostics: diagWithTools });
-
-      displayDiagnostics(response, { agent: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("Tool Calls:"),
-      );
-    });
-
-    it("shows safety section with --diagnostics", () => {
-      const diagWithSafety = {
-        ...baseDiagnostics,
-        safety: {
-          passed: true,
-          processingTimeMs: 5,
-          violations: [],
-        },
-      };
-      const response = createMockResponse({ diagnostics: diagWithSafety });
-
-      displayDiagnostics(response, { diagnostics: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Safety ==="),
-      );
-    });
-
-    it("shows evaluation section with --diagnostics", () => {
-      const diagWithEval = {
-        ...baseDiagnostics,
-        evaluation: {
-          qualityScore: 0.9,
-          relevanceScore: 0.85,
-          empathyScore: 0.88,
-          recoveryScore: 0.82,
-          overallScore: 0.86,
-          feedback: "Good response",
-        },
-      };
-      const response = createMockResponse({ diagnostics: diagWithEval });
-
-      displayDiagnostics(response, { diagnostics: true });
-
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        expect.stringContaining("=== Evaluation ==="),
-      );
+      expect(sendMessage).toHaveBeenCalledWith("Test message");
     });
   });
 });

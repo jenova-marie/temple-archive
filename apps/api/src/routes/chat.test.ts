@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createChatRouter } from './chat.js'
 import type { Request, Response } from 'express'
-import type { Pipeline } from '@recoverysky/pipeline'
-import { ok, err } from '@recoverysky/types'
+import type { Pipeline, PreflightResult } from '@recoverysky/pipeline'
+import type { CrisisCheckResult } from '@recoverysky/types'
 
 // Mock observability
 vi.mock('@recoverysky/observability', () => ({
@@ -16,12 +16,30 @@ vi.mock('@recoverysky/observability', () => ({
   }),
 }))
 
+// Mock ai SDK
+vi.mock('ai', () => ({
+  streamText: vi.fn(() => ({
+    pipeUIMessageStreamToResponse: vi.fn(),
+    text: Promise.resolve('Mock response'),
+  })),
+  convertToModelMessages: vi.fn((messages) => messages.map((m: { role: string; content?: string; parts?: Array<{ text?: string }> }) => ({
+    role: m.role,
+    content: m.content || m.parts?.[0]?.text || '',
+  }))),
+  stepCountIs: vi.fn((count: number) => ({ count })),
+}))
+
+// Mock anthropic
+vi.mock('@ai-sdk/anthropic', () => ({
+  anthropic: vi.fn((model: string) => ({ modelId: model })),
+}))
+
 /**
  * Helper to create valid Vercel AI SDK format request body
+ * Note: 'id' is no longer required - matches existing API
  */
 function createValidBody(overrides: Record<string, unknown> = {}) {
   return {
-    id: 'conv-123',
     messages: [
       { role: 'user', parts: [{ type: 'text', text: 'Hello' }], id: 'msg-1' }
     ],
@@ -43,6 +61,47 @@ function createAuthUser(overrides: Partial<Request['user']> = {}) {
   } as Request['user']
 }
 
+/**
+ * Create mock crisis check result
+ */
+function createMockCrisisCheck(overrides: Partial<CrisisCheckResult> = {}): CrisisCheckResult {
+  return {
+    level: 1,
+    patterns: [],
+    triggerEmergency: false,
+    action: 'continue',
+    processingTimeMs: 5,
+    ...overrides,
+  }
+}
+
+/**
+ * Create mock preflight result
+ */
+function createMockPreflightResult(overrides: Partial<PreflightResult> = {}): PreflightResult {
+  return {
+    systemPrompt: 'You are Sky, a recovery companion.',
+    tools: [],
+    context: {
+      messages: [],
+      sessionState: {
+        startTime: Date.now(),
+        lastActivity: Date.now(),
+        messageCount: 0,
+        crisisLevel: 1,
+      },
+    },
+    crisisCheck: createMockCrisisCheck(),
+    memoryContext: null,
+    memoryStats: {
+      source: 'NONE',
+      cacheHits: 0,
+      cacheMisses: 0,
+    },
+    ...overrides,
+  }
+}
+
 describe('chat routes', () => {
   let mockReq: Partial<Request>
   let mockRes: Partial<Response>
@@ -61,10 +120,21 @@ describe('chat routes', () => {
     mockRes = {
       json: vi.fn().mockReturnThis(),
       status: vi.fn().mockReturnThis(),
+      headersSent: false,
     }
 
     mockPipeline = {
-      process: vi.fn(),
+      preflight: vi.fn().mockResolvedValue({
+        ok: true,
+        value: createMockPreflightResult(),
+      }),
+      postProcess: vi.fn().mockResolvedValue(undefined),
+      getDeps: vi.fn().mockReturnValue({
+        memoryToolAccess: 'off',
+        crisisHandler: {
+          handle: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+        },
+      }),
     } as unknown as Pipeline
 
     router = createChatRouter(mockPipeline)
@@ -85,45 +155,17 @@ describe('chat routes', () => {
   }
 
   describe('POST /', () => {
-    it('returns 400 if id is missing', async () => {
-      mockReq.body = createValidBody({ id: undefined })
-      delete mockReq.body.id
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Bad Request',
-        message: 'id is required and must be a string',
-      })
-    })
-
-    it('returns 400 if id is not a string', async () => {
-      mockReq.body = createValidBody({ id: 123 })
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Bad Request',
-        message: 'id is required and must be a string',
-      })
-    })
-
     it('returns 400 if messages is missing', async () => {
-      mockReq.body = createValidBody({ messages: undefined })
+      mockReq.body = { ...createValidBody(), messages: undefined }
       delete mockReq.body.messages
 
       const handler = getHandler('post', '/')
       await handler(mockReq as Request, mockRes as Response)
 
       expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
         error: 'Bad Request',
-        message: 'messages is required and must be a non-empty array',
-      })
+      }))
     })
 
     it('returns 400 if messages is empty array', async () => {
@@ -133,10 +175,9 @@ describe('chat routes', () => {
       await handler(mockReq as Request, mockRes as Response)
 
       expect(mockRes.status).toHaveBeenCalledWith(400)
-      expect(mockRes.json).toHaveBeenCalledWith({
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
         error: 'Bad Request',
-        message: 'messages is required and must be a non-empty array',
-      })
+      }))
     })
 
     it('returns 400 if no user message found in messages', async () => {
@@ -156,6 +197,27 @@ describe('chat routes', () => {
       })
     })
 
+    it('calls pipeline.preflight with correct input', async () => {
+      mockReq.body = createValidBody({
+        messages: [
+          { role: 'user', parts: [{ type: 'text', text: 'Hello Sky' }], id: 'msg-1' }
+        ]
+      })
+
+      const handler = getHandler('post', '/')
+      await handler(mockReq as Request, mockRes as Response)
+
+      expect(mockPipeline.preflight).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Hello Sky',
+          userId: 'user-456',
+        }),
+        expect.objectContaining({
+          userId: 'user-456',
+        })
+      )
+    })
+
     it('extracts text from last user message parts', async () => {
       mockReq.body = createValidBody({
         messages: [
@@ -165,224 +227,30 @@ describe('chat routes', () => {
         ]
       })
 
-      const mockResult = {
-        response: 'Reply',
-        messages: { user: { id: '1' }, assistant: { id: '2' } },
-        metrics: {
-          totalDuration: 100,
-          memoryDuration: 10,
-          agentDuration: 80,
-          tokensUsed: { input: 10, output: 20 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        safetyViolations: [],
-        diagnostics: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mockResult))
-
       const handler = getHandler('post', '/')
       await handler(mockReq as Request, mockRes as Response)
 
-      expect(mockPipeline.process).toHaveBeenCalledWith(
+      expect(mockPipeline.preflight).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'Second message', // Should extract last user message
+          message: 'Second message',
         }),
         expect.anything()
-      )
-    })
-
-    it('processes message through pipeline and returns success response', async () => {
-      const mockResult = {
-        response: 'Hello! How can I help?',
-        messages: {
-          user: { id: 'msg-user-1' },
-          assistant: { id: 'msg-assistant-1' },
-        },
-        metrics: {
-          totalDuration: 150,
-          memoryDuration: 10,
-          agentDuration: 100,
-          tokensUsed: { input: 50, output: 100 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        safetyViolations: [],
-        diagnostics: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mockResult))
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockPipeline.process).toHaveBeenCalledWith(
-        {
-          message: 'Hello',
-          conversationId: 'conv-123',
-          userId: 'user-456',
-        },
-        expect.objectContaining({
-          userId: 'user-456',
-          sessionId: 'conv-123',
-          startTime: expect.any(Number),
-        })
-      )
-
-      // Verify Vercel AI SDK compatible response format
-      expect(mockRes.json).toHaveBeenCalledWith({
-        id: 'msg-assistant-1',
-        role: 'assistant',
-        content: 'Hello! How can I help?',
-        conversationId: 'conv-123',
-        metrics: {
-          totalDuration: 150,
-          memoryDuration: 10,
-          agentDuration: 100,
-          tokensUsed: { input: 50, output: 100 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        safetyViolations: [],
-        diagnostics: {},
-      })
-    })
-
-    it('uses trace headers when provided', async () => {
-      mockReq.headers = {
-        'x-trace-id': 'custom-trace-id',
-        'x-request-id': 'custom-request-id',
-      }
-
-      const mockResult = {
-        response: 'Response',
-        messages: { user: { id: '1' }, assistant: { id: '2' } },
-        metrics: {
-          totalDuration: 100,
-          memoryDuration: 10,
-          agentDuration: 80,
-          tokensUsed: { input: 10, output: 20 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        safetyViolations: [],
-        diagnostics: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mockResult))
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockPipeline.process).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          traceId: 'custom-trace-id',
-          requestId: 'custom-request-id',
-        })
-      )
-    })
-
-    it('returns 500 when pipeline returns error', async () => {
-      const pipelineError = {
-        kind: 'ProcessingError' as const,
-        message: 'Agent failed to respond',
-        context: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(err(pipelineError))
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Processing Error',
-        message: 'Agent failed to respond',
-        kind: 'ProcessingError',
-      })
-    })
-
-    it('returns 500 on unexpected exceptions', async () => {
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockRejectedValue(
-        new Error('Unexpected error')
-      )
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.status).toHaveBeenCalledWith(500)
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Internal Server Error',
-        message: 'An unexpected error occurred',
-      })
-    })
-
-    it('includes emergency triggered flag in response', async () => {
-      const mockResult = {
-        response: 'I notice you are in crisis. Here are resources...',
-        messages: { user: { id: '1' }, assistant: { id: '2' } },
-        metrics: {
-          totalDuration: 100,
-          memoryDuration: 10,
-          agentDuration: 80,
-          tokensUsed: { input: 10, output: 20 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 9,
-        emergencyTriggered: true,
-        safetyViolations: [],
-        diagnostics: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mockResult))
-
-      const handler = getHandler('post', '/')
-      await handler(mockReq as Request, mockRes as Response)
-
-      expect(mockRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          crisisLevel: 9,
-          emergencyTriggered: true,
-        })
       )
     })
 
     it('uses userId from authenticated JWT user', async () => {
-      // Auth middleware ensures req.user is present
       mockReq.user = createAuthUser({ id: 'jwt-user-123' })
-
-      const mockResult = {
-        response: 'Response',
-        messages: { user: { id: '1' }, assistant: { id: '2' } },
-        metrics: {
-          totalDuration: 100,
-          memoryDuration: 10,
-          agentDuration: 80,
-          tokensUsed: { input: 10, output: 20 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        safetyViolations: [],
-        diagnostics: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mockResult))
 
       const handler = getHandler('post', '/')
       await handler(mockReq as Request, mockRes as Response)
 
-      expect(mockPipeline.process).toHaveBeenCalledWith(
+      expect(mockPipeline.preflight).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'jwt-user-123',
         }),
-        expect.anything()
+        expect.objectContaining({
+          userId: 'jwt-user-123',
+        })
       )
     })
 
@@ -393,33 +261,81 @@ describe('chat routes', () => {
         ]
       })
 
-      const mockResult = {
-        response: 'Reply',
-        messages: { user: { id: '1' }, assistant: { id: '2' } },
-        metrics: {
-          totalDuration: 100,
-          memoryDuration: 10,
-          agentDuration: 80,
-          tokensUsed: { input: 10, output: 20 },
-          memorySource: 'L1',
-        },
-        crisisLevel: 1,
-        emergencyTriggered: false,
-        safetyViolations: [],
-        diagnostics: {},
-      }
-
-      ;(mockPipeline.process as ReturnType<typeof vi.fn>).mockResolvedValue(ok(mockResult))
-
       const handler = getHandler('post', '/')
       await handler(mockReq as Request, mockRes as Response)
 
-      expect(mockPipeline.process).toHaveBeenCalledWith(
+      expect(mockPipeline.preflight).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Fallback content',
         }),
         expect.anything()
       )
+    })
+
+    it('returns 500 when preflight fails', async () => {
+      ;(mockPipeline.preflight as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        error: { kind: 'CrisisError', message: 'Crisis check failed' },
+      })
+
+      const handler = getHandler('post', '/')
+      await handler(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(500)
+      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'Processing Error',
+      }))
+    })
+
+    it('handles emergency crisis by calling crisis handler', async () => {
+      const mockCrisisHandler = {
+        handle: vi.fn().mockResolvedValue({ ok: true, value: { prependMessage: 'Emergency resources' } }),
+      }
+      ;(mockPipeline.getDeps as ReturnType<typeof vi.fn>).mockReturnValue({
+        memoryToolAccess: 'off',
+        crisisHandler: mockCrisisHandler,
+      })
+      ;(mockPipeline.preflight as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        value: createMockPreflightResult({
+          crisisCheck: createMockCrisisCheck({
+            level: 9,
+            triggerEmergency: true,
+          }),
+        }),
+      })
+
+      const handler = getHandler('post', '/')
+      await handler(mockReq as Request, mockRes as Response)
+
+      expect(mockCrisisHandler.handle).toHaveBeenCalled()
+    })
+
+    it('returns 500 JSON on unexpected exceptions', async () => {
+      ;(mockPipeline.preflight as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error('Unexpected error')
+      })
+
+      const handler = getHandler('post', '/')
+      await handler(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.status).toHaveBeenCalledWith(500)
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred',
+      })
+    })
+  })
+
+  describe('GET /health', () => {
+    it('returns health status', async () => {
+      const handler = getHandler('get', '/health')
+      await handler(mockReq as Request, mockRes as Response)
+
+      expect(mockRes.json).toHaveBeenCalledWith({
+        status: 'healthy',
+        timestamp: expect.any(String),
+      })
     })
   })
 
@@ -434,10 +350,21 @@ describe('chat routes', () => {
         .filter((layer: { route?: { path: string; methods: Record<string, boolean> } }) => layer.route)
         .map((layer: { route: { path: string; methods: Record<string, boolean> } }) => ({
           path: layer.route.path,
-          method: layer.route.methods.post ? 'POST' : 'UNKNOWN',
+          method: layer.route.methods.post ? 'POST' : layer.route.methods.get ? 'GET' : 'UNKNOWN',
         }))
 
       expect(routes).toContainEqual({ path: '/', method: 'POST' })
+    })
+
+    it('registers GET /health route', () => {
+      const routes = router.stack
+        .filter((layer: { route?: { path: string; methods: Record<string, boolean> } }) => layer.route)
+        .map((layer: { route: { path: string; methods: Record<string, boolean> } }) => ({
+          path: layer.route.path,
+          method: layer.route.methods.get ? 'GET' : 'UNKNOWN',
+        }))
+
+      expect(routes).toContainEqual({ path: '/health', method: 'GET' })
     })
   })
 })

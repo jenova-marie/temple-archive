@@ -40,7 +40,7 @@ export interface PipelineMetrics {
   cacheHits: number
   cacheMisses: number
   /** Memory tier that provided context */
-  memoryTier?: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED'
+  memoryTier?: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED' | 'NONE'
   /** Total tokens used (input + output) */
   tokensUsed?: { input: number; output: number }
 }

@@ -6,7 +6,7 @@
  */
 
 import { anthropic } from '@ai-sdk/anthropic'
-import { generateText, type CoreTool } from 'ai'
+import { generateText, streamText, type CoreTool } from 'ai'
 import type {
   IAgentProvider,
   AgentInput,
@@ -139,62 +139,99 @@ export class VercelAIAgentProvider implements IAgentProvider {
   }
 
   /**
-   * Stream a response using the LLM
+   * Stream a response using Claude via Vercel AI SDK
    *
-   * Phase 1: Falls back to generate() and simulates streaming
-   * Real streaming will be implemented in Phase 1.5
+   * Yields text chunks as they arrive from the LLM, then returns
+   * the final AgentResponse with usage statistics.
    */
   async *stream(
     input: AgentInput,
     ctx: TraceContext
   ): AsyncGenerator<StreamChunk, AgentResponse, unknown> {
-    const logger = getLogger().child({ requestId: ctx.requestId })
-    logger.debug('stream() called - falling back to generate() for Phase 1')
+    const logger = getLogger().child({
+      requestId: ctx.requestId,
+      model: this.config.model,
+      conversationId: ctx.sessionId,
+    })
 
-    const result = await this.generate(input, ctx)
+    logger.info(
+      {
+        messageLength: input.userMessage.length,
+        hasTools: !!input.tools?.length,
+        toolCount: input.tools?.length ?? 0,
+      },
+      'Starting agent streaming'
+    )
 
-    if (!result.ok) {
-      yield {
-        type: 'error',
-        error: result.error.message,
+    try {
+      const messages = this.buildMessages(input)
+      const tools = this.convertTools(input.tools)
+      const startTime = Date.now()
+
+      const result = streamText({
+        model: anthropic(this.config.model),
+        system: input.systemPrompt,
+        messages,
+        tools,
+        maxSteps: this.config.maxSteps,
+        maxTokens: this.config.maxTokens,
+        temperature: this.config.temperature,
+      })
+
+      let fullText = ''
+
+      // Stream text chunks as they arrive
+      for await (const chunk of result.textStream) {
+        fullText += chunk
+        yield { type: 'text', content: chunk }
       }
-      throw new Error(result.error.message)
-    }
 
-    const response = result.value
+      // Wait for final results to get usage stats
+      // In Vercel AI SDK, these are promises that resolve when streaming completes
+      const [usage, toolCallsResult, finishReason] = await Promise.all([
+        result.usage,
+        result.toolCalls,
+        result.finishReason,
+      ])
 
-    // Emit tool calls if any
-    for (const toolCall of response.toolCalls) {
-      yield {
-        type: 'tool_call',
-        toolCall: {
-          toolId: toolCall.toolId,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
+      const duration = Date.now() - startTime
+
+      logger.info(
+        {
+          duration,
+          finishReason,
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
+          toolCallCount: toolCallsResult?.length ?? 0,
         },
-      }
-      yield {
-        type: 'tool_result',
-        toolCall: {
-          toolId: toolCall.toolId,
-          name: toolCall.name,
-          result: toolCall.result,
+        'Agent streaming completed'
+      )
+
+      // Record metrics
+      pipelineMetrics.tokensUsed.add(usage.promptTokens, { direction: 'input' })
+      pipelineMetrics.tokensUsed.add(usage.completionTokens, { direction: 'output' })
+
+      // Convert tool calls to our format
+      const toolCalls = this.convertToolCalls(toolCallsResult ?? [])
+
+      yield { type: 'done' }
+
+      return {
+        content: fullText,
+        toolCalls,
+        usage: {
+          inputTokens: usage.promptTokens,
+          outputTokens: usage.completionTokens,
         },
+        model: this.config.model,
+        stopReason: this.mapFinishReason(finishReason),
       }
+    } catch (error) {
+      logger.error({ error }, 'Agent streaming failed')
+
+      yield { type: 'error', error: (error as Error).message }
+      throw error
     }
-
-    // Stream the text content word by word (simulated for Phase 1)
-    const words = response.content.split(' ')
-    for (const word of words) {
-      yield {
-        type: 'text',
-        content: word + ' ',
-      }
-    }
-
-    yield { type: 'done' }
-
-    return response
   }
 
   /**
