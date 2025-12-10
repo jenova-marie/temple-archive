@@ -683,6 +683,8 @@ export interface VectorSearchOptions {
   limit?: number
   /** Minimum similarity score */
   scoreThreshold?: number
+  /** Query text for hybrid search (keyword matching) */
+  queryText?: string
 }
 
 /**

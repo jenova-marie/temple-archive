@@ -3,6 +3,8 @@ import {
   COLLECTION_NAME,
   VECTOR_SIZE,
   DISTANCE_METRIC,
+  DENSE_VECTOR_NAME,
+  SPARSE_VECTOR_NAME,
   messageIdToPointId,
   ensureCollection,
 } from "../../src/qdrant/schema.js";
@@ -107,14 +109,42 @@ describe("qdrant/schema", () => {
       expect(mockClient.createPayloadIndex).not.toHaveBeenCalled();
     });
 
-    it("creates collection if it does not exist", async () => {
+    it("creates collection with hybrid config (default)", async () => {
       mockClient.getCollections.mockResolvedValue({
         collections: [],
       });
       mockClient.createCollection.mockResolvedValue(undefined);
       mockClient.createPayloadIndex.mockResolvedValue(undefined);
 
-      await ensureCollection(mockClient as any);
+      await ensureCollection(mockClient as any, "messages", 1536, "hybrid");
+
+      expect(mockClient.createCollection).toHaveBeenCalledWith(
+        "messages",
+        expect.objectContaining({
+          vectors: {
+            [DENSE_VECTOR_NAME]: expect.objectContaining({
+              size: 1536,
+              distance: "Cosine",
+              on_disk: true,
+            }),
+          },
+          sparse_vectors: {
+            [SPARSE_VECTOR_NAME]: expect.objectContaining({
+              index: { on_disk: true },
+            }),
+          },
+        }),
+      );
+    });
+
+    it("creates collection with simple config", async () => {
+      mockClient.getCollections.mockResolvedValue({
+        collections: [],
+      });
+      mockClient.createCollection.mockResolvedValue(undefined);
+      mockClient.createPayloadIndex.mockResolvedValue(undefined);
+
+      await ensureCollection(mockClient as any, "messages", 1536, "simple");
 
       expect(mockClient.createCollection).toHaveBeenCalledWith(
         "messages",
@@ -124,6 +154,13 @@ describe("qdrant/schema", () => {
             distance: "Cosine",
             on_disk: true,
           }),
+        }),
+      );
+      // Simple mode should NOT have sparse_vectors
+      expect(mockClient.createCollection).not.toHaveBeenCalledWith(
+        "messages",
+        expect.objectContaining({
+          sparse_vectors: expect.anything(),
         }),
       );
     });
@@ -169,14 +206,14 @@ describe("qdrant/schema", () => {
       );
     });
 
-    it("uses custom vector size", async () => {
+    it("uses custom vector size in simple mode", async () => {
       mockClient.getCollections.mockResolvedValue({
         collections: [],
       });
       mockClient.createCollection.mockResolvedValue(undefined);
       mockClient.createPayloadIndex.mockResolvedValue(undefined);
 
-      await ensureCollection(mockClient as any, "messages", 768);
+      await ensureCollection(mockClient as any, "messages", 768, "simple");
 
       expect(mockClient.createCollection).toHaveBeenCalledWith(
         "messages",
@@ -184,6 +221,27 @@ describe("qdrant/schema", () => {
           vectors: expect.objectContaining({
             size: 768,
           }),
+        }),
+      );
+    });
+
+    it("uses custom vector size in hybrid mode", async () => {
+      mockClient.getCollections.mockResolvedValue({
+        collections: [],
+      });
+      mockClient.createCollection.mockResolvedValue(undefined);
+      mockClient.createPayloadIndex.mockResolvedValue(undefined);
+
+      await ensureCollection(mockClient as any, "messages", 768, "hybrid");
+
+      expect(mockClient.createCollection).toHaveBeenCalledWith(
+        "messages",
+        expect.objectContaining({
+          vectors: {
+            [DENSE_VECTOR_NAME]: expect.objectContaining({
+              size: 768,
+            }),
+          },
         }),
       );
     });

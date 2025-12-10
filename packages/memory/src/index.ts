@@ -25,9 +25,20 @@ export {
   COLLECTION_NAME,
   VECTOR_SIZE,
   DISTANCE_METRIC,
+  SEARCH_MODE,
+  DENSE_VECTOR_NAME,
+  SPARSE_VECTOR_NAME,
   ensureCollection,
   messageIdToPointId,
   type MessagePayload,
+  type QdrantSearchMode,
+  // BM25 sparse vector generation
+  BM25SparseEmbedding,
+  getBM25Embedder,
+  generateSparseVector,
+  tokenize,
+  type SparseVector,
+  type BM25Config,
 } from './qdrant/index.js'
 
 // Neo4j client and utilities

@@ -7,7 +7,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QdrantVectorStore } from "../../src/stores/QdrantVectorStore.js";
 import type { Message, TraceContext } from "@recoverysky/types";
-import { messageIdToPointId } from "../../src/qdrant/schema.js";
+import {
+  messageIdToPointId,
+  DENSE_VECTOR_NAME,
+  SPARSE_VECTOR_NAME,
+} from "../../src/qdrant/schema.js";
 
 // Mock observability to avoid side effects
 vi.mock("@recoverysky/observability", () => ({
@@ -73,16 +77,20 @@ describe("QdrantVectorStore", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockClient = createMockClient();
-    store = new QdrantVectorStore(mockClient as any);
+    // Default to simple mode for backward-compatible tests
+    store = new QdrantVectorStore(mockClient as any, { searchMode: "simple" });
     ctx = createTestContext();
   });
 
   describe("indexMessage", () => {
-    it("creates point with correct payload", async () => {
+    it("creates point with correct payload (simple mode)", async () => {
+      const simpleStore = new QdrantVectorStore(mockClient as any, {
+        searchMode: "simple",
+      });
       const message = createTestMessage();
       const embedding = Array(1536).fill(0.1);
 
-      const result = await store.indexMessage(message, embedding, ctx);
+      const result = await simpleStore.indexMessage(message, embedding, ctx);
 
       expect(result.ok).toBe(true);
       expect(mockClient.upsert).toHaveBeenCalledWith("messages", {
@@ -105,6 +113,28 @@ describe("QdrantVectorStore", () => {
           },
         ],
       });
+    });
+
+    it("creates point with named vectors (hybrid mode)", async () => {
+      const hybridStore = new QdrantVectorStore(mockClient as any, {
+        searchMode: "hybrid",
+      });
+      const message = createTestMessage();
+      const embedding = Array(1536).fill(0.1);
+
+      const result = await hybridStore.indexMessage(message, embedding, ctx);
+
+      expect(result.ok).toBe(true);
+      const upsertCall = mockClient.upsert.mock.calls[0];
+      const point = upsertCall[1].points[0];
+
+      // Should have named vectors
+      expect(point.vector).toHaveProperty(DENSE_VECTOR_NAME);
+      expect(point.vector).toHaveProperty(SPARSE_VECTOR_NAME);
+      expect(point.vector[DENSE_VECTOR_NAME]).toEqual(embedding);
+      // Sparse vector should have indices and values
+      expect(point.vector[SPARSE_VECTOR_NAME]).toHaveProperty("indices");
+      expect(point.vector[SPARSE_VECTOR_NAME]).toHaveProperty("values");
     });
 
     it("includes optional metadata in payload", async () => {
@@ -331,13 +361,16 @@ describe("QdrantVectorStore", () => {
   });
 
   describe("collection management", () => {
-    it("creates collection if it does not exist", async () => {
+    it("creates simple collection if it does not exist (simple mode)", async () => {
       mockClient.getCollections.mockResolvedValue({ collections: [] });
+      const simpleStore = new QdrantVectorStore(mockClient as any, {
+        searchMode: "simple",
+      });
 
       const message = createTestMessage();
       const embedding = Array(1536).fill(0.1);
 
-      await store.indexMessage(message, embedding, ctx);
+      await simpleStore.indexMessage(message, embedding, ctx);
 
       expect(mockClient.createCollection).toHaveBeenCalledWith("messages", {
         vectors: {
@@ -350,6 +383,37 @@ describe("QdrantVectorStore", () => {
           indexing_threshold: 20000,
         },
       });
+      expect(mockClient.createPayloadIndex).toHaveBeenCalledTimes(3);
+    });
+
+    it("creates hybrid collection if it does not exist (hybrid mode)", async () => {
+      mockClient.getCollections.mockResolvedValue({ collections: [] });
+      const hybridStore = new QdrantVectorStore(mockClient as any, {
+        searchMode: "hybrid",
+      });
+
+      const message = createTestMessage();
+      const embedding = Array(1536).fill(0.1);
+
+      await hybridStore.indexMessage(message, embedding, ctx);
+
+      expect(mockClient.createCollection).toHaveBeenCalledWith(
+        "messages",
+        expect.objectContaining({
+          vectors: {
+            [DENSE_VECTOR_NAME]: expect.objectContaining({
+              size: 1536,
+              distance: "Cosine",
+              on_disk: true,
+            }),
+          },
+          sparse_vectors: {
+            [SPARSE_VECTOR_NAME]: expect.objectContaining({
+              index: { on_disk: true },
+            }),
+          },
+        }),
+      );
       expect(mockClient.createPayloadIndex).toHaveBeenCalledTimes(3);
     });
 

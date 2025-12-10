@@ -20,10 +20,15 @@ import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability
 import {
   COLLECTION_NAME,
   VECTOR_SIZE,
+  SEARCH_MODE,
+  DENSE_VECTOR_NAME,
+  SPARSE_VECTOR_NAME,
   ensureCollection,
   messageIdToPointId,
   type MessagePayload,
+  type QdrantSearchMode,
 } from '../qdrant/schema.js'
+import { getBM25Embedder } from '../qdrant/bm25.js'
 
 export interface QdrantVectorStoreConfig {
   /** Collection name (default: 'messages') */
@@ -34,6 +39,8 @@ export interface QdrantVectorStoreConfig {
   scoreThreshold?: number
   /** Batch size for bulk operations (default: 100) */
   batchSize?: number
+  /** Search mode: 'hybrid' (dense + text) or 'simple' (dense only) */
+  searchMode?: QdrantSearchMode
 }
 
 /**
@@ -103,6 +110,7 @@ export class QdrantVectorStore implements IVectorStore {
   private readonly vectorSize: number
   private readonly scoreThreshold: number
   private readonly batchSize: number
+  private readonly searchMode: QdrantSearchMode
   private collectionInitialized = false
 
   constructor(
@@ -113,6 +121,7 @@ export class QdrantVectorStore implements IVectorStore {
     this.vectorSize = config.vectorSize ?? VECTOR_SIZE
     this.scoreThreshold = config.scoreThreshold ?? 0.7
     this.batchSize = config.batchSize ?? 100
+    this.searchMode = config.searchMode ?? SEARCH_MODE
   }
 
   /**
@@ -121,12 +130,13 @@ export class QdrantVectorStore implements IVectorStore {
   private async ensureCollectionExists(): Promise<void> {
     if (this.collectionInitialized) return
 
-    await ensureCollection(this.client, this.collectionName, this.vectorSize)
+    await ensureCollection(this.client, this.collectionName, this.vectorSize, this.searchMode)
     this.collectionInitialized = true
   }
 
   /**
    * Index a single message with its embedding
+   * In hybrid mode, also generates and stores BM25 sparse vector
    */
   async indexMessage(
     message: Message,
@@ -138,6 +148,7 @@ export class QdrantVectorStore implements IVectorStore {
         messageId: message.id,
         conversationId: message.conversationId,
         requestId: ctx.requestId,
+        searchMode: this.searchMode,
       })
 
       try {
@@ -156,18 +167,39 @@ export class QdrantVectorStore implements IVectorStore {
           topics: message.metadata?.topics,
         } as Record<string, unknown>
 
-        await this.client.upsert(this.collectionName, {
-          wait: true,
-          points: [
-            {
-              id: pointId,
-              vector: embedding,
-              payload,
-            },
-          ],
-        })
+        if (this.searchMode === 'hybrid') {
+          // Generate BM25 sparse vector from content
+          const sparseVector = getBM25Embedder().embed(message.content)
 
-        logger.debug('Message indexed in Qdrant L4')
+          await this.client.upsert(this.collectionName, {
+            wait: true,
+            points: [
+              {
+                id: pointId,
+                vector: {
+                  [DENSE_VECTOR_NAME]: embedding,
+                  [SPARSE_VECTOR_NAME]: sparseVector,
+                },
+                payload,
+              },
+            ],
+          })
+          logger.debug('Message indexed with dense + sparse vectors')
+        } else {
+          // Simple mode: single dense vector
+          await this.client.upsert(this.collectionName, {
+            wait: true,
+            points: [
+              {
+                id: pointId,
+                vector: embedding,
+                payload,
+              },
+            ],
+          })
+          logger.debug('Message indexed with dense vector only')
+        }
+
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to index message in Qdrant')
@@ -179,6 +211,7 @@ export class QdrantVectorStore implements IVectorStore {
 
   /**
    * Batch index multiple messages with their embeddings
+   * In hybrid mode, also generates BM25 sparse vectors for each message
    */
   async batchIndex(
     messages: Message[],
@@ -189,6 +222,7 @@ export class QdrantVectorStore implements IVectorStore {
       const logger = getLogger().child({
         count: messages.length,
         requestId: ctx.requestId,
+        searchMode: this.searchMode,
       })
 
       if (messages.length === 0) {
@@ -206,6 +240,9 @@ export class QdrantVectorStore implements IVectorStore {
 
       try {
         await this.ensureCollectionExists()
+
+        // Generate sparse vectors if in hybrid mode
+        const bm25 = this.searchMode === 'hybrid' ? getBM25Embedder() : null
 
         // Process in batches
         for (let i = 0; i < messages.length; i += this.batchSize) {
@@ -225,10 +262,22 @@ export class QdrantVectorStore implements IVectorStore {
               topics: message.metadata?.topics,
             } as Record<string, unknown>
 
-            return {
-              id: messageIdToPointId(message.id),
-              vector: batchEmbeddings[idx],
-              payload,
+            if (this.searchMode === 'hybrid' && bm25) {
+              const sparseVector = bm25.embed(message.content)
+              return {
+                id: messageIdToPointId(message.id),
+                vector: {
+                  [DENSE_VECTOR_NAME]: batchEmbeddings[idx],
+                  [SPARSE_VECTOR_NAME]: sparseVector,
+                },
+                payload,
+              }
+            } else {
+              return {
+                id: messageIdToPointId(message.id),
+                vector: batchEmbeddings[idx],
+                payload,
+              }
             }
           })
 
@@ -243,7 +292,7 @@ export class QdrantVectorStore implements IVectorStore {
           )
         }
 
-        logger.info({ count: messages.length }, 'All messages batch indexed in Qdrant L4')
+        logger.info({ count: messages.length, mode: this.searchMode }, 'All messages batch indexed in Qdrant L4')
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to batch index in Qdrant')
@@ -255,6 +304,7 @@ export class QdrantVectorStore implements IVectorStore {
 
   /**
    * Search for semantically similar messages
+   * In hybrid mode, combines dense vector similarity with BM25 sparse keyword matching
    */
   async search(
     queryEmbedding: number[],
@@ -266,6 +316,7 @@ export class QdrantVectorStore implements IVectorStore {
         requestId: ctx.requestId,
         userId: options.userId,
         conversationId: options.conversationId,
+        searchMode: this.searchMode,
       })
 
       const {
@@ -276,6 +327,7 @@ export class QdrantVectorStore implements IVectorStore {
         requiredTopics = [],
         limit = 20,
         scoreThreshold = this.scoreThreshold,
+        queryText,
       } = options
 
       try {
@@ -333,29 +385,44 @@ export class QdrantVectorStore implements IVectorStore {
           filter.must_not = mustNotConditions
         }
 
-        const searchResult = await this.client.search(this.collectionName, {
-          vector: queryEmbedding,
-          filter: Object.keys(filter).length > 0 ? filter : undefined,
-          limit,
-          score_threshold: scoreThreshold,
-          with_payload: true,
-        })
+        let results: SemanticMatch[]
 
-        const results: SemanticMatch[] = searchResult.map((point) => {
-          const payload = point.payload as unknown as MessagePayload
-          return {
-            id: payload.messageId,
-            score: point.score,
-            content: payload.content,
-            metadata: {
-              conversationId: payload.conversationId,
-              timestamp: payload.timestamp,
-              role: payload.role,
-            },
+        if (this.searchMode === 'hybrid') {
+          // Hybrid mode: use named vectors
+          if (queryText) {
+            // Full hybrid: dense + sparse with RRF fusion
+            logger.debug({ queryText }, 'Using hybrid search (dense + sparse BM25)')
+            results = await this.hybridSearch(queryEmbedding, queryText, filter, limit, scoreThreshold)
+          } else {
+            // Dense-only search in hybrid collection (use named vector)
+            logger.debug('Using dense-only search in hybrid collection')
+            const searchResult = await this.client.search(this.collectionName, {
+              vector: {
+                name: DENSE_VECTOR_NAME,
+                vector: queryEmbedding,
+              },
+              filter: Object.keys(filter).length > 0 ? filter : undefined,
+              limit,
+              score_threshold: scoreThreshold,
+              with_payload: true,
+            })
+
+            results = this.mapSearchResults(searchResult)
           }
-        })
+        } else {
+          // Simple mode: single unnamed dense vector
+          const searchResult = await this.client.search(this.collectionName, {
+            vector: queryEmbedding,
+            filter: Object.keys(filter).length > 0 ? filter : undefined,
+            limit,
+            score_threshold: scoreThreshold,
+            with_payload: true,
+          })
 
-        logger.debug({ count: results.length }, 'Qdrant L4 search completed')
+          results = this.mapSearchResults(searchResult)
+        }
+
+        logger.debug({ count: results.length, mode: this.searchMode }, 'Qdrant L4 search completed')
         pipelineMetrics.memoryCacheHits.add(results.length > 0 ? 1 : 0, { tier: 'L4' })
 
         return ok(results)
@@ -363,6 +430,85 @@ export class QdrantVectorStore implements IVectorStore {
         logger.error({ error }, 'Qdrant search failed')
         pipelineMetrics.errors.add(1, { error_kind: 'qdrant_search' })
         return err(mapQdrantError(error))
+      }
+    })
+  }
+
+  /**
+   * Map Qdrant search results to SemanticMatch array
+   */
+  private mapSearchResults(searchResult: Array<{ payload?: Record<string, unknown> | null; score: number }>): SemanticMatch[] {
+    return searchResult.map((point) => {
+      const payload = point.payload as unknown as MessagePayload
+      return {
+        id: payload.messageId,
+        score: point.score,
+        content: payload.content,
+        metadata: {
+          conversationId: payload.conversationId,
+          timestamp: payload.timestamp,
+          role: payload.role,
+        },
+      }
+    })
+  }
+
+  /**
+   * Hybrid search combining dense vector similarity with BM25 sparse keyword matching
+   * Uses Qdrant's query API with prefetch for RRF (Reciprocal Rank Fusion)
+   */
+  private async hybridSearch(
+    queryEmbedding: number[],
+    queryText: string,
+    filter: Record<string, unknown>,
+    limit: number,
+    _scoreThreshold: number
+  ): Promise<SemanticMatch[]> {
+    const filterObj = Object.keys(filter).length > 0 ? filter : undefined
+
+    // Generate sparse vector from query text
+    const sparseVector = getBM25Embedder().embed(queryText)
+
+    // Use Qdrant's query API with prefetch for hybrid search
+    // This performs RRF (Reciprocal Rank Fusion) to combine dense + sparse results
+    const queryResult = await this.client.query(this.collectionName, {
+      prefetch: [
+        {
+          // Dense vector search
+          query: queryEmbedding,
+          using: DENSE_VECTOR_NAME,
+          filter: filterObj,
+          limit: limit * 2, // Fetch more for fusion
+        },
+        {
+          // Sparse BM25 vector search
+          query: {
+            indices: sparseVector.indices,
+            values: sparseVector.values,
+          },
+          using: SPARSE_VECTOR_NAME,
+          filter: filterObj,
+          limit: limit * 2,
+        },
+      ],
+      query: {
+        fusion: 'rrf', // Reciprocal Rank Fusion to combine results
+      },
+      limit,
+      with_payload: true,
+    })
+
+    return queryResult.points.map((point) => {
+      const payload = point.payload as unknown as MessagePayload
+      return {
+        id: payload.messageId,
+        score: point.score,
+        content: payload.content,
+        metadata: {
+          conversationId: payload.conversationId,
+          timestamp: payload.timestamp,
+          role: payload.role,
+        },
       }
     })
   }

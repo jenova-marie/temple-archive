@@ -9,9 +9,18 @@ import { getLogger } from '@recoverysky/observability'
 import { createHash } from 'crypto'
 
 // Collection configuration constants
-export const COLLECTION_NAME = 'messages'
+export const COLLECTION_NAME = process.env.QDRANT_COLLECTION_NAME ?? 'messages'
 export const VECTOR_SIZE = 1536 // OpenAI text-embedding-3-small dimensions
 export const DISTANCE_METRIC = 'Cosine'
+
+// Search mode: 'hybrid' (dense + sparse BM25) or 'simple' (dense only)
+export type QdrantSearchMode = 'hybrid' | 'simple'
+export const SEARCH_MODE: QdrantSearchMode =
+  (process.env.QDRANT_SEARCH_MODE as QdrantSearchMode) ?? 'hybrid'
+
+// Named vector configuration for hybrid mode
+export const DENSE_VECTOR_NAME = 'dense'
+export const SPARSE_VECTOR_NAME = 'sparse'
 
 /**
  * Payload schema for message vectors
@@ -57,13 +66,17 @@ export function messageIdToPointId(messageId: string): string {
 /**
  * Ensure the messages collection exists with correct configuration
  * Creates the collection if it doesn't exist
+ *
+ * - Simple mode: Single unnamed dense vector
+ * - Hybrid mode: Named vectors (dense + sparse BM25)
  */
 export async function ensureCollection(
   client: QdrantClient,
   collectionName: string = COLLECTION_NAME,
-  vectorSize: number = VECTOR_SIZE
+  vectorSize: number = VECTOR_SIZE,
+  searchMode: QdrantSearchMode = SEARCH_MODE
 ): Promise<void> {
-  const logger = getLogger().child({ component: 'qdrant-schema', collectionName })
+  const logger = getLogger().child({ component: 'qdrant-schema', collectionName, searchMode })
 
   try {
     // Check if collection exists
@@ -75,21 +88,47 @@ export async function ensureCollection(
       return
     }
 
-    logger.info({ vectorSize, distance: DISTANCE_METRIC }, 'Creating collection')
+    logger.info({ vectorSize, distance: DISTANCE_METRIC, searchMode }, 'Creating collection')
 
-    // Create collection with vector configuration
-    await client.createCollection(collectionName, {
-      vectors: {
-        size: vectorSize,
-        distance: DISTANCE_METRIC,
-        on_disk: true, // Enable on-disk storage for durability
-      },
-      // Configure optimizers for better performance
-      optimizers_config: {
-        default_segment_number: 2,
-        indexing_threshold: 20000,
-      },
-    })
+    if (searchMode === 'hybrid') {
+      // Hybrid mode: named vectors (dense + sparse)
+      await client.createCollection(collectionName, {
+        vectors: {
+          [DENSE_VECTOR_NAME]: {
+            size: vectorSize,
+            distance: DISTANCE_METRIC,
+            on_disk: true,
+          },
+        },
+        sparse_vectors: {
+          [SPARSE_VECTOR_NAME]: {
+            // BM25 sparse vectors - no fixed size, index for efficiency
+            index: {
+              on_disk: true,
+            },
+          },
+        },
+        optimizers_config: {
+          default_segment_number: 2,
+          indexing_threshold: 20000,
+        },
+      })
+      logger.debug('Created collection with dense + sparse vectors for hybrid search')
+    } else {
+      // Simple mode: single unnamed dense vector
+      await client.createCollection(collectionName, {
+        vectors: {
+          size: vectorSize,
+          distance: DISTANCE_METRIC,
+          on_disk: true,
+        },
+        optimizers_config: {
+          default_segment_number: 2,
+          indexing_threshold: 20000,
+        },
+      })
+      logger.debug('Created collection with single dense vector for simple search')
+    }
 
     // Create payload indexes for efficient filtering
     logger.debug('Creating payload indexes')
@@ -109,7 +148,7 @@ export async function ensureCollection(
       field_schema: 'integer',
     })
 
-    logger.info('Collection created successfully with payload indexes')
+    logger.info({ searchMode }, 'Collection created successfully with payload indexes')
   } catch (error) {
     logger.error({ error }, 'Failed to ensure collection exists')
     throw error
