@@ -283,7 +283,7 @@ export class VercelAIAgentProvider implements IAgentProvider {
     for (const tool of tools) {
       converted[tool.name] = {
         description: tool.description,
-        inputSchema: tool.parameters,
+        parameters: tool.parameters,
         execute: tool.execute,
       }
     }
