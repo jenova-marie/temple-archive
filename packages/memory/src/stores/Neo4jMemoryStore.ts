@@ -53,6 +53,8 @@ export interface Neo4jMemoryStoreConfig {
 
 export class Neo4jMemoryStore implements IMemoryStore {
   private readonly config: Neo4jMemoryStoreConfig
+  /** Track which databases have been initialized (schema created) */
+  private readonly initializedDatabases: Set<string> = new Set()
 
   constructor(
     private readonly driver: Driver,
@@ -98,6 +100,75 @@ export class Neo4jMemoryStore implements IMemoryStore {
     return name
   }
 
+  /**
+   * Get the database name for the given context.
+   * Returns the sanitized userId if in database-per-user mode, otherwise the default database.
+   */
+  private getDatabaseName(ctx: TraceContext): string {
+    if (this.config.databasePerUser && ctx.userId) {
+      return this.sanitizeDatabaseName(ctx.userId)
+    }
+    return this.config.defaultDatabase || 'neo4j'
+  }
+
+  /**
+   * Schema statements for Memory nodes (bootstrap/MCP schema)
+   */
+  private static readonly SCHEMA_STATEMENTS = [
+    'CREATE INDEX memory_id IF NOT EXISTS FOR (m:Memory) ON (m.id)',
+    'CREATE INDEX memory_name IF NOT EXISTS FOR (m:Memory) ON (m.name)',
+    'CREATE INDEX memory_type IF NOT EXISTS FOR (m:Memory) ON (m.memoryType)',
+    'CREATE INDEX memory_last_accessed IF NOT EXISTS FOR (m:Memory) ON (m.lastAccessed)',
+    'CREATE INDEX observation_id IF NOT EXISTS FOR (o:Observation) ON (o.id)',
+  ]
+
+  /**
+   * Ensure schema (indexes) is initialized for the database.
+   * In database-per-user mode, each user's database needs its own schema.
+   * Dozer/Neo4j will auto-create the database on first session, but schema must be set up.
+   *
+   * This method is idempotent and tracks which databases have been initialized
+   * to avoid redundant schema creation on every request.
+   */
+  private async ensureSchemaInitialized(ctx: TraceContext): Promise<void> {
+    const databaseName = this.getDatabaseName(ctx)
+
+    // Skip if already initialized this session
+    if (this.initializedDatabases.has(databaseName)) {
+      return
+    }
+
+    const logger = getLogger().child({
+      component: 'Neo4jMemoryStore',
+      database: databaseName,
+    })
+
+    // Open session to the specific database
+    const session = this.driver.session({ database: databaseName })
+
+    try {
+      logger.debug('Initializing Memory schema for database')
+
+      for (const statement of Neo4jMemoryStore.SCHEMA_STATEMENTS) {
+        try {
+          await session.run(statement)
+        } catch (error) {
+          // Ignore "already exists" errors - these are expected
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          if (!errorMessage.includes('already exists')) {
+            logger.warn({ error, statement: statement.slice(0, 50) }, 'Schema statement failed')
+          }
+        }
+      }
+
+      // Mark as initialized
+      this.initializedDatabases.add(databaseName)
+      logger.info('Memory schema initialized for database')
+    } finally {
+      await session.close()
+    }
+  }
+
   // ============================================================================
   // Core CRUD Operations
   // ============================================================================
@@ -115,6 +186,9 @@ export class Neo4jMemoryStore implements IMemoryStore {
         memoryType: input.memoryType,
         requestId: ctx.requestId,
       })
+
+      // Ensure schema exists for this database (lazy initialization for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
 
       const session = this.getSession(ctx)
       const now = Date.now()
@@ -391,6 +465,9 @@ export class Neo4jMemoryStore implements IMemoryStore {
         requestId: ctx.requestId,
       })
 
+      // Ensure schema exists for this database (lazy initialization for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
+
       const session = this.getSession(ctx)
       const obsId = nanoid()
       const now = Date.now()
@@ -500,6 +577,9 @@ export class Neo4jMemoryStore implements IMemoryStore {
         type,
         requestId: ctx.requestId,
       })
+
+      // Ensure schema exists for this database (lazy initialization for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
 
       const session = this.getSession(ctx)
 

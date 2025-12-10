@@ -64,6 +64,8 @@ export interface Neo4jKnowledgeStoreConfig {
 
 export class Neo4jKnowledgeStore implements IKnowledgeStore {
   private readonly config: Neo4jKnowledgeStoreConfig
+  /** Track which databases have been initialized (schema created) */
+  private readonly initializedDatabases: Set<string> = new Set()
 
   constructor(
     private readonly driver: Driver,
@@ -121,6 +123,76 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
   }
 
   /**
+   * Get the database name for the given context.
+   * Returns the sanitized userId if in database-per-user mode, otherwise the default database.
+   */
+  private getDatabaseName(ctx: TraceContext): string {
+    if (this.config.databasePerUser && ctx.userId) {
+      return this.sanitizeDatabaseName(ctx.userId)
+    }
+    return this.config.defaultDatabase || 'neo4j'
+  }
+
+  /**
+   * Schema statements for Entity nodes (knowledge graph)
+   */
+  private static readonly SCHEMA_STATEMENTS = [
+    'CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (e:Entity) REQUIRE e.entityId IS UNIQUE',
+    'CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)',
+    'CREATE INDEX entity_type IF NOT EXISTS FOR (e:Entity) ON (e.type)',
+    'CREATE INDEX entity_user IF NOT EXISTS FOR (e:Entity) ON (e.userId)',
+    'CREATE INDEX entity_last_mentioned IF NOT EXISTS FOR (e:Entity) ON (e.lastMentioned)',
+    'CREATE INDEX entity_user_type IF NOT EXISTS FOR (e:Entity) ON (e.userId, e.type)',
+  ]
+
+  /**
+   * Ensure schema (indexes/constraints) is initialized for the database.
+   * In database-per-user mode, each user's database needs its own schema.
+   * Dozer/Neo4j will auto-create the database on first session, but schema must be set up.
+   *
+   * This method is idempotent and tracks which databases have been initialized
+   * to avoid redundant schema creation on every request.
+   */
+  private async ensureSchemaInitialized(ctx: TraceContext): Promise<void> {
+    const databaseName = this.getDatabaseName(ctx)
+
+    // Skip if already initialized this session
+    if (this.initializedDatabases.has(databaseName)) {
+      return
+    }
+
+    const logger = getLogger().child({
+      component: 'Neo4jKnowledgeStore',
+      database: databaseName,
+    })
+
+    // Open session to the specific database
+    const session = this.driver.session({ database: databaseName })
+
+    try {
+      logger.debug('Initializing schema for database')
+
+      for (const statement of Neo4jKnowledgeStore.SCHEMA_STATEMENTS) {
+        try {
+          await session.run(statement)
+        } catch (error) {
+          // Ignore "already exists" errors - these are expected
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          if (!errorMessage.includes('already exists')) {
+            logger.warn({ error, statement: statement.slice(0, 50) }, 'Schema statement failed')
+          }
+        }
+      }
+
+      // Mark as initialized
+      this.initializedDatabases.add(databaseName)
+      logger.info('Schema initialized for database')
+    } finally {
+      await session.close()
+    }
+  }
+
+  /**
    * Create or update an entity in the knowledge graph
    *
    * Uses MERGE to upsert: creates new entity or updates existing one.
@@ -142,6 +214,9 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         entityType: entity.type,
         requestId: ctx.requestId,
       })
+
+      // Ensure schema exists for this database (lazy initialization for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
 
       const session = this.getSession(ctx)
 
@@ -206,6 +281,9 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         relationshipType,
         requestId: ctx.requestId,
       })
+
+      // Ensure schema exists for this database (lazy initialization for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
 
       const session = this.getSession(ctx)
 

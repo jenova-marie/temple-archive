@@ -185,8 +185,13 @@ describe("Neo4jKnowledgeStore", () => {
       );
 
       // The query should contain sanitized relationship type (HELPS_WITH)
-      const callArg = mockDriver._mockSession.run.mock.calls[0][0];
-      expect(callArg).toContain("HELPS_WITH");
+      // Note: Schema initialization calls happen first, so find the relationship query
+      const allCalls = mockDriver._mockSession.run.mock.calls;
+      const relationshipCall = allCalls.find(
+        (call: unknown[]) => typeof call[0] === "string" && call[0].includes("MERGE")
+      );
+      expect(relationshipCall).toBeDefined();
+      expect(relationshipCall![0]).toContain("HELPS_WITH");
     });
   });
 
