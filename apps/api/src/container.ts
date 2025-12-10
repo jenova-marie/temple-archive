@@ -53,6 +53,8 @@ import { getLogger } from '@recoverysky/observability'
 export interface Container {
   pipeline: Pipeline
   config: PipelineConfig
+  /** Initialize async services (Qdrant collection, etc). Call after creation. */
+  init: () => Promise<void>
 }
 
 export interface ContainerConfig {
@@ -105,10 +107,12 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
   // L4 Vector Store - Qdrant when QDRANT_URL is set, otherwise in-memory
   let vectorStore: IVectorStore
+  let qdrantVectorStore: QdrantVectorStore | null = null
   if (!useStubs && process.env.QDRANT_URL) {
     logger.info('Using QdrantVectorStore (L4)')
     const qdrant = createQdrantClient({ url: process.env.QDRANT_URL })
-    vectorStore = new QdrantVectorStore(qdrant)
+    qdrantVectorStore = new QdrantVectorStore(qdrant)
+    vectorStore = qdrantVectorStore
   } else {
     logger.info('Using InMemoryVectorStore (L4 stub)')
     vectorStore = new InMemoryVectorStore()
@@ -426,8 +430,29 @@ export function createContainer(options: ContainerConfig = {}): Container {
   // Create pipeline
   const pipeline = new Pipeline(deps, pipelineConfig)
 
+  // Init function for async service initialization
+  const init = async (): Promise<void> => {
+    const initTasks: Promise<void>[] = []
+
+    // Initialize Qdrant collection if using real Qdrant
+    if (qdrantVectorStore) {
+      logger.info('Initializing Qdrant collection...')
+      initTasks.push(
+        qdrantVectorStore.init().then(() => {
+          logger.info('Qdrant collection initialized successfully')
+        })
+      )
+    } else {
+      logger.info('Skipping Qdrant init (using stub or not configured)')
+    }
+
+    await Promise.all(initTasks)
+    logger.info('Container initialization complete')
+  }
+
   return {
     pipeline,
     config: pipelineConfig,
+    init,
   }
 }

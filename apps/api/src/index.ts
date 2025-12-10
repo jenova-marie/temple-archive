@@ -50,6 +50,15 @@ const container = createContainer({
   useStubs: process.env.USE_STUBS === "true",
 });
 
+// Initialize async services (Qdrant collection, etc)
+container.init()
+  .then(() => {
+    logger.info("Container async initialization complete");
+  })
+  .catch((err) => {
+    logger.error({ err, message: err?.message, stack: err?.stack }, "Failed to initialize container services");
+  });
+
 logger.info({ useStubs: container.config.useStubs }, "Container initialized");
 
 // Create Express app

@@ -135,6 +135,22 @@ export class QdrantVectorStore implements IVectorStore {
   }
 
   /**
+   * Initialize the vector store - creates collection if it doesn't exist.
+   * Call this on startup to ensure collection is ready before first operation.
+   */
+  async init(): Promise<void> {
+    const logger = getLogger().child({ component: 'QdrantVectorStore', method: 'init' })
+    logger.info({ collectionName: this.collectionName, searchMode: this.searchMode }, 'Starting Qdrant init')
+    try {
+      await this.ensureCollectionExists()
+      logger.info('Qdrant init completed successfully')
+    } catch (error) {
+      logger.error({ error }, 'Qdrant init failed')
+      throw error
+    }
+  }
+
+  /**
    * Index a single message with its embedding
    * In hybrid mode, also generates and stores BM25 sparse vector
    */
