@@ -17,6 +17,12 @@ import { anthropic } from '@ai-sdk/anthropic'
 import type { PipelineInput, TraceContext } from '@recoverysky/types'
 import type { Pipeline } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
+import {
+  recoveryTools,
+  getMemoryTools,
+  setMemoryToolTraceContext,
+  clearMemoryToolTraceContext,
+} from '@recoverysky/tools'
 
 /**
  * Chat request body schema - matches existing recoverysky-api format
@@ -176,6 +182,7 @@ export function createChatRouter(pipeline: Pipeline): Router {
             model: anthropic('claude-sonnet-4-20250514'),
             system: 'You are Sky, a compassionate recovery companion. Respond with care and provide crisis resources.',
             messages: [{ role: 'user', content: lastUserMessage }],
+            tools: { getCrisisResources: recoveryTools.getCrisisResources },
             maxOutputTokens: 500,
           })
 
@@ -198,11 +205,19 @@ export function createChatRouter(pipeline: Pipeline): Router {
       }
 
       // STAGE 2: Stream response using Vercel AI SDK
-      // Get tools from pipeline
+      // Build tools object from recovery tools + optional memory tools
       const deps = pipeline.getDeps()
-      const tools = deps.memoryToolAccess !== 'off'
-        ? {} // TODO: Convert pipeline tools to Vercel AI SDK format if needed
-        : {}
+      const memoryToolAccess = deps.memoryToolAccess || 'off'
+
+      // Set trace context for memory tools before streaming
+      if (memoryToolAccess !== 'off') {
+        setMemoryToolTraceContext(traceContext)
+      }
+
+      const tools = {
+        ...recoveryTools,
+        ...(memoryToolAccess !== 'off' ? getMemoryTools(memoryToolAccess) : {}),
+      }
 
       const result = streamText({
         model: anthropic('claude-sonnet-4-20250514'),
@@ -236,6 +251,11 @@ export function createChatRouter(pipeline: Pipeline): Router {
         logger.info({ requestId, totalDuration: Date.now() - startTime }, 'Request fully completed')
       }).catch(err => {
         logger.error({ err }, 'Post-process failed')
+      }).finally(() => {
+        // Clean up memory tool trace context
+        if (memoryToolAccess !== 'off') {
+          clearMemoryToolTraceContext()
+        }
       })
 
     } catch (error) {

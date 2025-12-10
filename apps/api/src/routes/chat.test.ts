@@ -19,7 +19,7 @@ vi.mock('@recoverysky/observability', () => ({
 // Mock ai SDK
 vi.mock('ai', () => ({
   streamText: vi.fn(() => ({
-    pipeUIMessageStreamToResponse: vi.fn(),
+    toUIMessageStream: vi.fn(),
     text: Promise.resolve('Mock response'),
   })),
   convertToModelMessages: vi.fn((messages) => messages.map((m: { role: string; content?: string; parts?: Array<{ text?: string }> }) => ({
@@ -27,6 +27,9 @@ vi.mock('ai', () => ({
     content: m.content || m.parts?.[0]?.text || '',
   }))),
   stepCountIs: vi.fn((count: number) => ({ count })),
+  pipeUIMessageStreamToResponse: vi.fn(),
+  // Required by @recoverysky/tools for tool definitions
+  tool: vi.fn((config) => config),
 }))
 
 // Mock anthropic

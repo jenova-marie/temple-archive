@@ -862,17 +862,18 @@ export class Pipeline {
     const tools: ToolDefinition[] = []
 
     // Add recovery tools
+    // Note: AI SDK v5 tools use inputSchema instead of parameters
     for (const [name, tool] of Object.entries(recoveryTools)) {
-      const t = tool as {
+      const t = tool as unknown as {
         description?: string
-        parameters?: unknown
+        inputSchema?: unknown
         execute?: (args: Record<string, unknown>) => Promise<unknown>
       }
 
       tools.push({
         name,
         description: t.description || `Tool: ${name}`,
-        parameters: t.parameters as Record<string, unknown>,
+        parameters: t.inputSchema as Record<string, unknown>,
         execute: t.execute || (async () => ({ error: 'Not implemented' })),
       })
     }
@@ -883,16 +884,16 @@ export class Pipeline {
       const memoryTools = getMemoryTools(memoryToolAccess)
 
       for (const [name, tool] of Object.entries(memoryTools)) {
-        const t = tool as {
+        const t = tool as unknown as {
           description?: string
-          parameters?: unknown
+          inputSchema?: unknown
           execute?: (args: Record<string, unknown>) => Promise<unknown>
         }
 
         tools.push({
           name,
           description: t.description || `Memory Tool: ${name}`,
-          parameters: t.parameters as Record<string, unknown>,
+          parameters: t.inputSchema as Record<string, unknown>,
           execute: t.execute || (async () => ({ error: 'Not implemented' })),
         })
       }
