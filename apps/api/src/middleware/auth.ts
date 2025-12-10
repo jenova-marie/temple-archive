@@ -116,6 +116,11 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
   const logger = getLogger().child({ middleware: "auth" });
   const jwks = getJWKS(config.issuer);
 
+  logger.info(
+    { issuer: config.issuer, audience: config.audience },
+    "Auth middleware initialized",
+  );
+
   /**
    * Verify JWT and attach user to request
    */
@@ -151,7 +156,19 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
 
       return true;
     } catch (error) {
-      logger.warn({ error }, "JWT verification failed");
+      // jose errors don't serialize well, extract useful info
+      const err = error as Error & { code?: string; claim?: string };
+      logger.warn(
+        {
+          errorName: err.name,
+          errorMessage: err.message,
+          errorCode: err.code,
+          claim: err.claim,
+          issuer: config.issuer,
+          audience: config.audience,
+        },
+        "JWT verification failed",
+      );
       return false;
     }
   }
