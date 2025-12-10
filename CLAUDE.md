@@ -176,3 +176,4 @@ All imports must include `.js` extension for local files.
 2. Add reference to root `tsconfig.json`
 3. Add workspace dependency: `pnpm --filter @recoverysky/<consumer> add @recoverysky/<name>`
 4. Export via `src/index.ts` and ensure `.js` extensions on local imports
+- Your Iris MCP team name is 'team-alpha'
