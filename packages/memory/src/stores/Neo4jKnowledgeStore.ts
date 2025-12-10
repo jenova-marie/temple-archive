@@ -78,11 +78,10 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
     }
 
     const logger = getLogger().child({ component: 'Neo4jKnowledgeStore' })
-    if (this.config.databasePerUser) {
-      logger.info('Neo4j database-per-user mode enabled')
-    } else {
-      logger.info({ database: this.config.defaultDatabase }, 'Neo4j using shared database')
-    }
+    logger.info({
+      databasePerUser: this.config.databasePerUser,
+      defaultDatabase: this.config.defaultDatabase,
+    }, 'Neo4jKnowledgeStore initialized')
   }
 
   /**
@@ -102,21 +101,36 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
   /**
    * Sanitize a userId for use as a Neo4j database name.
-   * Neo4j database names must be lowercase and can contain: a-z, 0-9, dots, dashes, underscores.
-   * Must start with a letter.
+   * Neo4j database names: lowercase letters, numbers, and hyphens only.
+   * Must start and end with alphanumeric character.
+   * Max length: 63 characters.
    */
   private sanitizeDatabaseName(userId: string): string {
-    // Convert to lowercase, replace invalid chars with underscore
-    let name = userId.toLowerCase().replace(/[^a-z0-9._-]/g, '_')
+    // Convert to lowercase, replace spaces with hyphens
+    let name = userId.toLowerCase().replace(/\s+/g, '-')
 
-    // Ensure starts with a letter (prefix with 'u' if starts with number)
+    // Remove invalid characters (keep only lowercase letters, numbers, and hyphens)
+    name = name.replace(/[^a-z0-9-]/g, '')
+
+    // Remove leading hyphens
+    name = name.replace(/^-+/, '')
+
+    // Neo4j database names must start with a letter, prefix numeric names with 'u'
     if (/^[0-9]/.test(name)) {
-      name = `u${name}`
+      name = 'u' + name
+    }
+
+    // Remove trailing hyphens
+    name = name.replace(/-+$/, '')
+
+    // Trim to max length (63 chars - Neo4j limit)
+    if (name.length > 63) {
+      name = name.substring(0, 63)
     }
 
     // Ensure not empty
-    if (!name || name === '_') {
-      name = 'default_user'
+    if (!name) {
+      name = 'default-user'
     }
 
     return name
@@ -146,27 +160,86 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
   ]
 
   /**
-   * Ensure schema (indexes/constraints) is initialized for the database.
-   * In database-per-user mode, each user's database needs its own schema.
-   * Dozer/Neo4j will auto-create the database on first session, but schema must be set up.
-   *
-   * This method is idempotent and tracks which databases have been initialized
-   * to avoid redundant schema creation on every request.
+   * Check if a database exists using the system database.
    */
-  private async ensureSchemaInitialized(ctx: TraceContext): Promise<void> {
-    const databaseName = this.getDatabaseName(ctx)
-
-    // Skip if already initialized this session
-    if (this.initializedDatabases.has(databaseName)) {
-      return
+  private async databaseExists(databaseName: string): Promise<boolean> {
+    const systemSession = this.driver.session({ database: 'system' })
+    try {
+      const result = await systemSession.run(
+        'SHOW DATABASES YIELD name WHERE name = $name',
+        { name: databaseName }
+      )
+      return result.records.length > 0
+    } catch {
+      // Fallback for older Neo4j versions or if SHOW DATABASES not supported
+      return false
+    } finally {
+      await systemSession.close()
     }
+  }
 
+  /**
+   * Create a database using the system database.
+   */
+  private async createDatabase(databaseName: string): Promise<void> {
     const logger = getLogger().child({
       component: 'Neo4jKnowledgeStore',
       database: databaseName,
     })
 
-    // Open session to the specific database
+    const systemSession = this.driver.session({ database: 'system' })
+    try {
+      logger.info('Creating database')
+      await systemSession.run('CREATE DATABASE $name IF NOT EXISTS', { name: databaseName })
+      // Wait for database to be ready (Neo4j needs time to initialize new databases)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      logger.info('Database created successfully')
+    } catch (error) {
+      // Log but continue - might fail due to permissions or already exists
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.warn({ error: errorMessage }, 'Database creation attempt completed')
+    } finally {
+      await systemSession.close()
+    }
+  }
+
+  /**
+   * Ensure database exists and schema (indexes/constraints) is initialized.
+   * In database-per-user mode, each user's database needs to be created first,
+   * then schema must be set up.
+   *
+   * This method is idempotent and tracks which databases have been initialized
+   * to avoid redundant creation/schema setup on every request.
+   */
+  private async ensureSchemaInitialized(ctx: TraceContext): Promise<void> {
+    const databaseName = this.getDatabaseName(ctx)
+
+    const logger = getLogger().child({
+      component: 'Neo4jKnowledgeStore',
+      database: databaseName,
+      databasePerUser: this.config.databasePerUser,
+    })
+
+    // Skip if already initialized this session
+    if (this.initializedDatabases.has(databaseName)) {
+      logger.debug('Database already initialized, skipping')
+      return
+    }
+
+    logger.info({ userId: ctx.userId }, 'Ensuring database exists and schema initialized')
+
+    // Step 1: Check if database exists and create if needed (per-user mode only)
+    if (this.config.databasePerUser && databaseName !== 'neo4j' && databaseName !== 'system') {
+      logger.info('Per-user mode: checking if database exists')
+      const exists = await this.databaseExists(databaseName)
+      logger.info({ exists }, 'Database existence check result')
+
+      if (!exists) {
+        await this.createDatabase(databaseName)
+      }
+    }
+
+    // Step 2: Initialize schema in the user's database
     const session = this.driver.session({ database: databaseName })
 
     try {
@@ -186,7 +259,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
       // Mark as initialized
       this.initializedDatabases.add(databaseName)
-      logger.info('Schema initialized for database')
+      logger.info('Database and schema initialized')
     } finally {
       await session.close()
     }
@@ -343,6 +416,9 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         requestId: ctx.requestId,
       })
 
+      // Ensure database exists (for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
+
       const session = this.getSession(ctx)
 
       try {
@@ -403,6 +479,9 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         pattern,
         requestId: ctx.requestId,
       })
+
+      // Ensure database exists (for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
 
       const session = this.getSession(ctx)
 
@@ -465,6 +544,9 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         options,
         requestId: ctx.requestId,
       })
+
+      // Ensure database exists (for per-user mode)
+      await this.ensureSchemaInitialized(ctx)
 
       const session = this.getSession(ctx)
 

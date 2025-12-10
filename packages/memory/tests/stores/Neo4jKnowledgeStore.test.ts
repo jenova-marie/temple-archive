@@ -86,9 +86,10 @@ describe("Neo4jKnowledgeStore", () => {
       // userId with uppercase and special chars
       await store.searchEntities("test", createTraceContext("User@123!ABC"));
 
-      // Should be sanitized to lowercase with underscores
+      // Should be sanitized: lowercase, special chars removed (Neo4j only allows a-z, 0-9, hyphens)
+      // User@123!ABC -> user123abc
       expect(mockDriver.session).toHaveBeenCalledWith({
-        database: "user_123_abc",
+        database: "user123abc",
       });
     });
 
@@ -101,6 +102,7 @@ describe("Neo4jKnowledgeStore", () => {
 
       await store.searchEntities("test", createTraceContext("12345"));
 
+      // Neo4j database names must start with a letter, so numeric IDs get 'u' prefix
       expect(mockDriver.session).toHaveBeenCalledWith({ database: "u12345" });
     });
 
