@@ -6,7 +6,13 @@
 
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from 'ai'
+import {
+  streamText,
+  convertToModelMessages,
+  pipeUIMessageStreamToResponse,
+  stepCountIs,
+  type UIMessage,
+} from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import type { PipelineInput, TraceContext } from '@recoverysky/types'
 import type { Pipeline } from '@recoverysky/pipeline'
@@ -173,7 +179,12 @@ export function createChatRouter(pipeline: Pipeline): Router {
             maxOutputTokens: 500,
           })
 
-          emergencyStream.pipeUIMessageStreamToResponse(res)
+          // Pipe the UI message stream to the Express response
+          pipeUIMessageStreamToResponse({
+            response: res,
+            status: 200,
+            stream: emergencyStream.toUIMessageStream(),
+          })
 
           // Post-process the emergency response
           emergencyStream.text.then(async (text) => {
@@ -209,7 +220,11 @@ export function createChatRouter(pipeline: Pipeline): Router {
       })
 
       // Use native UI Message Stream - this is what assistant-ui expects
-      result.pipeUIMessageStreamToResponse(res)
+      pipeUIMessageStreamToResponse({
+        response: res,
+        status: 200,
+        stream: result.toUIMessageStream(),
+      })
 
       // STAGE 3: Post-process after stream completes (async, don't await)
       result.text.then(async (responseText) => {
