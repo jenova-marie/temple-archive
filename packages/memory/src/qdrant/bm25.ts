@@ -139,8 +139,8 @@ export function generateSparseVector(text: string, config: BM25Config = {}): Spa
   const docLength = tokens.length
   const lengthNorm = 1 - b + b * (docLength / avgDocLength)
 
-  const indices: number[] = []
-  const values: number[] = []
+  // Use Map to aggregate weights for hash collisions (Qdrant requires unique indices)
+  const indexWeights = new Map<number, number>()
 
   for (const [term, tf] of termFreqs) {
     const index = hashTerm(term)
@@ -153,6 +153,14 @@ export function generateSparseVector(text: string, config: BM25Config = {}): Spa
     // This approximates IDF behavior for common vs rare terms
     const weight = tfScore * Math.log(1 + tf)
 
+    // Sum weights for hash collisions
+    indexWeights.set(index, (indexWeights.get(index) ?? 0) + weight)
+  }
+
+  // Convert map to arrays
+  const indices: number[] = []
+  const values: number[] = []
+  for (const [index, weight] of indexWeights) {
     indices.push(index)
     values.push(weight)
   }
