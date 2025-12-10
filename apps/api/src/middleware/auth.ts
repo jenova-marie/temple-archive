@@ -220,7 +220,57 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
 }
 
 /**
+ * Create a bypass middleware that skips JWT verification
+ * Used when DISABLE_AUTH=true for local development
+ */
+function createBypassAuthMiddleware() {
+  const logger = getLogger().child({ middleware: "auth" });
+
+  return {
+    required: async (
+      req: Request,
+      _res: Response,
+      next: NextFunction,
+    ): Promise<void> => {
+      // Set a development user
+      req.user = {
+        id: "dev-user",
+        email: "dev@recoverysky.app",
+        name: "Development User",
+        roles: ["admin"],
+        claims: { sub: "dev-user" } as ZitadelClaims,
+      };
+
+      logger.debug({ userId: req.user.id }, "Auth bypassed (DISABLE_AUTH=true)");
+      next();
+    },
+
+    optional: async (
+      req: Request,
+      _res: Response,
+      next: NextFunction,
+    ): Promise<void> => {
+      req.user = {
+        id: "dev-user",
+        email: "dev@recoverysky.app",
+        name: "Development User",
+        roles: ["admin"],
+        claims: { sub: "dev-user" } as ZitadelClaims,
+      };
+      next();
+    },
+
+    requireRole: () => {
+      return (_req: Request, _res: Response, next: NextFunction): void => {
+        next();
+      };
+    },
+  };
+}
+
+/**
  * Get auth middleware instance (singleton pattern for convenience)
+ * Returns bypass middleware if DISABLE_AUTH=true
  * Returns null if ZITADEL_ISSUER is not configured
  */
 let authMiddlewareInstance: ReturnType<typeof createAuthMiddleware> | null =
@@ -230,6 +280,13 @@ export function getAuthMiddleware(): ReturnType<
   typeof createAuthMiddleware
 > | null {
   if (authMiddlewareInstance) return authMiddlewareInstance;
+
+  // Check for auth bypass (local development)
+  if (process.env.DISABLE_AUTH === "true") {
+    getLogger().warn("Authentication DISABLED (DISABLE_AUTH=true) - using dev user");
+    authMiddlewareInstance = createBypassAuthMiddleware();
+    return authMiddlewareInstance;
+  }
 
   const issuer = process.env.ZITADEL_ISSUER;
   const audience =
