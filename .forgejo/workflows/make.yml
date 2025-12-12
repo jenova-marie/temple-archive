@@ -10,7 +10,7 @@ env:
   AWS_REGION: ${{ github.ref_name == 'dev' && 'us-east-2' || github.ref_name == 'staging' && 'us-west-2' || github.ref_name == 'prod' && 'us-east-1' || 'us-east-2' }}
 jobs:
   docker-build-and-push:
-    runs-on: bob-builder # Runs directly on host
+    runs-on: hestia # Runs directly on host
     steps:
       - uses: actions/checkout@v4
         with:
