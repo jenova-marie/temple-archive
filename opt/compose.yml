@@ -24,9 +24,9 @@ services:
     volumes:
       # Standard container config & pki
       - /opt/containers/caddy:/container:ro
-      - /etc/pki/tls/public/ca-cert.pem:/container/ca-cert.pem:ro
+      - /etc/pki/tls/certs/ca-bundle.crt:/container/ca-bundle.crt:ro
     environment:
-      - NODE_EXTRA_CA_CERTS=/container/ca-cert.pem
+      - NODE_EXTRA_CA_CERTS=/container/ca-bundle.crt
 
       # Application
       - NODE_ENV
