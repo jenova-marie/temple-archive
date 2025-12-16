@@ -16,7 +16,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.54",
     "@anthropic-ai/sdk": "^0.71.2",
-    "@recoverysky-org/common": "link:../../../recoverysky-common",
+    "@recoverysky-org/common": "^1.4.13",
     "@recoverysky/agent": "workspace:*",
     "@recoverysky/crisis": "workspace:*",
     "@recoverysky/db": "workspace:*",
