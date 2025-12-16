@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Last Updated:** 2025/12/16
+
 ## Build & Development Commands
 
 ```bash
@@ -166,9 +168,65 @@ All imports must include `.js` extension for local files.
 
 ## API Endpoints
 
-- `POST /api/chat` - Process message (requires `message`, `conversationId`, `userId`)
+- `POST /api/chat` - Process message (UIMessage format, requires JWT auth)
 - `GET /health` - Health check
 - `GET /health/metrics` - Prometheus metrics
+
+### Chat Request Format (Vercel AI SDK UIMessage)
+
+```bash
+curl -X POST http://localhost:3333/api/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -d '{
+    "id": "conv_123",
+    "messages": [
+      {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
+    ]
+  }'
+```
+
+## CLI Usage
+
+```bash
+# Build CLI
+pnpm --filter @recoverysky/cli build
+
+# Interactive chat
+node packages/cli/dist/index.js
+
+# Single message
+node packages/cli/dist/index.js chat "I'm feeling anxious today"
+
+# Health check
+node packages/cli/dist/index.js health
+```
+
+## Memory Tool Access Levels
+
+Controlled by `MEMORY_TOOL_ACCESS` env var:
+
+| Level | Tools Available |
+|-------|-----------------|
+| `off` | None |
+| `read` | recallMemory, searchEntities, getRelatedEntities |
+| `write` | read + saveNote, logObservation |
+| `full` | write + updateEntity, deleteEntity, createRelationship |
+
+## External Dependencies
+
+### @recoverysky-org/common
+
+Shared package for RecoverySky ecosystem. Used for:
+- `SystemPromptRepository` - Fetches base identity from `system_prompts` table
+- Drizzle schemas for shared tables
+- Supports both `postgres-js` and `node-postgres` drivers
+
+```typescript
+import { SystemPromptRepository } from '@recoverysky-org/common'
+const repo = new SystemPromptRepository(db)
+const result = await repo.findActive('base-identity')
+```
 
 ## Adding a New Package
 
@@ -176,4 +234,7 @@ All imports must include `.js` extension for local files.
 2. Add reference to root `tsconfig.json`
 3. Add workspace dependency: `pnpm --filter @recoverysky/<consumer> add @recoverysky/<name>`
 4. Export via `src/index.ts` and ensure `.js` extensions on local imports
-- Your Iris MCP team name is 'team-alpha'
+
+## Iris MCP
+
+Team name: `team-alpha`

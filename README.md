@@ -2,6 +2,8 @@
 
 An AI-powered chatbot agent designed to support people in addiction recovery. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
 
+**Last Updated:** 2025/12/16
+
 ## Features
 
 - **Vercel AI SDK Compatible**: Native support for `useChat` hooks with UIMessage format
@@ -207,15 +209,36 @@ recoverysky-agent/
 ### Neo4j L3 Knowledge Graph
 - **Entity extraction** from conversations using Claude Haiku
 - **Database-per-user** mode for multi-tenancy (Dozer/Enterprise)
+- **Lazy schema initialization** - schemas created on first access per database
 - **Rich relationships** with context properties (not summaries)
 - **Graph traversal** for related entities and patterns
 - Entity types: person, place, event, emotion, trigger, coping_strategy, milestone, medication
 
 ### Qdrant L4 Features
 - OpenAI embedding provider (text-embedding-3-small)
+- **Hybrid search** with dense vectors + BM25 sparse vectors
 - Semantic similarity search across conversation history
 - Automatic collection creation with HNSW indexing
 - Batch indexing for bulk operations
+
+## Dynamic System Prompts
+
+The agent's base identity can be loaded from the database instead of being hardcoded:
+
+```sql
+-- Insert a custom base identity prompt
+INSERT INTO system_prompts (id, name, content, active, created, updated)
+VALUES (
+  'prompt_001',
+  'base-identity',
+  'You are Sky, a compassionate recovery companion...',
+  true,
+  NOW(),
+  NOW()
+);
+```
+
+On startup, the container fetches the active `base-identity` prompt from the `system_prompts` table (via `@recoverysky-org/common`). If not found, falls back to the hardcoded default.
 
 ## Active Memory System
 
@@ -445,7 +468,8 @@ pnpm typecheck
 
 - **[@jenova-marie/wonder-logger](https://github.com/jenova-marie/wonder-logger)**: Unified observability (Pino logging + OpenTelemetry tracing/metrics)
 - **[@jenova-marie/ts-rust-result](https://github.com/jenova-marie/ts-rust-result)**: Type-safe Result error handling
-- **[Vercel AI SDK](https://sdk.vercel.ai/docs)**: LLM integration with streaming and tool support
+- **[Vercel AI SDK v5](https://sdk.vercel.ai/docs)**: LLM integration with streaming and tool support
+- **[@recoverysky-org/common](https://github.com/recoverysky-org/recoverysky-common)**: Shared models, schemas, and repositories
 - **[Drizzle ORM](https://orm.drizzle.team)**: Type-safe PostgreSQL database access
 - **[ioredis](https://github.com/redis/ioredis)**: Redis client with cluster support
 - **[@qdrant/js-client-rest](https://github.com/qdrant/qdrant-js)**: Qdrant vector database client
@@ -456,9 +480,11 @@ pnpm typecheck
 
 ### Phase 1: Agent Integration ✅
 - [x] VercelAIAgentProvider with Claude (claude-sonnet-4)
+- [x] Vercel AI SDK v5 with UIMessage format
 - [x] Streaming support with AsyncGenerator
 - [x] Tool execution loop with argument conversion
 - [x] Token usage tracking and error handling
+- [x] Dynamic system prompts from database
 
 ### Phase 2: PostgreSQL L2 Memory ✅
 - [x] Drizzle ORM schema with migrations
@@ -481,6 +507,7 @@ pnpm typecheck
 - [x] QdrantVectorStore with HNSW indexing
 - [x] Semantic similarity search
 - [x] Automatic collection management
+- [x] Hybrid search with BM25 sparse vectors
 
 ### Phase 6: Enhanced Crisis Detection ✅
 - [x] KeywordCrisisDetector with 9 pattern types
@@ -500,6 +527,7 @@ pnpm typecheck
 - [x] Neo4jKnowledgeStore with CRUD operations
 - [x] EntityExtractor with LLM-based extraction
 - [x] Database-per-user mode (Dozer/Enterprise)
+- [x] Lazy schema initialization per database
 - [x] Memory tools for Claude (recallMemory, saveNote, etc.)
 - [x] MemoryContextBuilder for pre-agent injection
 - [x] Rich relationship properties (graph-native design)
