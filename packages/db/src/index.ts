@@ -18,4 +18,4 @@ export {
 export * from './schema/index.js'
 
 // Stores
-export { PostgresSessionStore } from './stores/index.js'
+export { PostgresSessionStore, SystemPromptRepository, type SystemPromptError } from './stores/index.js'

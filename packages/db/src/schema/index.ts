@@ -37,3 +37,9 @@ export {
   type DbMemoryCache,
   type NewDbMemoryCache,
 } from './memoryCache.js'
+
+export {
+  systemPrompts,
+  type SystemPrompt,
+  type NewSystemPrompt,
+} from './systemPrompts.js'

@@ -26,13 +26,13 @@
     "test:watch": "vitest",
     "clean": "rm -rf dist",
     "db:generate": "drizzle-kit generate --config=drizzle.config.local.ts",
-    "db:generate:prod": "source ../../.env && drizzle-kit generate --config=drizzle.config.prod.ts",
+    "db:generate:prod": "drizzle-kit generate --config=drizzle.config.prod.ts",
     "db:migrate:local": "drizzle-kit migrate --config=drizzle.config.local.ts",
-    "db:migrate:prod": "source ../../.env && drizzle-kit migrate --config=drizzle.config.prod.ts",
+    "db:migrate:prod": "drizzle-kit migrate --config=drizzle.config.prod.ts",
     "db:push:local": "drizzle-kit push --config=drizzle.config.local.ts",
-    "db:push:prod": "source ../../.env && drizzle-kit push --config=drizzle.config.prod.ts",
+    "db:push:prod": "drizzle-kit push --config=drizzle.config.prod.ts",
     "db:studio:local": "drizzle-kit studio --config=drizzle.config.local.ts",
-    "db:studio:prod": "source ../../.env && drizzle-kit studio --config=drizzle.config.prod.ts"
+    "db:studio:prod": "drizzle-kit studio --config=drizzle.config.prod.ts"
   },
   "dependencies": {
     "@recoverysky/types": "workspace:*",

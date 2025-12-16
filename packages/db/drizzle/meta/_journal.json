@@ -8,6 +8,13 @@
       "when": 1765086032701,
       "tag": "0000_heavy_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765883655209,
+      "tag": "0001_cold_speed_demon",
+      "breakpoints": true
     }
   ]
 }

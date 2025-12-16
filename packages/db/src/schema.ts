@@ -16,8 +16,11 @@ import {
   integer,
   date,
   foreignKey,
+  boolean,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core'
 import { vector } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 // ============================================================================
 // Users
@@ -172,5 +175,28 @@ export const crisisEvents = pgTable(
     }),
     index('idx_crisis_events_user').on(table.userId, table.handledAt),
     index('idx_crisis_events_level').on(table.crisisLevel),
+  ]
+)
+
+// ============================================================================
+// System Prompts
+// ============================================================================
+
+export const systemPrompts = pgTable(
+  'system_prompts',
+  {
+    id: text('id').notNull().primaryKey(),
+    name: text('name').notNull(),
+    content: text('content').notNull(),
+    variables: jsonb('variables').notNull().default({}),
+    active: boolean('active').notNull().default(false),
+    created: timestamp('created', { withTimezone: true, mode: 'string' }).notNull(),
+    updated: timestamp('updated', { withTimezone: true, mode: 'string' }).notNull(),
+  },
+  (table) => [
+    index('idx_system_prompts_name').on(table.name),
+    uniqueIndex('idx_system_prompts_active_unique')
+      .on(table.name)
+      .where(sql`active = true`),
   ]
 )
