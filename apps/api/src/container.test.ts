@@ -62,6 +62,9 @@ vi.mock('@recoverysky/tools', () => ({
 vi.mock('@recoverysky/db', () => ({
   createDatabaseClient: vi.fn().mockReturnValue({}),
   PostgresSessionStore: vi.fn().mockImplementation(() => ({})),
+  SystemPromptRepository: vi.fn().mockImplementation(() => ({
+    findActive: vi.fn().mockResolvedValue({ ok: true, value: null }),
+  })),
 }))
 
 vi.mock('@recoverysky/crisis', () => ({

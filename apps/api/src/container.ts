@@ -49,7 +49,7 @@ import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
 import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
-import { SystemPromptRepository } from '@recoverysky-org/common'
+import { SystemPromptRepository } from '@recoverysky/db'
 
 export interface Container {
   pipeline: Pipeline
@@ -140,7 +140,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     sessionStore = new PostgresSessionStore(db)
 
     // Create SystemPromptRepository for fetching base identity from database
-    systemPromptRepo = new SystemPromptRepository(db as any)
+    systemPromptRepo = new SystemPromptRepository(db)
     logger.info('SystemPromptRepository initialized')
   } else {
     logger.info('Using InMemorySessionStore (L2 stub)')

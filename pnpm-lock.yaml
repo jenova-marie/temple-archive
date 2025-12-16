@@ -44,9 +44,6 @@ importers:
       '@opentelemetry/core':
         specifier: ^2.2.0
         version: 2.2.0(@opentelemetry/api@1.9.0)
-      '@recoverysky-org/common':
-        specifier: ^1.4.13
-        version: 1.4.13(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(drizzle-orm@0.38.4(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(pg@8.16.3)(react@19.2.1))
       '@recoverysky/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -1232,8 +1229,12 @@ packages:
 
   '@jenova-marie/ts-rust-result@2.2.16':
     resolution: {integrity: sha512-JV/gz/COEdzQcTE4wSuiKFx1r/2Ybs/YPOWNDB2FhjI+pHql860q10KBoVp1gUU1/OF80OQm7SgEH19V4Xy/QA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fts-rust-result/-/2.2.16/ts-rust-result-2.2.16.tgz}
+    engines: {node: '>=18'}
     peerDependencies:
       zod: ^4.1.13
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@jenova-marie/wonder-logger@2.0.16':
     resolution: {integrity: sha512-q9UzK6UtcD09Bb6hQXXpfK9caWSf+lLfTCq+GMOHC4lYRvs0hAJJZA6jpiSd6oNROWdK7M/iJ6FzscMP55aUXA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fwonder-logger/-/2.0.16/wonder-logger-2.0.16.tgz}
@@ -1783,11 +1784,6 @@ packages:
     resolution: {integrity: sha512-oQG/FejNpItrxRHoyctYvT3rwGZOnK4jr3JdppO/c78ktDvkWiPXPHNsrDf33K9sZdRb6PR7gi4noIapu5q4HA==}
     engines: {node: '>=18.0.0', pnpm: '>=8'}
 
-  '@recoverysky-org/common@1.4.13':
-    resolution: {integrity: sha512-ht6RofdwvZmHNtl0/Fh43+GK/1SOX54bEAg1YbCGTV/2gjyvYUBr2zChYlOBxwZMx/7DdIT7A+FupR5FIMIZ9Q==, tarball: https://git.rso/api/packages/recoverysky-org/npm/%40recoverysky-org%2Fcommon/-/1.4.13/common-1.4.13.tgz}
-    peerDependencies:
-      drizzle-orm: ^0.44.7
-
   '@rollup/rollup-android-arm-eabi@4.53.3':
     resolution: {integrity: sha512-mRSi+4cBjrRLoaal2PnqH82Wqyb+d3HsPUN/W+WslCXsZsyHa9ZeQQX/pQsZaVIWDkPcpV6jJ+3KLbTbgnwv8w==}
     cpu: [arm]
@@ -1900,9 +1896,6 @@ packages:
 
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
-
-  '@trex-ts/core@1.1.8':
-    resolution: {integrity: sha512-rVRPxqt6Q6Rbh12Kinsg0Xmh0sBaEAqqFR3a6mkweQLRxrjHThxyez36D8+oHxB/Nr0eBjywfFGbbTXjiniJvg==, tarball: https://git.rso/api/packages/trex/npm/%40trex-ts%2Fcore/-/1.1.8/core-1.1.8.tgz}
 
   '@types/aws-lambda@8.10.152':
     resolution: {integrity: sha512-soT/c2gYBnT5ygwiHPmd9a1bftj462NWVk2tKCc1PYHSIacB2UwbTS2zYG4jzag1mRDuzg/OjtxQjQ2NKRB6Rw==}
@@ -2183,9 +2176,6 @@ packages:
 
   brace-expansion@2.0.2:
     resolution: {integrity: sha512-Jt0vHyM+jmUBqojB7E1NIYadt0vI0Qxjxd2TErW94wDz+E2LAm5vKMXXwg6ZZBTHPuUlDgQHKXvjGBdfcF1ZDQ==}
-
-  bson-objectid@2.0.4:
-    resolution: {integrity: sha512-vgnKAUzcDoa+AeyYwXCoHyF2q6u/8H46dxu5JN+4/TZeq/Dlinn0K6GvxsCLb3LHUJl0m/TLiEK31kUwtgocMQ==}
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
@@ -2932,9 +2922,6 @@ packages:
     resolution: {integrity: sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==}
     engines: {node: '>=10'}
 
-  lodash-es@4.17.21:
-    resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}
-
   lodash.camelcase@4.3.0:
     resolution: {integrity: sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA==}
 
@@ -2963,10 +2950,6 @@ packages:
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
-
-  luxon@3.7.2:
-    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
-    engines: {node: '>=12'}
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -3604,10 +3587,6 @@ packages:
   utils-merge@1.0.1:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
-
-  uuid@13.0.0:
-    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
-    hasBin: true
 
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
@@ -4320,7 +4299,7 @@ snapshots:
   '@istanbuljs/schema@0.1.3': {}
 
   '@jenova-marie/ts-rust-result@2.2.16(zod@4.1.13)':
-    dependencies:
+    optionalDependencies:
       zod: 4.1.13
 
   '@jenova-marie/wonder-logger@2.0.16(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))':
@@ -5091,25 +5070,6 @@ snapshots:
 
   '@qdrant/openapi-typescript-fetch@1.2.6': {}
 
-  '@recoverysky-org/common@1.4.13(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(drizzle-orm@0.38.4(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(pg@8.16.3)(react@19.2.1))':
-    dependencies:
-      '@jenova-marie/ts-rust-result': 2.2.16(zod@4.1.13)
-      '@jenova-marie/wonder-logger': 2.0.16(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
-      '@trex-ts/core': 1.1.8
-      bson-objectid: 2.0.4
-      drizzle-orm: 0.38.4(@opentelemetry/api@1.9.0)(@types/pg@8.15.6)(pg@8.16.3)(react@19.2.1)
-      jose: 6.1.3
-      lodash-es: 4.17.21
-      luxon: 3.7.2
-      pg: 8.16.3
-      uuid: 13.0.0
-      zod: 4.1.13
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - encoding
-      - pg-native
-      - supports-color
-
   '@rollup/rollup-android-arm-eabi@4.53.3':
     optional: true
 
@@ -5177,10 +5137,6 @@ snapshots:
     optional: true
 
   '@standard-schema/spec@1.0.0': {}
-
-  '@trex-ts/core@1.1.8':
-    dependencies:
-      luxon: 3.7.2
 
   '@types/aws-lambda@8.10.152': {}
 
@@ -5538,8 +5494,6 @@ snapshots:
   brace-expansion@2.0.2:
     dependencies:
       balanced-match: 1.0.2
-
-  bson-objectid@2.0.4: {}
 
   buffer-from@1.1.2: {}
 
@@ -6329,8 +6283,6 @@ snapshots:
     dependencies:
       p-locate: 5.0.0
 
-  lodash-es@4.17.21: {}
-
   lodash.camelcase@4.3.0: {}
 
   lodash.defaults@4.2.0: {}
@@ -6351,8 +6303,6 @@ snapshots:
   loupe@3.2.1: {}
 
   lru-cache@10.4.3: {}
-
-  luxon@3.7.2: {}
 
   magic-string@0.30.21:
     dependencies:
@@ -6993,8 +6943,6 @@ snapshots:
       punycode: 2.3.1
 
   utils-merge@1.0.1: {}
-
-  uuid@13.0.0: {}
 
   uuid@8.3.2: {}
 
