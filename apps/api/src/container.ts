@@ -49,6 +49,7 @@ import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
 import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
+import { SystemPromptRepository } from '@recoverysky-org/common'
 
 export interface Container {
   pipeline: Pipeline
@@ -131,10 +132,16 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
   // L2 Session Store - PostgreSQL when DATABASE_URL is set, otherwise in-memory
   let sessionStore: ISessionStore
+  let systemPromptRepo: SystemPromptRepository | null = null
+
   if (!useStubs && process.env.DATABASE_URL) {
     logger.info('Using PostgresSessionStore (L2)')
     const db = createDatabaseClient({ connectionString: process.env.DATABASE_URL })
     sessionStore = new PostgresSessionStore(db)
+
+    // Create SystemPromptRepository for fetching base identity from database
+    systemPromptRepo = new SystemPromptRepository(db as any)
+    logger.info('SystemPromptRepository initialized')
   } else {
     logger.info('Using InMemorySessionStore (L2 stub)')
     sessionStore = new InMemorySessionStore()
@@ -411,6 +418,9 @@ export function createContainer(options: ContainerConfig = {}): Container {
     bootstrapOrchestrator = new StubBootstrapOrchestrator()
   }
 
+  // Base identity will be fetched during init()
+  let baseIdentity: string | undefined
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -425,6 +435,8 @@ export function createContainer(options: ContainerConfig = {}): Container {
     memoryContextBuilder,
     memoryToolAccess,
     bootstrapOrchestrator,
+    // baseIdentity is set after init() fetches it from the database
+    get baseIdentity() { return baseIdentity },
   }
 
   // Create pipeline
@@ -444,6 +456,27 @@ export function createContainer(options: ContainerConfig = {}): Container {
       )
     } else {
       logger.info('Skipping Qdrant init (using stub or not configured)')
+    }
+
+    // Fetch base identity from database
+    if (systemPromptRepo) {
+      logger.info('Fetching base identity from database...')
+      initTasks.push(
+        systemPromptRepo.findActive('base-identity').then((result) => {
+          if (!result.ok) {
+            logger.error({ error: result.error }, 'Failed to fetch base identity from database, using default')
+            return
+          }
+          if (result.value) {
+            baseIdentity = result.value.content
+            logger.info({ promptId: result.value.id, promptName: result.value.name }, 'Base identity loaded from database')
+          } else {
+            logger.warn('No active base-identity prompt found in database, using default')
+          }
+        })
+      )
+    } else {
+      logger.info('Skipping base identity fetch (no database configured)')
     }
 
     await Promise.all(initTasks)

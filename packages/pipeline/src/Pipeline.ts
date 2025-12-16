@@ -70,6 +70,8 @@ export interface PipelineDependencies {
   memoryToolAccess?: MemoryToolAccessLevel
   /** Bootstrap orchestrator for conversation memory priming (optional) */
   bootstrapOrchestrator?: IBootstrapOrchestrator
+  /** Base identity prompt fetched from database (optional, falls back to default) */
+  baseIdentity?: string
 }
 
 /**
@@ -527,6 +529,7 @@ export class Pipeline {
         crisisCheck: ctx.crisisCheck,
         memoryContext,
         hasMemoryTools,
+        baseIdentity: this.deps.baseIdentity,
       })
 
       const tools = this.convertToolsToDefinitions()
@@ -811,6 +814,7 @@ export class Pipeline {
       crisisCheck: ctx.crisisCheck,
       memoryContext,
       hasMemoryTools,
+      baseIdentity: this.deps.baseIdentity,
     })
 
     // Convert Vercel AI SDK tools to ToolDefinition format (including memory tools if enabled)
@@ -1152,6 +1156,7 @@ export class Pipeline {
           crisisCheck: ctx.crisisCheck,
           memoryContext,
           hasMemoryTools,
+          baseIdentity: this.deps.baseIdentity,
         })
 
         // STAGE 5: Get tools

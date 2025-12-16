@@ -41,6 +41,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@4.1.13)
+      '@recoverysky-org/common':
+        specifier: link:../../../recoverysky-common
+        version: link:../../../recoverysky-common
       '@recoverysky/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -1226,12 +1229,8 @@ packages:
 
   '@jenova-marie/ts-rust-result@2.2.16':
     resolution: {integrity: sha512-JV/gz/COEdzQcTE4wSuiKFx1r/2Ybs/YPOWNDB2FhjI+pHql860q10KBoVp1gUU1/OF80OQm7SgEH19V4Xy/QA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fts-rust-result/-/2.2.16/ts-rust-result-2.2.16.tgz}
-    engines: {node: '>=18'}
     peerDependencies:
       zod: ^4.1.13
-    peerDependenciesMeta:
-      zod:
-        optional: true
 
   '@jenova-marie/wonder-logger@2.0.16':
     resolution: {integrity: sha512-q9UzK6UtcD09Bb6hQXXpfK9caWSf+lLfTCq+GMOHC4lYRvs0hAJJZA6jpiSd6oNROWdK7M/iJ6FzscMP55aUXA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fwonder-logger/-/2.0.16/wonder-logger-2.0.16.tgz}
@@ -4296,7 +4295,7 @@ snapshots:
   '@istanbuljs/schema@0.1.3': {}
 
   '@jenova-marie/ts-rust-result@2.2.16(zod@4.1.13)':
-    optionalDependencies:
+    dependencies:
       zod: 4.1.13
 
   '@jenova-marie/wonder-logger@2.0.16(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))':

@@ -16,6 +16,8 @@ export interface BuildSystemPromptOptions {
   memoryContext?: string | null
   /** Whether memory tools are available */
   hasMemoryTools?: boolean
+  /** Base identity prompt from database (optional, falls back to default) */
+  baseIdentity?: string
 }
 
 /**
@@ -30,13 +32,13 @@ export function buildSystemPrompt(
     ? contextOrOptions
     : { context: contextOrOptions, crisisCheck }
 
-  const { context, memoryContext, hasMemoryTools } = options
+  const { context, memoryContext, hasMemoryTools, baseIdentity } = options
   const crisis = options.crisisCheck ?? crisisCheck
 
   const sections: string[] = []
 
-  // Base identity
-  sections.push(BASE_IDENTITY)
+  // Base identity (use database value if provided, otherwise fall back to default)
+  sections.push(baseIdentity ?? BASE_IDENTITY)
 
   // Memory context (from MemoryContextBuilder - pre-agent knowledge injection)
   if (memoryContext) {
