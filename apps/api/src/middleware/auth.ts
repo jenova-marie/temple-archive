@@ -293,6 +293,13 @@ function createBypassAuthMiddleware() {
 let authMiddlewareInstance: ReturnType<typeof createAuthMiddleware> | null =
   null;
 
+/**
+ * Reset the auth middleware singleton (for testing only)
+ */
+export function resetAuthMiddleware(): void {
+  authMiddlewareInstance = null;
+}
+
 export function getAuthMiddleware(): ReturnType<
   typeof createAuthMiddleware
 > | null {

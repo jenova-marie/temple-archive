@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Request, Response, NextFunction } from 'express'
-import { createAuthMiddleware, getAuthMiddleware, type ZitadelClaims } from './auth.js'
+import { createAuthMiddleware, getAuthMiddleware, resetAuthMiddleware, type ZitadelClaims } from './auth.js'
 import * as jose from 'jose'
 
 // Mock observability
@@ -76,10 +76,12 @@ describe('auth middleware', () => {
   })
 
   afterEach(() => {
-    // Reset env vars
+    // Reset singleton and env vars
+    resetAuthMiddleware()
     delete process.env.ZITADEL_ISSUER
     delete process.env.ZITADEL_AUDIENCE
     delete process.env.ZITADEL_CLIENT_ID
+    delete process.env.DISABLE_AUTH
   })
 
   describe('createAuthMiddleware', () => {
