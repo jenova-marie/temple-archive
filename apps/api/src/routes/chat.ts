@@ -4,6 +4,7 @@
  * Uses pipeUIMessageStreamToResponse() for assistant-ui compatibility
  */
 
+import { randomUUID } from 'node:crypto'
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
 import {
@@ -29,6 +30,8 @@ import {
  * Note: 'id' is optional (unlike our previous implementation)
  */
 const chatBodySchema = z.object({
+  /** Conversation ID - required for message continuity across requests (must be valid UUID) */
+  conversation_id: z.string().uuid('conversation_id must be a valid UUID').optional(),
   messages: z.array(z.object({
     id: z.string().optional(),
     role: z.enum(['user', 'assistant', 'system']),
@@ -38,6 +41,8 @@ const chatBodySchema = z.object({
     }).passthrough()).optional(),
     content: z.string().optional(),
   }).passthrough()).min(1),
+  /** Optional guide ID (system prompt) to use instead of default base-identity */
+  guide: z.string().optional(),
 }).passthrough()
 
 /**
@@ -65,7 +70,12 @@ function extractLastUserMessage(messages: Array<{ role: string; parts?: Array<{ 
   return null
 }
 
-export function createChatRouter(pipeline: Pipeline): Router {
+interface ChatRouterDeps {
+  pipeline: Pipeline
+  ensureUser: (userId: string, email?: string, displayName?: string) => Promise<void>
+}
+
+export function createChatRouter({ pipeline, ensureUser }: ChatRouterDeps): Router {
   const router = Router()
 
   /**
@@ -87,6 +97,9 @@ export function createChatRouter(pipeline: Pipeline): Router {
     try {
       // Auth middleware ensures req.user is present
       const userId = req.user!.id
+
+      // Ensure user exists in database early in request lifecycle
+      await ensureUser(userId, req.user?.email, req.user?.name)
       const requestId = req.headers['x-request-id'] as string || generateId()
 
       // Validate request body
@@ -101,7 +114,7 @@ export function createChatRouter(pipeline: Pipeline): Router {
         return
       }
 
-      const { messages: rawMessages } = parseResult.data
+      const { messages: rawMessages, guide: systemPromptId, conversation_id } = parseResult.data
 
       // Validate messages array
       if (!rawMessages || rawMessages.length === 0) {
@@ -125,8 +138,8 @@ export function createChatRouter(pipeline: Pipeline): Router {
       // Convert to model messages format for Vercel AI SDK
       const messages = convertToModelMessages(rawMessages as UIMessage[])
 
-      // Use request ID as conversation ID (or could use a separate field)
-      const conversationId = requestId
+      // Use provided conversation_id or generate new UUID for new conversations
+      const conversationId = conversation_id || randomUUID()
 
       // Create trace context
       const traceContext: TraceContext = {
@@ -143,10 +156,11 @@ export function createChatRouter(pipeline: Pipeline): Router {
         message: lastUserMessage,
         conversationId,
         userId,
+        systemPromptId,
       }
 
       logger.info(
-        { conversationId, userId, messageLength: lastUserMessage.length, messageCount: messages.length },
+        { conversationId, userId, messageLength: lastUserMessage.length, messageCount: messages.length, systemPromptId },
         'Processing chat message'
       )
 

@@ -36,6 +36,7 @@ import {
 import { createContainer } from "./container.js";
 import { createChatRouter } from "./routes/chat.js";
 import { createHealthRouter } from "./routes/health.js";
+import { createGuidesRouter } from "./routes/guides.js";
 import { tracingMiddleware } from "./middleware/tracing.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { getAuthMiddleware } from "./middleware/auth.js";
@@ -93,10 +94,18 @@ app.use("/health", createHealthRouter());
 
 // Chat API - requires authentication if Zitadel is configured
 if (auth) {
-  app.use("/api/v1/chat", auth.required, createChatRouter(container.pipeline));
-  logger.info("Zitadel JWT authentication enabled for /api/v1/chat");
+  app.use("/api/v1/chat", auth.required, createChatRouter({
+    pipeline: container.pipeline,
+    ensureUser: container.ensureUser,
+  }));
+  app.use("/api/v1/guides", auth.required, createGuidesRouter(container));
+  logger.info("Zitadel JWT authentication enabled for /api/v1/chat and /api/v1/guides");
 } else {
-  app.use("/api/v1/chat", createChatRouter(container.pipeline));
+  app.use("/api/v1/chat", createChatRouter({
+    pipeline: container.pipeline,
+    ensureUser: container.ensureUser,
+  }));
+  app.use("/api/v1/guides", createGuidesRouter(container));
   logger.warn("No authentication configured - API is unprotected");
 }
 
