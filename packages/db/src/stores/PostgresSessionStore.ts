@@ -22,7 +22,6 @@ import {
   userProfiles,
   sessionSummaries,
   conversations,
-  users,
 } from '../schema/index.js'
 
 /**
@@ -83,14 +82,7 @@ export class PostgresSessionStore implements ISessionStore {
       })
 
       try {
-        // Ensure user exists (upsert)
-        await this.db
-          .insert(users)
-          .values({
-            userId: message.userId,
-          })
-          .onConflictDoNothing()
-
+        // User is ensured to exist by ensureUser() called early in request lifecycle
         // Ensure conversation exists (upsert)
         await this.db
           .insert(conversations)
@@ -205,8 +197,34 @@ export class PostgresSessionStore implements ISessionStore {
           .limit(1)
 
         if (rows.length === 0) {
-          logger.debug({ found: false }, 'User profile lookup in L2')
-          return ok(null)
+          // User exists (ensured by getOrCreateUser earlier) but profile doesn't - create default
+          logger.debug('User profile not found, creating default')
+          const now = new Date()
+
+          await this.db
+            .insert(userProfiles)
+            .values({
+              userId,
+              triggers: [],
+              copingStrategies: [],
+              preferences: {},
+              milestones: [],
+              createdAt: now,
+              lastUpdated: now,
+            })
+            .onConflictDoNothing()
+
+          const defaultProfile: UserProfile = {
+            userId,
+            triggers: [],
+            copingStrategies: [],
+            preferences: {},
+            milestones: [],
+            lastUpdated: now.getTime(),
+          }
+
+          logger.debug({ found: true }, 'User profile created in L2')
+          return ok(defaultProfile)
         }
 
         const row = rows[0]
