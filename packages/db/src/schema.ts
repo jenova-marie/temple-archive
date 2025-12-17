@@ -209,6 +209,7 @@ export const systemPrompts = pgTable(
 export const literature = pgTable('literature', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
+  fellowship: text('fellowship'),
   isbn: text('isbn'),
   datePublished: date('date_published'),
   edition: text('edition'),
