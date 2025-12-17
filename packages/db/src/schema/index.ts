@@ -43,3 +43,12 @@ export {
   type SystemPrompt,
   type NewSystemPrompt,
 } from './systemPrompts.js'
+
+export {
+  literature,
+  literatureBlocks,
+  type Literature,
+  type NewLiterature,
+  type LiteratureBlock,
+  type NewLiteratureBlock,
+} from './literature.js'

@@ -18,6 +18,7 @@ import {
   foreignKey,
   boolean,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core'
 import { vector } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
@@ -198,5 +199,45 @@ export const systemPrompts = pgTable(
     uniqueIndex('idx_system_prompts_active_unique')
       .on(table.name)
       .where(sql`active = true`),
+  ]
+)
+
+// ============================================================================
+// Literature
+// ============================================================================
+
+export const literature = pgTable('literature', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  isbn: text('isbn'),
+  datePublished: date('date_published'),
+  edition: text('edition'),
+  summary: text('summary'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// ============================================================================
+// Literature Blocks
+// ============================================================================
+
+export const literatureBlocks = pgTable(
+  'literature_blocks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    literatureId: uuid('literature_id').notNull(),
+    page: integer('page'),
+    lineStart: integer('line_start'),
+    lineEnd: integer('line_end'),
+    text: text('text').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'literature_blocks_literature_id_fk',
+      columns: [table.literatureId],
+      foreignColumns: [literature.id],
+    }).onDelete('cascade'),
+    index('idx_literature_blocks_literature_id').on(table.literatureId),
   ]
 )

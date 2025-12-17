@@ -8,6 +8,13 @@
       "when": 1765888866189,
       "tag": "0000_curious_quicksilver",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765973781038,
+      "tag": "0001_thankful_vindicator",
+      "breakpoints": true
     }
   ]
 }
