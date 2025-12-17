@@ -43,6 +43,26 @@ export interface QdrantVectorStoreConfig {
   searchMode?: QdrantSearchMode
 }
 
+/** Literature collection name */
+const LITERATURE_COLLECTION = 'literature'
+
+/** Payload structure for literature search results */
+export interface LiteratureSearchHit {
+  literatureId: string
+  literatureBlockId: string
+  fellowship: string
+  title: string
+  page: number
+  score: number
+}
+
+/** Options for literature search */
+export interface LiteratureSearchOptions {
+  fellowship?: string
+  limit?: number
+  scoreThreshold?: number
+}
+
 /**
  * Map Qdrant errors to StoreError types
  */
@@ -623,5 +643,86 @@ export class QdrantVectorStore implements IVectorStore {
     } catch {
       return false
     }
+  }
+
+  /**
+   * Search the literature collection for semantically similar content
+   *
+   * @param queryEmbedding - Dense vector from query text
+   * @param options - Search options (fellowship filter, limit, threshold)
+   * @param ctx - Trace context
+   * @returns Array of literature search hits with scores
+   */
+  async searchLiterature(
+    queryEmbedding: number[],
+    options: LiteratureSearchOptions,
+    ctx: TraceContext
+  ): Promise<Result<LiteratureSearchHit[], StoreError>> {
+    return withSpan('QdrantVectorStore.searchLiterature', async () => {
+      const logger = getLogger().child({
+        requestId: ctx.requestId,
+        fellowship: options.fellowship,
+        limit: options.limit,
+      })
+
+      const {
+        fellowship,
+        limit = 10,
+        scoreThreshold = this.scoreThreshold,
+      } = options
+
+      try {
+        // Build filter for fellowship if provided
+        const filter: Record<string, unknown> = {}
+        if (fellowship && fellowship !== 'all') {
+          filter.must = [
+            {
+              key: 'fellowship',
+              match: { value: fellowship },
+            },
+          ]
+        }
+
+        logger.debug({
+          collection: LITERATURE_COLLECTION,
+          vectorLength: queryEmbedding.length,
+          hasFilter: Object.keys(filter).length > 0,
+          fellowship,
+          limit,
+          scoreThreshold,
+        }, 'Executing Qdrant literature search')
+
+        // Search the literature collection (uses simple dense vectors)
+        const searchResult = await this.client.search(LITERATURE_COLLECTION, {
+          vector: queryEmbedding,
+          filter: Object.keys(filter).length > 0 ? filter : undefined,
+          limit,
+          ...(scoreThreshold > 0 ? { score_threshold: scoreThreshold } : {}),
+          with_payload: true,
+        })
+
+        logger.debug({ rawResultCount: searchResult.length }, 'Qdrant search returned')
+
+        // Map results to LiteratureSearchHit format
+        const hits: LiteratureSearchHit[] = searchResult.map((point) => {
+          const payload = point.payload as Record<string, unknown>
+          return {
+            literatureId: payload.literature_id as string,
+            literatureBlockId: payload.literature_block_id as string,
+            fellowship: payload.fellowship as string,
+            title: payload.title as string,
+            page: payload.page as number,
+            score: point.score,
+          }
+        })
+
+        logger.debug({ count: hits.length }, 'Literature search completed')
+        return ok(hits)
+      } catch (error) {
+        logger.error({ error }, 'Literature search failed')
+        pipelineMetrics.errors.add(1, { error_kind: 'qdrant_literature_search' })
+        return err(mapQdrantError(error))
+      }
+    })
   }
 }

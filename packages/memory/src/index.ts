@@ -56,7 +56,7 @@ export {
 
 // Store implementations
 export { RedisContextStore, type RedisContextStoreConfig } from './stores/index.js'
-export { QdrantVectorStore, type QdrantVectorStoreConfig } from './stores/index.js'
+export { QdrantVectorStore, type QdrantVectorStoreConfig, type LiteratureSearchHit, type LiteratureSearchOptions } from './stores/index.js'
 
 // MCP-compatible Memory Store (new)
 export { Neo4jMemoryStore, type Neo4jMemoryStoreConfig } from './stores/Neo4jMemoryStore.js'
