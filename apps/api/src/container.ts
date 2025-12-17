@@ -46,7 +46,7 @@ import {
   loadCompactionConfig,
   type IContextCompactor,
 } from '@recoverysky/memory'
-import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
+import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, setLiteratureRepository, setLiteratureQdrantStore, setLiteratureEmbeddingProvider, setLiteratureToolsConfig, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
@@ -54,7 +54,7 @@ import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
 import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
-import { SystemPromptRepository, UserRepository } from '@recoverysky/db'
+import { SystemPromptRepository, UserRepository, LiteratureRepository } from '@recoverysky/db'
 
 import type { UserProfile } from '@recoverysky/types'
 
@@ -177,7 +177,16 @@ export function createContainer(options: ContainerConfig = {}): Container {
     systemPromptRepo = new SystemPromptRepository(db)
     // Pass userCacheStore to UserRepository for user caching
     userRepo = new UserRepository(db, userCacheStore ?? undefined)
-    logger.info('Database repositories initialized (SystemPromptRepository, UserRepository)')
+
+    // Create literature repository and wire up tools
+    const literatureRepo = new LiteratureRepository(db)
+    setLiteratureRepository(literatureRepo)
+
+    // Literature search limit from env
+    const literatureSearchLimit = parseInt(process.env.LITERATURE_SEARCH_LIMIT || '10', 10)
+    setLiteratureToolsConfig({ searchLimit: literatureSearchLimit })
+
+    logger.info({ literatureSearchLimit }, 'Database repositories initialized (SystemPromptRepository, UserRepository, LiteratureRepository)')
   } else {
     logger.info('Using InMemorySessionStore (L2 stub)')
     sessionStore = new InMemorySessionStore()
@@ -281,6 +290,13 @@ export function createContainer(options: ContainerConfig = {}): Container {
   if (!useStubs && process.env.OPENAI_API_KEY) {
     logger.info('Using OpenAIEmbeddingProvider for semantic search')
     embedding = new OpenAIEmbeddingProvider()
+
+    // Wire up literature tools with Qdrant and embedding provider for semantic search
+    if (qdrantVectorStore) {
+      setLiteratureQdrantStore(qdrantVectorStore)
+      setLiteratureEmbeddingProvider(embedding)
+      logger.info('Literature semantic search enabled (Qdrant + OpenAI embeddings)')
+    }
   } else if (!useStubs) {
     logger.warn('OPENAI_API_KEY not set - semantic search disabled')
   }

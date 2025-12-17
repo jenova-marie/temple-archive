@@ -35,7 +35,7 @@ import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder, type IBootstrapOrchestrator, type IContextCompactor } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
-import { recoveryTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
+import { recoveryTools, meetingTools, getMemoryTools, literatureTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
 
 export interface PipelineError {
   kind: 'CrisisError' | 'MemoryError' | 'AgentError' | 'SafetyError' | 'ValidationError' | 'TimeoutError' | 'UnexpectedError'
@@ -899,7 +899,9 @@ export class Pipeline {
 
     // Add recovery tools
     // Note: AI SDK v5 tools use inputSchema instead of parameters
-    for (const [name, tool] of Object.entries(recoveryTools)) {
+    const recoveryToolEntries = Object.entries(recoveryTools)
+    getLogger().debug({ count: recoveryToolEntries.length, names: recoveryToolEntries.map(([n]) => n) }, 'Adding recovery tools')
+    for (const [name, tool] of recoveryToolEntries) {
       const t = tool as unknown as {
         description?: string
         inputSchema?: unknown
@@ -914,12 +916,50 @@ export class Pipeline {
       })
     }
 
+    // Add meeting tools
+    const meetingToolEntries = Object.entries(meetingTools)
+    getLogger().debug({ count: meetingToolEntries.length, names: meetingToolEntries.map(([n]) => n) }, 'Adding meeting tools')
+    for (const [name, tool] of meetingToolEntries) {
+      const t = tool as unknown as {
+        description?: string
+        inputSchema?: unknown
+        execute?: (args: Record<string, unknown>) => Promise<unknown>
+      }
+
+      tools.push({
+        name,
+        description: t.description || `Meeting Tool: ${name}`,
+        parameters: t.inputSchema as Record<string, unknown>,
+        execute: t.execute || (async () => ({ error: 'Not implemented' })),
+      })
+    }
+
+    // Add literature tools
+    const litToolEntries = Object.entries(literatureTools)
+    getLogger().debug({ count: litToolEntries.length, names: litToolEntries.map(([n]) => n) }, 'Adding literature tools')
+    for (const [name, tool] of litToolEntries) {
+      const t = tool as unknown as {
+        description?: string
+        inputSchema?: unknown
+        execute?: (args: Record<string, unknown>) => Promise<unknown>
+      }
+
+      tools.push({
+        name,
+        description: t.description || `Literature Tool: ${name}`,
+        parameters: t.inputSchema as Record<string, unknown>,
+        execute: t.execute || (async () => ({ error: 'Not implemented' })),
+      })
+    }
+
     // Add memory tools based on access level
     const memoryToolAccess = this.deps.memoryToolAccess || 'off'
     if (memoryToolAccess !== 'off') {
       const memoryTools = getMemoryTools(memoryToolAccess)
+      const memoryToolEntries = Object.entries(memoryTools)
+      getLogger().debug({ count: memoryToolEntries.length, names: memoryToolEntries.map(([n]) => n), accessLevel: memoryToolAccess }, 'Adding memory tools')
 
-      for (const [name, tool] of Object.entries(memoryTools)) {
+      for (const [name, tool] of memoryToolEntries) {
         const t = tool as unknown as {
           description?: string
           inputSchema?: unknown
@@ -940,6 +980,7 @@ export class Pipeline {
       { name: 'refreshSystemPrompt', tool: refreshSystemPrompt },
       { name: 'clearConversation', tool: clearConversation },
     ]
+    getLogger().debug({ count: systemTools.length, names: systemTools.map(t => t.name) }, 'Adding system tools')
 
     for (const { name, tool } of systemTools) {
       const t = tool as unknown as {

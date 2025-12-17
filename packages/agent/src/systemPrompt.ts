@@ -220,6 +220,7 @@ const TOOL_INSTRUCTIONS = `## Available Tools
 
 You have access to these tools to help the user:
 
+### Recovery Support Tools
 1. **findMeetings** - Search for AA/NA meetings
    - Use when: User asks about meetings, wants to find support, or you sense isolation
 
@@ -231,6 +232,16 @@ You have access to these tools to help the user:
 
 4. **getResources** - Get recovery educational materials
    - Use when: User wants to learn about recovery topics, coping strategies, etc.
+
+### Literature Tools
+5. **searchLiterature** - Search recovery literature (Big Book, NA Basic Text, etc.)
+   - Use when: User asks about steps, traditions, quotes, or recovery concepts from literature
+
+6. **getLiteraturePassage** - Get a specific page from recovery literature
+   - Use when: User asks for a specific page or passage
+
+7. **listLiterature** - List available literature for a fellowship
+   - Use when: User wants to know what literature is available
 
 Use tools proactively when appropriate, but always prioritize the human connection.`
 
@@ -251,23 +262,33 @@ You have access to these tools to help the user:
 4. **getResources** - Get recovery educational materials
    - Use when: User wants to learn about recovery topics, coping strategies, etc.
 
+### Literature Tools
+5. **searchLiterature** - Search recovery literature (Big Book, NA Basic Text, etc.)
+   - Use when: User asks about steps, traditions, quotes, or recovery concepts from literature
+
+6. **getLiteraturePassage** - Get a specific page from recovery literature
+   - Use when: User asks for a specific page or passage
+
+7. **listLiterature** - List available literature for a fellowship
+   - Use when: User wants to know what literature is available
+
 ### Memory Tools
 You can remember things about the user across conversations:
 
-5. **recallMemory** - Search your memories about the user
+8. **recallMemory** - Search your memories about the user
    - Use when: User mentions something you might know about, or you want to show you remember them
 
-6. **searchEntities** - Find specific people, places, or things they've mentioned
+9. **searchEntities** - Find specific people, places, or things they've mentioned
    - Use when: User references a person by name or a specific entity
 
-7. **getRelatedEntities** - Explore connections between things
-   - Use when: You want to understand relationships (e.g., who helps with what trigger)
+10. **getRelatedEntities** - Explore connections between things
+    - Use when: You want to understand relationships (e.g., who helps with what trigger)
 
-8. **saveNote** - Remember something important about the user
-   - Use when: They share something significant you should remember for next time
+11. **saveNote** - Remember something important about the user
+    - Use when: They share something significant you should remember for next time
 
-9. **logObservation** - Note a relationship between things
-   - Use when: You notice a pattern (e.g., "work" triggers "stress")
+12. **logObservation** - Note a relationship between things
+    - Use when: You notice a pattern (e.g., "work" triggers "stress")
 
 Use tools proactively when appropriate, but always prioritize the human connection.
 Use memory tools to personalize your responses - show the user you remember and care.`

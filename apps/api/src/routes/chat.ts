@@ -20,6 +20,8 @@ import type { Pipeline } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
 import {
   recoveryTools,
+  meetingTools,
+  literatureTools,
   getMemoryTools,
   setMemoryToolTraceContext,
   clearMemoryToolTraceContext,
@@ -241,6 +243,8 @@ export function createChatRouter({ pipeline, loadUserData }: ChatRouterDeps): Ro
 
       const tools = {
         ...recoveryTools,
+        ...meetingTools,
+        ...literatureTools,
         ...(memoryToolAccess !== 'off' ? getMemoryTools(memoryToolAccess) : {}),
       }
 
