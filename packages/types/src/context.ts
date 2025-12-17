@@ -53,6 +53,8 @@ export interface AssembledContext {
   messages: Message[]
   /** User's long-term profile */
   userProfile: UserProfile | null
+  /** User's display name from JWT (for personalization) */
+  displayName?: string
   /** Entities extracted from current session */
   sessionEntities: SessionEntities
   /** Current session state */

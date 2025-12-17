@@ -94,6 +94,8 @@ export interface PipelineInput {
   systemPromptId?: string
   /** Pre-loaded user profile (loaded once per request, passed through) */
   userProfile?: UserProfile | null
+  /** User's display name from JWT (for personalization) */
+  displayName?: string
 }
 
 import type { PipelineDiagnostics } from './diagnostics.js'
