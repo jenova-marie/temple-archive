@@ -95,6 +95,7 @@ export type {
   ToolDefinition,
   AgentResponse,
   EmbeddingError,
+  EmbeddingOptions,
   IEmbeddingProvider,
   SafetyError,
   SafetyValidationResult,

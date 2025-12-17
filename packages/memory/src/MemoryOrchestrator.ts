@@ -299,6 +299,7 @@ export class MemoryOrchestrator {
       const logger = getLogger().child({
         messageId: message.id,
         conversationId: message.conversationId,
+        role: message.role,
         requestId: ctx.requestId,
       })
 
@@ -330,7 +331,7 @@ export class MemoryOrchestrator {
         }
       }
 
-      logger.debug('Message stored across tiers')
+      logger.debug({ role: message.role }, 'Message stored across tiers')
       return ok(undefined)
     })
   }
@@ -380,7 +381,7 @@ export class MemoryOrchestrator {
     relatedEntities?: Entity[],
     displayName?: string
   ): AssembledContext {
-    return {
+    const context: AssembledContext = {
       messages,
       userProfile,
       displayName,
@@ -390,6 +391,13 @@ export class MemoryOrchestrator {
       semanticMatches,
       relatedEntities,
     }
+
+    // Log context size in KB
+    const sizeBytes = Buffer.byteLength(JSON.stringify(context), 'utf8')
+    const sizeKB = (sizeBytes / 1024).toFixed(2)
+    getLogger().info({ sizeKB, messageCount: messages.length }, 'Context assembled')
+
+    return context
   }
 
   private extractSessionEntities(messages: Message[]): SessionEntities {

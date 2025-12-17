@@ -222,7 +222,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
     // Skip if already initialized this session
     if (this.initializedDatabases.has(databaseName)) {
-      logger.debug('Database already initialized, skipping')
+      logger.trace('Database already initialized, skipping')
       return
     }
 
@@ -321,7 +321,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           }
         )
 
-        logger.debug('Entity upserted in Neo4j')
+        logger.debug({ entity: entity.name, type: entity.type }, 'Entity upserted in Neo4j')
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to upsert entity in Neo4j')
@@ -385,7 +385,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           }
         )
 
-        logger.debug('Relationship created/updated in Neo4j')
+        logger.debug({ from: fromEntity, to: toEntity, type: relationshipType }, 'Relationship created/updated in Neo4j')
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to create relationship in Neo4j')

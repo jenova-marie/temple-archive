@@ -95,13 +95,24 @@ export interface EmbeddingError {
 }
 
 /**
+ * Options for embedding operations
+ */
+export interface EmbeddingOptions {
+  /** Label for logging (e.g., 'user', 'assistant', 'query') */
+  label?: string
+}
+
+/**
  * Embedding provider interface
  */
 export interface IEmbeddingProvider {
   /**
    * Generate embedding for a single text
+   * @param text - Text to embed
+   * @param ctx - Trace context
+   * @param options - Optional settings including label for logging
    */
-  embed(text: string, ctx: TraceContext): Promise<Result<number[], EmbeddingError>>
+  embed(text: string, ctx: TraceContext, options?: EmbeddingOptions): Promise<Result<number[], EmbeddingError>>
 
   /**
    * Generate embeddings for multiple texts

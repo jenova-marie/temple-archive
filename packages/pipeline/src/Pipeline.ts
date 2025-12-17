@@ -33,7 +33,7 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder, type IBootstrapOrchestrator } from '@recoverysky/memory'
+import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder, type IBootstrapOrchestrator, type IContextCompactor } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
 import { recoveryTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
 
@@ -76,6 +76,8 @@ export interface PipelineDependencies {
   getSystemPrompt?: (name: string) => Promise<{ id: string; name: string; content: string } | null>
   /** Function to get the default system prompt fresh from database */
   getDefaultSystemPrompt?: () => Promise<{ id: string; name: string; content: string } | null>
+  /** Context compactor for summarizing older messages (optional) */
+  contextCompactor?: IContextCompactor
 }
 
 /**
@@ -230,6 +232,15 @@ export class Pipeline {
           ctx.metrics.cacheHits = memoryResult.value.cacheHits
           ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
           ctx.metrics.memoryTier = memoryResult.value.source
+        }
+
+        // Fire-and-forget context compaction (runs in parallel with agent processing)
+        if (this.deps.contextCompactor && memoryResult.ok && memoryResult.value.context) {
+          this.deps.contextCompactor.maybeCompact(
+            input.conversationId,
+            memoryResult.value.context.messages,
+            ctx
+          )
         }
 
         // STAGE 3: Agent processing + deep crisis evaluation (parallel)
@@ -509,6 +520,15 @@ export class Pipeline {
         ctx.metrics.memoryTier = memoryResult.value.source
       }
 
+      // Fire-and-forget context compaction (runs in parallel with agent processing)
+      if (this.deps.contextCompactor && memoryResult.ok && memoryResult.value.context) {
+        this.deps.contextCompactor.maybeCompact(
+          input.conversationId,
+          memoryResult.value.context.messages,
+          ctx
+        )
+      }
+
       // STAGE 3: Build agent input and stream response
       const agentStageStart = Date.now()
 
@@ -761,7 +781,7 @@ export class Pipeline {
     // Generate embedding for semantic search (if provider available)
     let queryEmbedding: number[] | null = null
     if (this.deps.embedding) {
-      const embeddingResult = await this.deps.embedding.embed(input.message, ctx)
+      const embeddingResult = await this.deps.embedding.embed(input.message, ctx, { label: 'query' })
       if (embeddingResult.ok) {
         queryEmbedding = embeddingResult.value
       }
@@ -1027,8 +1047,8 @@ export class Pipeline {
 
     if (this.deps.embedding) {
       const [userEmb, assistantEmb] = await Promise.all([
-        this.deps.embedding.embed(userMessage.content, ctx),
-        this.deps.embedding.embed(assistantMessage.content, ctx),
+        this.deps.embedding.embed(userMessage.content, ctx, { label: 'user' }),
+        this.deps.embedding.embed(assistantMessage.content, ctx, { label: 'assistant' }),
       ])
 
       userEmbedding = userEmb.ok ? userEmb.value : null

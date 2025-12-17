@@ -84,6 +84,7 @@ export class PostgresSessionStore implements ISessionStore {
       const logger = getLogger().child({
         conversationId: message.conversationId,
         messageId: message.id,
+        role: message.role,
         requestId: ctx.requestId,
       })
 
@@ -110,7 +111,7 @@ export class PostgresSessionStore implements ISessionStore {
           metadata: message.metadata ?? {},
         })
 
-        logger.debug({ hasEmbedding: !!embedding }, 'Message stored in L2')
+        logger.debug({ role: message.role, hasEmbedding: !!embedding }, 'Message stored in L2')
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to store message')

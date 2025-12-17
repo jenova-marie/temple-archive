@@ -163,6 +163,7 @@ export class QdrantVectorStore implements IVectorStore {
       const logger = getLogger().child({
         messageId: message.id,
         conversationId: message.conversationId,
+        role: message.role,
         requestId: ctx.requestId,
         searchMode: this.searchMode,
       })
@@ -200,7 +201,7 @@ export class QdrantVectorStore implements IVectorStore {
               },
             ],
           })
-          logger.debug('Message indexed with dense + sparse vectors')
+          logger.debug({ role: message.role }, 'Message indexed with dense + sparse vectors')
         } else {
           // Simple mode: single dense vector
           await this.client.upsert(this.collectionName, {
@@ -213,7 +214,7 @@ export class QdrantVectorStore implements IVectorStore {
               },
             ],
           })
-          logger.debug('Message indexed with dense vector only')
+          logger.debug({ role: message.role }, 'Message indexed with dense vector only')
         }
 
         return ok(undefined)

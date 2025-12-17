@@ -9,6 +9,7 @@ import OpenAI from 'openai'
 import type {
   IEmbeddingProvider,
   EmbeddingError,
+  EmbeddingOptions,
   TraceContext,
   Result,
 } from '@recoverysky/types'
@@ -56,11 +57,12 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
   /**
    * Generate embedding for a single text
    */
-  async embed(text: string, ctx: TraceContext): Promise<Result<number[], EmbeddingError>> {
+  async embed(text: string, ctx: TraceContext, options?: EmbeddingOptions): Promise<Result<number[], EmbeddingError>> {
     return withSpan('OpenAIEmbeddingProvider.embed', async () => {
       const logger = getLogger().child({
         requestId: ctx.requestId,
         textLength: text.length,
+        ...(options?.label && { label: options.label }),
       })
 
       try {
@@ -80,7 +82,7 @@ export class OpenAIEmbeddingProvider implements IEmbeddingProvider {
           })
         }
 
-        logger.debug({ dimension: embedding.length }, 'Embedding generated')
+        logger.debug({ dimension: embedding.length, ...(options?.label && { label: options.label }) }, 'Embedding generated')
         return ok(embedding)
       } catch (error) {
         return this.handleError(error, logger)

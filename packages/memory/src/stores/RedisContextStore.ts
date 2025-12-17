@@ -213,6 +213,7 @@ export class RedisContextStore implements IContextStore {
       const logger = getLogger().child({
         sessionId: message.conversationId,
         messageId: message.id,
+        role: message.role,
         requestId: ctx.requestId,
       })
 
@@ -245,7 +246,7 @@ export class RedisContextStore implements IContextStore {
 
         await pipeline.exec()
 
-        logger.debug('Message stored in Redis L1 cache')
+        logger.debug({ role: message.role }, 'Message stored in Redis L1 cache')
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to store message in Redis')
