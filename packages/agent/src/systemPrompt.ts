@@ -45,8 +45,8 @@ export function buildSystemPrompt(
     sections.push(memoryContext)
   }
 
-  // User context section
-  if (context.userProfile) {
+  // User context section (include if profile exists OR displayName is set)
+  if (context.userProfile || context.displayName) {
     sections.push(buildUserContextSection(context))
   }
 
@@ -83,29 +83,57 @@ You communicate with warmth, understanding, and hope. You recognize that recover
 
 function buildUserContextSection(context: AssembledContext): string {
   const profile = context.userProfile
-  if (!profile) return ''
+  if (!profile && !context.displayName) return ''
 
   const lines = ['## User Context']
 
-  if (profile.recoveryPhase) {
+  // User's name (from JWT)
+  if (context.displayName) {
+    lines.push(`- **Name**: ${context.displayName}`)
+  }
+
+  // Recovery-related fields
+  if (profile?.recoveryPhase) {
     lines.push(`- **Recovery Phase**: ${profile.recoveryPhase}`)
   }
 
-  if (profile.sobrietyDate) {
+  if (profile?.sobrietyDate) {
     const days = Math.floor((Date.now() - new Date(profile.sobrietyDate).getTime()) / (1000 * 60 * 60 * 24))
     lines.push(`- **Sobriety**: ${days} days (since ${profile.sobrietyDate})`)
   }
 
-  if (profile.triggers.length > 0) {
+  if (profile?.triggers && profile.triggers.length > 0) {
     lines.push(`- **Known Triggers**: ${profile.triggers.join(', ')}`)
   }
 
-  if (profile.copingStrategies.length > 0) {
+  if (profile?.copingStrategies && profile.copingStrategies.length > 0) {
     lines.push(`- **Effective Coping Strategies**: ${profile.copingStrategies.join(', ')}`)
   }
 
-  if (profile.preferences.tone) {
-    lines.push(`- **Preferred Communication Style**: ${profile.preferences.tone}`)
+  // All user preferences
+  if (profile?.preferences) {
+    const prefs = profile.preferences
+    if (prefs.tone) {
+      lines.push(`- **Preferred Communication Style**: ${prefs.tone}`)
+    }
+    if (prefs.responseLength) {
+      lines.push(`- **Preferred Response Length**: ${prefs.responseLength}`)
+    }
+    if (prefs.preferredTopics && prefs.preferredTopics.length > 0) {
+      lines.push(`- **Interested Topics**: ${prefs.preferredTopics.join(', ')}`)
+    }
+    if (prefs.avoidTopics && prefs.avoidTopics.length > 0) {
+      lines.push(`- **Topics to Avoid**: ${prefs.avoidTopics.join(', ')}`)
+    }
+  }
+
+  // Recent milestones
+  if (profile?.milestones && profile.milestones.length > 0) {
+    const recentMilestones = profile.milestones.slice(-3)
+    const milestoneText = recentMilestones
+      .map(m => `${m.achievement} (${m.date})`)
+      .join(', ')
+    lines.push(`- **Recent Milestones**: ${milestoneText}`)
   }
 
   return lines.join('\n')

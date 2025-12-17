@@ -772,7 +772,8 @@ export class Pipeline {
       input.userId,
       queryEmbedding,
       ctx,
-      input.userProfile
+      input.userProfile,
+      input.displayName
     )
 
     ctx.metrics.stageDurations.memory = Date.now() - stageStart

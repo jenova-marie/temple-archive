@@ -160,13 +160,14 @@ export function createChatRouter({ pipeline, loadUserData }: ChatRouterDeps): Ro
         startTime,
       }
 
-      // Create pipeline input with pre-loaded user profile
+      // Create pipeline input with pre-loaded user data
       const input: PipelineInput = {
         message: lastUserMessage,
         conversationId,
         userId,
         systemPromptId,
         userProfile: userData.profile,
+        displayName: userData.displayName,
       }
 
       logger.info(

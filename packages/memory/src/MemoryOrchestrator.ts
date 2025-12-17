@@ -80,13 +80,15 @@ export class MemoryOrchestrator {
   /**
    * Retrieve assembled context for a conversation
    * @param preloadedProfile - Optional pre-loaded user profile to avoid redundant fetch
+   * @param displayName - Optional user's display name for personalization
    */
   async retrieveContext(
     conversationId: string,
     userId: string,
     queryEmbedding: number[] | null,
     ctx: TraceContext,
-    preloadedProfile?: UserProfile | null
+    preloadedProfile?: UserProfile | null,
+    displayName?: string
   ): Promise<Result<MemoryRetrievalResult, MemoryError>> {
     return withSpan('MemoryOrchestrator.retrieveContext', async () => {
       const startTime = Date.now()
@@ -139,7 +141,8 @@ export class MemoryOrchestrator {
           sessionState,
           [],
           [],
-          relatedEntities
+          relatedEntities,
+          displayName
         )
 
         return ok({
@@ -200,7 +203,8 @@ export class MemoryOrchestrator {
           this.createDefaultSessionState(),
           previousSessions,
           [],
-          relatedEntities
+          relatedEntities,
+          displayName
         )
 
         return ok({
@@ -243,7 +247,8 @@ export class MemoryOrchestrator {
             this.createDefaultSessionState(),
             previousSessions,
             l4Result.value,
-            relatedEntities
+            relatedEntities,
+            displayName
           )
 
           return ok({
@@ -268,7 +273,8 @@ export class MemoryOrchestrator {
         this.createDefaultSessionState(),
         previousSessions,
         [],
-        relatedEntities
+        relatedEntities,
+        displayName
       )
 
       return ok({
@@ -371,11 +377,13 @@ export class MemoryOrchestrator {
     sessionState: SessionState,
     previousSessions: import('@recoverysky/types').SessionSummary[],
     semanticMatches: import('@recoverysky/types').SemanticMatch[],
-    relatedEntities?: Entity[]
+    relatedEntities?: Entity[],
+    displayName?: string
   ): AssembledContext {
     return {
       messages,
       userProfile,
+      displayName,
       sessionEntities: this.extractSessionEntities(messages),
       sessionState,
       previousSessions,
