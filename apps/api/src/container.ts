@@ -40,6 +40,11 @@ import {
   // Memory stores for bootstrap (implements IMemoryStore)
   Neo4jMemoryStore,
   InMemoryMemoryStore,
+  // Context compaction
+  ContextCompactor,
+  StubContextCompactor,
+  loadCompactionConfig,
+  type IContextCompactor,
 } from '@recoverysky/memory'
 import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
@@ -449,6 +454,39 @@ export function createContainer(options: ContainerConfig = {}): Container {
     bootstrapOrchestrator = new StubBootstrapOrchestrator()
   }
 
+  // Context Compactor for summarizing older messages
+  // Controlled by COMPACTION_ENABLED env var (default: true)
+  let contextCompactor: IContextCompactor
+  const compactionConfig = loadCompactionConfig()
+
+  if (compactionConfig.enabled && !useStubs && process.env.REDIS_URL && process.env.ANTHROPIC_API_KEY) {
+    const anthropicForCompaction = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const redisForCompaction = createRedisClient({ url: process.env.REDIS_URL })
+
+    contextCompactor = new ContextCompactor(
+      redisForCompaction,
+      anthropicForCompaction,
+      compactionConfig
+    )
+
+    logger.info({
+      threshold: compactionConfig.threshold,
+      batchSize: compactionConfig.batchSize,
+      model: compactionConfig.model,
+    }, 'Context compaction enabled')
+  } else {
+    contextCompactor = new StubContextCompactor()
+    if (!compactionConfig.enabled) {
+      logger.info('Context compaction disabled (COMPACTION_ENABLED=false)')
+    } else if (useStubs) {
+      logger.info('Context compaction disabled (USE_STUBS=true)')
+    } else if (!process.env.REDIS_URL) {
+      logger.info('Context compaction disabled (no REDIS_URL)')
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      logger.info('Context compaction disabled (no ANTHROPIC_API_KEY)')
+    }
+  }
+
   // Base identity will be fetched during init()
   let baseIdentity: string | undefined
 
@@ -504,6 +542,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     memoryContextBuilder,
     memoryToolAccess,
     bootstrapOrchestrator,
+    contextCompactor,
     // baseIdentity is set after init() fetches it from the database
     get baseIdentity() { return baseIdentity },
     // getSystemPrompt allows looking up custom system prompts by name

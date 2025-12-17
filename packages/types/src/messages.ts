@@ -39,6 +39,14 @@ export interface MessageMetadata {
   userAgent?: string
   /** Any tool calls made */
   toolCalls?: ToolCall[]
+  /** Message type marker (for compaction summaries) */
+  type?: 'summary' | 'normal'
+  /** Original message IDs (for summaries) */
+  originalMessageIds?: string[]
+  /** When compaction occurred (for summaries) */
+  compactedAt?: number
+  /** Original message count before compaction */
+  originalCount?: number
 }
 
 /**
