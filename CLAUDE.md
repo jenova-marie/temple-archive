@@ -104,6 +104,7 @@ All external services are injected via `apps/api/src/container.ts`. Environment 
 
 - `USE_STUBS=true` → All in-memory stubs (default for dev)
 - `REDIS_URL` → Real Redis L1 cache
+- `USER_CACHE_TTL_MINUTES` → TTL for user/profile cache in Redis (default: 60)
 - `DATABASE_URL` → Real PostgreSQL L2 session store
 - `DATABASE_SSL` → `false` to disable SSL, `true` to enable with self-signed certs
 - `NEO4J_URI` → Real Neo4j L3 knowledge graph
