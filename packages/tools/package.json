@@ -21,6 +21,8 @@
   "dependencies": {
     "@recoverysky/types": "workspace:*",
     "@recoverysky/observability": "workspace:*",
+    "@recoverysky/db": "workspace:*",
+    "@recoverysky/memory": "workspace:*",
     "ai": "^5.0.108",
     "zod": "^3.23.8"
   },

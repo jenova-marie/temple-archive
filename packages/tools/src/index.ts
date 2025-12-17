@@ -1,12 +1,19 @@
+// Recovery tools (mood, crisis, resources)
 export {
-  findMeetings,
-  getLiveMeetings,
   logMood,
   getCrisisResources,
   getResources,
   recoveryTools,
-} from './definitions.js'
+} from "./definitions.js";
 
+// Meeting tools
+export {
+  findMeetings,
+  getLiveMeetings,
+  meetingTools,
+} from "./meetingTools.js";
+
+// Meeting client
 export {
   MeetingClient,
   getMeetingClient,
@@ -16,7 +23,23 @@ export {
   type ScheduleResponse,
   type Periodicity,
   type MeetingClientConfig,
-} from './clients/index.js'
+} from "./clients/index.js";
+
+// Literature tools for searching recovery literature
+export {
+  searchLiterature,
+  getLiteraturePassage,
+  listLiterature,
+  literatureTools,
+  setLiteratureRepository,
+  setLiteratureQdrantStore,
+  setLiteratureEmbeddingProvider,
+  setLiteratureToolsConfig,
+  setLiteratureTraceContext,
+  clearLiteratureTraceContext,
+  clearLiteratureRepository,
+  type LiteratureToolsConfig,
+} from "./literatureTools.js";
 
 // Memory tools for Claude to interact with Neo4j knowledge graph
 export {
@@ -39,7 +62,7 @@ export {
   clearMemoryToolTraceContext,
   setBootstrapOrchestrator,
   type MemoryToolAccessLevel,
-} from './memoryTools.js'
+} from "./memoryTools.js";
 
 // System tools for dynamic prompt updates and conversation management
 export {
@@ -51,4 +74,4 @@ export {
   setGetConversationIdFn,
   clearSystemPromptRefreshFn,
   clearSystemToolFunctions,
-} from './systemPromptTools.js'
+} from "./systemPromptTools.js";
