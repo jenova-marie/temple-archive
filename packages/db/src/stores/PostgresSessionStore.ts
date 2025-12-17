@@ -3,6 +3,8 @@
  *
  * L2 Session Store implementation using PostgreSQL + Drizzle ORM.
  * Implements the ISessionStore interface for persistent conversation storage.
+ *
+ * Supports optional Redis caching via UserCacheStore for user profiles.
  */
 
 import type {
@@ -23,6 +25,7 @@ import {
   sessionSummaries,
   conversations,
 } from '../schema/index.js'
+import type { UserCacheStore } from './UserCacheStore.js'
 
 /**
  * Generate a unique ID with a prefix
@@ -34,7 +37,10 @@ function generateId(prefix: string): string {
 }
 
 export class PostgresSessionStore implements ISessionStore {
-  constructor(private readonly db: DatabaseClient) {}
+  constructor(
+    private readonly db: DatabaseClient,
+    private readonly userCache?: UserCacheStore
+  ) {}
 
   async getConversationHistory(
     conversationId: string,
@@ -189,6 +195,14 @@ export class PostgresSessionStore implements ISessionStore {
     return withSpan('PostgresSessionStore.getUserProfile', async () => {
       const logger = getLogger().child({ userId, requestId: ctx.requestId })
 
+      // Check cache first (UserCacheStore logs cache hit/miss)
+      if (this.userCache) {
+        const cached = await this.userCache.getUserProfile(userId)
+        if (cached.ok && cached.value) {
+          return ok(cached.value)
+        }
+      }
+
       try {
         const rows = await this.db
           .select()
@@ -198,7 +212,7 @@ export class PostgresSessionStore implements ISessionStore {
 
         if (rows.length === 0) {
           // User exists (ensured by getOrCreateUser earlier) but profile doesn't - create default
-          logger.debug('User profile not found, creating default')
+          logger.debug({ cacheHit: false }, 'User profile not found, creating default')
           const now = new Date()
 
           await this.db
@@ -223,7 +237,12 @@ export class PostgresSessionStore implements ISessionStore {
             lastUpdated: now.getTime(),
           }
 
-          logger.debug({ found: true }, 'User profile created in L2')
+          // Cache the new profile
+          if (this.userCache) {
+            await this.userCache.setUserProfile(defaultProfile)
+          }
+
+          logger.debug({ cacheHit: false }, 'User profile created in L2')
           return ok(defaultProfile)
         }
 
@@ -239,7 +258,12 @@ export class PostgresSessionStore implements ISessionStore {
           lastUpdated: row.lastUpdated.getTime(),
         }
 
-        logger.debug({ found: true }, 'User profile lookup in L2')
+        // Cache the profile
+        if (this.userCache) {
+          await this.userCache.setUserProfile(profile)
+        }
+
+        logger.debug({ cacheHit: false }, 'User profile lookup in L2')
         return ok(profile)
       } catch (error) {
         logger.error({ error }, 'Failed to get user profile')
@@ -287,6 +311,11 @@ export class PostgresSessionStore implements ISessionStore {
             target: userProfiles.userId,
             set: setValues as Partial<typeof userProfiles.$inferInsert>,
           })
+
+        // Invalidate cache - next read will fetch fresh data
+        if (this.userCache) {
+          await this.userCache.invalidateUserProfile(userId)
+        }
 
         logger.debug('User profile updated in L2')
         return ok(undefined)
