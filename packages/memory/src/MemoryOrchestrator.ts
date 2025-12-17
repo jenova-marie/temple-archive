@@ -19,6 +19,7 @@ import type {
   SessionState,
   SessionEntities,
   Entity,
+  UserProfile,
 } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
@@ -78,12 +79,14 @@ export class MemoryOrchestrator {
 
   /**
    * Retrieve assembled context for a conversation
+   * @param preloadedProfile - Optional pre-loaded user profile to avoid redundant fetch
    */
   async retrieveContext(
     conversationId: string,
     userId: string,
     queryEmbedding: number[] | null,
-    ctx: TraceContext
+    ctx: TraceContext,
+    preloadedProfile?: UserProfile | null
   ): Promise<Result<MemoryRetrievalResult, MemoryError>> {
     return withSpan('MemoryOrchestrator.retrieveContext', async () => {
       const startTime = Date.now()
@@ -120,9 +123,12 @@ export class MemoryOrchestrator {
           ? stateResult.value
           : this.createDefaultSessionState()
 
-        // Get user profile from L2 (may be cached)
-        const profileResult = await this.l2.getUserProfile(userId, ctx)
-        const userProfile = profileResult.ok ? profileResult.value : null
+        // Use pre-loaded profile if available, otherwise fetch from L2
+        let userProfile: UserProfile | null = preloadedProfile ?? null
+        if (preloadedProfile === undefined) {
+          const profileResult = await this.l2.getUserProfile(userId, ctx)
+          userProfile = profileResult.ok ? profileResult.value : null
+        }
 
         // Query L3 for related entities (non-blocking)
         const relatedEntities = await this.queryL3Entities(userId, ctx)
@@ -166,9 +172,12 @@ export class MemoryOrchestrator {
         })
       }
 
-      // Get user profile
-      const profileResult = await this.l2.getUserProfile(userId, ctx)
-      const userProfile = profileResult.ok ? profileResult.value : null
+      // Use pre-loaded profile if available, otherwise fetch from L2
+      let userProfile: UserProfile | null = preloadedProfile ?? null
+      if (preloadedProfile === undefined) {
+        const profileResult = await this.l2.getUserProfile(userId, ctx)
+        userProfile = profileResult.ok ? profileResult.value : null
+      }
 
       // Get previous session summaries
       const summariesResult = await this.l2.getSessionSummaries(conversationId, 5, ctx)

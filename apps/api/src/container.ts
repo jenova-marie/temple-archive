@@ -42,7 +42,7 @@ import {
   InMemoryMemoryStore,
 } from '@recoverysky/memory'
 import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
-import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
+import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
 import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
@@ -51,6 +51,15 @@ import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
 import { SystemPromptRepository, UserRepository } from '@recoverysky/db'
 
+import type { UserProfile } from '@recoverysky/types'
+
+export interface RequestUserData {
+  userId: string
+  email?: string
+  displayName?: string
+  profile: UserProfile | null
+}
+
 export interface Container {
   pipeline: Pipeline
   config: PipelineConfig
@@ -58,8 +67,11 @@ export interface Container {
   init: () => Promise<void>
   /** List all active system prompts (for guide selection UI) */
   listSystemPrompts: () => Promise<Array<{ id: string; name: string; description: string | null }>>
-  /** Ensure user exists in database - call early in request after JWT auth */
-  ensureUser: (userId: string, email?: string, displayName?: string) => Promise<void>
+  /**
+   * Load user and profile data - call once early in request after JWT auth.
+   * Returns user + profile to be passed through the request lifecycle.
+   */
+  loadUserData: (userId: string, email?: string, displayName?: string) => Promise<RequestUserData>
 }
 
 export interface ContainerConfig {
@@ -138,16 +150,28 @@ export function createContainer(options: ContainerConfig = {}): Container {
   let sessionStore: ISessionStore
   let systemPromptRepo: SystemPromptRepository | null = null
   let userRepo: UserRepository | null = null
+  let userCacheStore: UserCacheStore | null = null
+
+  // Create UserCacheStore if Redis is available (for caching user/profile data)
+  if (!useStubs && process.env.REDIS_URL) {
+    const userCacheTTLMinutes = parseInt(process.env.USER_CACHE_TTL_MINUTES || '60', 10)
+    const userCacheRedis = createRedisClient({ url: process.env.REDIS_URL })
+    userCacheStore = new UserCacheStore(userCacheRedis, { ttlSeconds: userCacheTTLMinutes * 60 })
+    logger.info({ ttlMinutes: userCacheTTLMinutes }, 'Using Redis UserCacheStore for user/profile caching')
+  }
 
   if (!useStubs && process.env.DATABASE_URL) {
     logger.info('Using PostgresSessionStore (L2)')
     const ssl = process.env.DATABASE_SSL === 'false' ? false : process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined
     const db = createDatabaseClient({ connectionString: process.env.DATABASE_URL, ssl })
-    sessionStore = new PostgresSessionStore(db)
+
+    // Pass userCacheStore to PostgresSessionStore for profile caching
+    sessionStore = new PostgresSessionStore(db, userCacheStore ?? undefined)
 
     // Create repositories for database operations
     systemPromptRepo = new SystemPromptRepository(db)
-    userRepo = new UserRepository(db)
+    // Pass userCacheStore to UserRepository for user caching
+    userRepo = new UserRepository(db, userCacheStore ?? undefined)
     logger.info('Database repositories initialized (SystemPromptRepository, UserRepository)')
   } else {
     logger.info('Using InMemorySessionStore (L2 stub)')
@@ -565,17 +589,30 @@ export function createContainer(options: ContainerConfig = {}): Container {
     }))
   }
 
-  // Ensure user exists in database - call early in request after JWT auth
-  const ensureUser = async (userId: string, email?: string, displayName?: string): Promise<void> => {
-    if (!userRepo) {
-      logger.debug('No userRepo configured, skipping ensureUser')
-      return
-    }
+  // Load user and profile data - call once early in request after JWT auth
+  const loadUserData = async (userId: string, email?: string, displayName?: string): Promise<RequestUserData> => {
     const ctx = { traceId: '', spanId: '', requestId: userId, userId, startTime: Date.now() }
-    const result = await userRepo.getOrCreateUser({ userId, email, displayName }, ctx)
-    if (!result.ok) {
-      logger.error({ error: result.error }, 'Failed to ensure user exists')
+    let profile: UserProfile | null = null
+
+    // Ensure user exists in database
+    if (userRepo) {
+      const result = await userRepo.getOrCreateUser({ userId, email, displayName }, ctx)
+      if (!result.ok) {
+        logger.error({ error: result.error }, 'Failed to ensure user exists')
+      }
+    } else {
+      logger.debug('No userRepo configured, skipping user creation')
     }
+
+    // Load user profile (will be passed through request lifecycle)
+    const profileResult = await sessionStore.getUserProfile(userId, ctx)
+    if (profileResult.ok) {
+      profile = profileResult.value
+    } else {
+      logger.error({ error: profileResult.error }, 'Failed to load user profile')
+    }
+
+    return { userId, email, displayName, profile }
   }
 
   return {
@@ -583,6 +620,6 @@ export function createContainer(options: ContainerConfig = {}): Container {
     config: pipelineConfig,
     init,
     listSystemPrompts,
-    ensureUser,
+    loadUserData,
   }
 }

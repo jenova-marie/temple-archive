@@ -96,14 +96,14 @@ app.use("/health", createHealthRouter());
 if (auth) {
   app.use("/api/v1/chat", auth.required, createChatRouter({
     pipeline: container.pipeline,
-    ensureUser: container.ensureUser,
+    loadUserData: container.loadUserData,
   }));
   app.use("/api/v1/guides", auth.required, createGuidesRouter(container));
   logger.info("Zitadel JWT authentication enabled for /api/v1/chat and /api/v1/guides");
 } else {
   app.use("/api/v1/chat", createChatRouter({
     pipeline: container.pipeline,
-    ensureUser: container.ensureUser,
+    loadUserData: container.loadUserData,
   }));
   app.use("/api/v1/guides", createGuidesRouter(container));
   logger.warn("No authentication configured - API is unprotected");

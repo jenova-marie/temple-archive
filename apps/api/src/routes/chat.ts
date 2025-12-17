@@ -70,12 +70,21 @@ function extractLastUserMessage(messages: Array<{ role: string; parts?: Array<{ 
   return null
 }
 
-interface ChatRouterDeps {
-  pipeline: Pipeline
-  ensureUser: (userId: string, email?: string, displayName?: string) => Promise<void>
+import type { UserProfile } from '@recoverysky/types'
+
+interface RequestUserData {
+  userId: string
+  email?: string
+  displayName?: string
+  profile: UserProfile | null
 }
 
-export function createChatRouter({ pipeline, ensureUser }: ChatRouterDeps): Router {
+interface ChatRouterDeps {
+  pipeline: Pipeline
+  loadUserData: (userId: string, email?: string, displayName?: string) => Promise<RequestUserData>
+}
+
+export function createChatRouter({ pipeline, loadUserData }: ChatRouterDeps): Router {
   const router = Router()
 
   /**
@@ -98,8 +107,8 @@ export function createChatRouter({ pipeline, ensureUser }: ChatRouterDeps): Rout
       // Auth middleware ensures req.user is present
       const userId = req.user!.id
 
-      // Ensure user exists in database early in request lifecycle
-      await ensureUser(userId, req.user?.email, req.user?.name)
+      // Load user and profile data once for the entire request lifecycle
+      const userData = await loadUserData(userId, req.user?.email, req.user?.name)
       const requestId = req.headers['x-request-id'] as string || generateId()
 
       // Validate request body
@@ -151,12 +160,13 @@ export function createChatRouter({ pipeline, ensureUser }: ChatRouterDeps): Rout
         startTime,
       }
 
-      // Create pipeline input
+      // Create pipeline input with pre-loaded user profile
       const input: PipelineInput = {
         message: lastUserMessage,
         conversationId,
         userId,
         systemPromptId,
+        userProfile: userData.profile,
       }
 
       logger.info(

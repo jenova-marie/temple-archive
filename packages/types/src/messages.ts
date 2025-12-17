@@ -76,6 +76,8 @@ export interface StreamChunk {
   }
 }
 
+import type { UserProfile } from './memory.js'
+
 /**
  * Input to the pipeline
  */
@@ -90,6 +92,8 @@ export interface PipelineInput {
   sessionMetadata?: Record<string, unknown>
   /** Optional system prompt ID to use instead of default base-identity */
   systemPromptId?: string
+  /** Pre-loaded user profile (loaded once per request, passed through) */
+  userProfile?: UserProfile | null
 }
 
 import type { PipelineDiagnostics } from './diagnostics.js'
