@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last Updated:** 2025/12/16
+**Last Updated:** 2025/12/17
 
 ## Build & Development Commands
 
@@ -105,6 +105,7 @@ All external services are injected via `apps/api/src/container.ts`. Environment 
 - `USE_STUBS=true` → All in-memory stubs (default for dev)
 - `REDIS_URL` → Real Redis L1 cache
 - `DATABASE_URL` → Real PostgreSQL L2 session store
+- `DATABASE_SSL` → `false` to disable SSL, `true` to enable with self-signed certs
 - `NEO4J_URI` → Real Neo4j L3 knowledge graph
 - `QDRANT_URL` → Real Qdrant L4 vector store
 - `ANTHROPIC_API_KEY` → Real agent, crisis evaluator, entity extraction
@@ -168,23 +169,26 @@ All imports must include `.js` extension for local files.
 
 ## API Endpoints
 
-- `POST /api/chat` - Process message (UIMessage format, requires JWT auth)
+- `POST /api/v1/chat` - Process message (UIMessage format, requires JWT auth)
+- `GET /api/v1/guides` - List available system prompts (guides)
 - `GET /health` - Health check
 - `GET /health/metrics` - Prometheus metrics
 
 ### Chat Request Format (Vercel AI SDK UIMessage)
 
 ```bash
-curl -X POST http://localhost:3333/api/chat \
+curl -X POST http://localhost:3333/api/v1/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
-    "id": "conv_123",
     "messages": [
       {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
-    ]
+    ],
+    "guide": "base-identity"
   }'
 ```
+
+The `guide` parameter is optional and specifies which system prompt to use (by name). If omitted, uses the active `base-identity` prompt.
 
 ## CLI Usage
 
@@ -213,20 +217,36 @@ Controlled by `MEMORY_TOOL_ACCESS` env var:
 | `write` | read + saveNote, logObservation |
 | `full` | write + updateEntity, deleteEntity, createRelationship |
 
-## External Dependencies
+## Database Migrations
 
-### @recoverysky-org/common
+Drizzle migrations are managed in the `@recoverysky/db` package:
 
-Shared package for RecoverySky ecosystem. Used for:
-- `SystemPromptRepository` - Fetches base identity from `system_prompts` table
-- Drizzle schemas for shared tables
-- Supports both `postgres-js` and `node-postgres` drivers
+```bash
+# Generate migration from schema changes
+pnpm --filter @recoverysky/db db:generate
+
+# Run migrations (local)
+pnpm --filter @recoverysky/db db:migrate:local
+
+# Open Drizzle Studio (database browser)
+pnpm --filter @recoverysky/db db:studio:local
+```
+
+## System Prompts (Guides)
+
+System prompts are fetched fresh from the `system_prompts` table on each chat request:
+
+- **Custom guide**: Pass `guide` parameter with prompt name → fetches that prompt
+- **Default**: No guide specified → fetches active `base-identity` prompt
+- **Fallback**: Database unavailable → uses hardcoded default
 
 ```typescript
-import { SystemPromptRepository } from '@recoverysky-org/common'
+import { SystemPromptRepository } from '@recoverysky/db'
 const repo = new SystemPromptRepository(db)
-const result = await repo.findActive('base-identity')
+const result = await repo.findActive('recovery-coach') // lookup by name
 ```
+
+List available guides via `GET /api/v1/guides`.
 
 ## Adding a New Package
 
@@ -237,4 +257,4 @@ const result = await repo.findActive('base-identity')
 
 ## Iris MCP
 
-Team name: `team-alpha`
+Team name: `team-jenova`
