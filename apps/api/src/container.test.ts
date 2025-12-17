@@ -66,7 +66,12 @@ vi.mock('@recoverysky/db', () => ({
   PostgresSessionStore: vi.fn().mockImplementation(() => ({})),
   SystemPromptRepository: vi.fn().mockImplementation(() => ({
     findActive: vi.fn().mockResolvedValue({ ok: true, value: null }),
+    findAllActive: vi.fn().mockResolvedValue({ ok: true, value: [] }),
   })),
+  UserRepository: vi.fn().mockImplementation(() => ({
+    getOrCreateUser: vi.fn().mockResolvedValue({ ok: true, value: {} }),
+  })),
+  UserCacheStore: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock('@recoverysky/crisis', () => ({
@@ -268,6 +273,7 @@ describe('container', () => {
 
         expect(createDatabaseClient).toHaveBeenCalledWith({
           connectionString: 'postgresql://localhost:5432/test',
+          ssl: undefined,
         })
         expect(PostgresSessionStore).toHaveBeenCalled()
       })

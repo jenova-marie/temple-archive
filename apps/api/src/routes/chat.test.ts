@@ -140,7 +140,14 @@ describe('chat routes', () => {
       }),
     } as unknown as Pipeline
 
-    router = createChatRouter(mockPipeline)
+    const mockLoadUserData = vi.fn().mockResolvedValue({
+      userId: 'user-456',
+      email: 'test@example.com',
+      displayName: 'Test User',
+      profile: null,
+    })
+
+    router = createChatRouter({ pipeline: mockPipeline, loadUserData: mockLoadUserData })
   })
 
   // Helper to find and execute route handler

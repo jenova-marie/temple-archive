@@ -180,15 +180,25 @@ describe("PostgresSessionStore", () => {
   });
 
   describe("getUserProfile", () => {
-    it("returns null when profile does not exist", async () => {
+    it("creates default profile when profile does not exist", async () => {
       mockDb.limit.mockResolvedValue([]);
 
       const result = await store.getUserProfile("user-1", ctx);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toBeNull();
+        // Default profile is auto-created for existing users
+        expect(result.value).toEqual(expect.objectContaining({
+          userId: "user-1",
+          triggers: [],
+          copingStrategies: [],
+          preferences: {},
+          milestones: [],
+        }));
+        expect(result.value?.lastUpdated).toBeDefined();
       }
+      // Verify insert was called to create the default profile
+      expect(mockDb.insert).toHaveBeenCalled();
     });
 
     it("returns user profile when exists", async () => {
