@@ -1,0 +1,1 @@
+ALTER TABLE "literature" ADD COLUMN "fellowship" text;
