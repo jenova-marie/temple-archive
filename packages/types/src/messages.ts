@@ -88,6 +88,8 @@ export interface PipelineInput {
   userId: string
   /** Optional session metadata */
   sessionMetadata?: Record<string, unknown>
+  /** Optional system prompt ID to use instead of default base-identity */
+  systemPromptId?: string
 }
 
 import type { PipelineDiagnostics } from './diagnostics.js'

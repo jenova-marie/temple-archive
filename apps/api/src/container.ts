@@ -41,7 +41,7 @@ import {
   Neo4jMemoryStore,
   InMemoryMemoryStore,
 } from '@recoverysky/memory'
-import { setMemoryToolProviders, setBootstrapOrchestrator, type MemoryToolAccessLevel } from '@recoverysky/tools'
+import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore } from '@recoverysky/db'
 import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
@@ -49,13 +49,17 @@ import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
 import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
 import { getLogger } from '@recoverysky/observability'
-import { SystemPromptRepository } from '@recoverysky/db'
+import { SystemPromptRepository, UserRepository } from '@recoverysky/db'
 
 export interface Container {
   pipeline: Pipeline
   config: PipelineConfig
   /** Initialize async services (Qdrant collection, etc). Call after creation. */
   init: () => Promise<void>
+  /** List all active system prompts (for guide selection UI) */
+  listSystemPrompts: () => Promise<Array<{ id: string; name: string; description: string | null }>>
+  /** Ensure user exists in database - call early in request after JWT auth */
+  ensureUser: (userId: string, email?: string, displayName?: string) => Promise<void>
 }
 
 export interface ContainerConfig {
@@ -133,15 +137,18 @@ export function createContainer(options: ContainerConfig = {}): Container {
   // L2 Session Store - PostgreSQL when DATABASE_URL is set, otherwise in-memory
   let sessionStore: ISessionStore
   let systemPromptRepo: SystemPromptRepository | null = null
+  let userRepo: UserRepository | null = null
 
   if (!useStubs && process.env.DATABASE_URL) {
     logger.info('Using PostgresSessionStore (L2)')
-    const db = createDatabaseClient({ connectionString: process.env.DATABASE_URL })
+    const ssl = process.env.DATABASE_SSL === 'false' ? false : process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined
+    const db = createDatabaseClient({ connectionString: process.env.DATABASE_URL, ssl })
     sessionStore = new PostgresSessionStore(db)
 
-    // Create SystemPromptRepository for fetching base identity from database
+    // Create repositories for database operations
     systemPromptRepo = new SystemPromptRepository(db)
-    logger.info('SystemPromptRepository initialized')
+    userRepo = new UserRepository(db)
+    logger.info('Database repositories initialized (SystemPromptRepository, UserRepository)')
   } else {
     logger.info('Using InMemorySessionStore (L2 stub)')
     sessionStore = new InMemorySessionStore()
@@ -421,6 +428,44 @@ export function createContainer(options: ContainerConfig = {}): Container {
   // Base identity will be fetched during init()
   let baseIdentity: string | undefined
 
+  // Set up system prompt refresh function for the refreshSystemPrompt tool
+  if (systemPromptRepo) {
+    const repo = systemPromptRepo // Capture for closure
+    setSystemPromptRefreshFn(async () => {
+      const result = await repo.findActive('base-identity')
+      if (result.ok && result.value) {
+        baseIdentity = result.value.content
+        return {
+          content: result.value.content,
+          id: result.value.id,
+          name: result.value.name,
+        }
+      }
+      return null
+    })
+    logger.info('System prompt refresh function configured')
+  }
+
+  // Set up clear conversation function for the clearConversation tool
+  // Uses the bootstrap orchestrator to clear all memory tiers
+  setClearConversationFn(async (conversationId: string) => {
+    try {
+      // Use bootstrap orchestrator to clear memory cache across all tiers
+      if (bootstrapOrchestrator && 'clearMemoryCache' in bootstrapOrchestrator) {
+        await bootstrapOrchestrator.clearMemoryCache(conversationId, ['L1', 'L2', 'L4'])
+        logger.info({ conversationId }, 'Conversation memory cleared via bootstrap orchestrator')
+        return true
+      } else {
+        logger.warn('Bootstrap orchestrator not available for clearing memory')
+        return false
+      }
+    } catch (error) {
+      logger.error({ error, conversationId }, 'Failed to clear conversation memory')
+      return false
+    }
+  })
+  logger.info('Clear conversation function configured')
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -437,6 +482,26 @@ export function createContainer(options: ContainerConfig = {}): Container {
     bootstrapOrchestrator,
     // baseIdentity is set after init() fetches it from the database
     get baseIdentity() { return baseIdentity },
+    // getSystemPrompt allows looking up custom system prompts by name
+    getSystemPrompt: systemPromptRepo ? async (name: string) => {
+      const result = await systemPromptRepo.findActive(name)
+      if (!result.ok || !result.value) return null
+      return {
+        id: result.value.id,
+        name: result.value.name,
+        content: result.value.content,
+      }
+    } : undefined,
+    // getDefaultSystemPrompt fetches the active base-identity fresh from database
+    getDefaultSystemPrompt: systemPromptRepo ? async () => {
+      const result = await systemPromptRepo.findActive('base-identity')
+      if (!result.ok || !result.value) return null
+      return {
+        id: result.value.id,
+        name: result.value.name,
+        content: result.value.content,
+      }
+    } : undefined,
   }
 
   // Create pipeline
@@ -483,9 +548,41 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info('Container initialization complete')
   }
 
+  // List all active system prompts for guide selection
+  const listSystemPrompts = async (): Promise<Array<{ id: string; name: string; description: string | null }>> => {
+    if (!systemPromptRepo) {
+      return []
+    }
+    const result = await systemPromptRepo.findAllActive()
+    if (!result.ok) {
+      logger.error({ error: result.error }, 'Failed to list system prompts')
+      return []
+    }
+    return result.value.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: null, // Schema doesn't have description field yet
+    }))
+  }
+
+  // Ensure user exists in database - call early in request after JWT auth
+  const ensureUser = async (userId: string, email?: string, displayName?: string): Promise<void> => {
+    if (!userRepo) {
+      logger.debug('No userRepo configured, skipping ensureUser')
+      return
+    }
+    const ctx = { traceId: '', spanId: '', requestId: userId, userId, startTime: Date.now() }
+    const result = await userRepo.getOrCreateUser({ userId, email, displayName }, ctx)
+    if (!result.ok) {
+      logger.error({ error: result.error }, 'Failed to ensure user exists')
+    }
+  }
+
   return {
     pipeline,
     config: pipelineConfig,
     init,
+    listSystemPrompts,
+    ensureUser,
   }
 }

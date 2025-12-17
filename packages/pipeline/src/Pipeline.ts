@@ -35,7 +35,7 @@ import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder, type IBootstrapOrchestrator } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
-import { recoveryTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, type MemoryToolAccessLevel } from '@recoverysky/tools'
+import { recoveryTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
 
 export interface PipelineError {
   kind: 'CrisisError' | 'MemoryError' | 'AgentError' | 'SafetyError' | 'ValidationError' | 'TimeoutError' | 'UnexpectedError'
@@ -72,6 +72,10 @@ export interface PipelineDependencies {
   bootstrapOrchestrator?: IBootstrapOrchestrator
   /** Base identity prompt fetched from database (optional, falls back to default) */
   baseIdentity?: string
+  /** Function to lookup a system prompt by name (optional, for custom guides) */
+  getSystemPrompt?: (name: string) => Promise<{ id: string; name: string; content: string } | null>
+  /** Function to get the default system prompt fresh from database */
+  getDefaultSystemPrompt?: () => Promise<{ id: string; name: string; content: string } | null>
 }
 
 /**
@@ -539,6 +543,9 @@ export class Pipeline {
         setMemoryToolTraceContext(ctx)
       }
 
+      // Set conversation ID getter for system tools (clearConversation)
+      setGetConversationIdFn(() => ctx.sessionId || ctx.requestId)
+
       let fullContent = ''
       let agentResponse: AgentResponse | undefined
 
@@ -825,6 +832,9 @@ export class Pipeline {
       setMemoryToolTraceContext(ctx)
     }
 
+    // Set conversation ID getter for system tools (clearConversation)
+    setGetConversationIdFn(() => ctx.sessionId || ctx.requestId)
+
     let result: Result<AgentResponse, { kind: string; message: string }>
     try {
       result = await this.deps.agent.generate(
@@ -901,6 +911,26 @@ export class Pipeline {
           execute: t.execute || (async () => ({ error: 'Not implemented' })),
         })
       }
+    }
+
+    // Add system tools (always available)
+    const systemTools = [
+      { name: 'refreshSystemPrompt', tool: refreshSystemPrompt },
+      { name: 'clearConversation', tool: clearConversation },
+    ]
+
+    for (const { name, tool } of systemTools) {
+      const t = tool as unknown as {
+        description?: string
+        inputSchema?: unknown
+        execute?: (args: Record<string, unknown>) => Promise<unknown>
+      }
+      tools.push({
+        name,
+        description: t.description || `System Tool: ${name}`,
+        parameters: t.inputSchema as Record<string, unknown>,
+        execute: t.execute || (async () => ({ error: 'Not implemented' })),
+      })
     }
 
     return tools
@@ -1149,17 +1179,37 @@ export class Pipeline {
           }
         }
 
-        // STAGE 4: Build system prompt
+        // STAGE 4: Resolve base identity (always fetch fresh from database)
+        let baseIdentity = this.deps.baseIdentity // fallback if no database
+        if (input.systemPromptId && this.deps.getSystemPrompt) {
+          // Custom guide requested - fetch by ID
+          const customPrompt = await this.deps.getSystemPrompt(input.systemPromptId)
+          if (customPrompt) {
+            baseIdentity = customPrompt.content
+            logger.debug({ promptId: customPrompt.id, promptName: customPrompt.name }, 'Using custom system prompt')
+          } else {
+            logger.warn({ guideName: input.systemPromptId }, 'Custom system prompt not found, using default')
+          }
+        } else if (this.deps.getDefaultSystemPrompt) {
+          // No custom guide - fetch default fresh
+          const defaultPrompt = await this.deps.getDefaultSystemPrompt()
+          if (defaultPrompt) {
+            baseIdentity = defaultPrompt.content
+            logger.debug({ promptId: defaultPrompt.id, promptName: defaultPrompt.name }, 'Using fresh default system prompt')
+          }
+        }
+
+        // STAGE 5: Build system prompt
         const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
         const systemPrompt = buildSystemPrompt({
           context: ctx.memory!,
           crisisCheck: ctx.crisisCheck,
           memoryContext,
           hasMemoryTools,
-          baseIdentity: this.deps.baseIdentity,
+          baseIdentity,
         })
 
-        // STAGE 5: Get tools
+        // STAGE 6: Get tools
         const tools = this.convertToolsToDefinitions()
 
         logger.info(

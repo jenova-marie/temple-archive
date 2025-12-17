@@ -40,3 +40,15 @@ export {
   setBootstrapOrchestrator,
   type MemoryToolAccessLevel,
 } from './memoryTools.js'
+
+// System tools for dynamic prompt updates and conversation management
+export {
+  refreshSystemPrompt,
+  clearConversation,
+  systemPromptTools,
+  setSystemPromptRefreshFn,
+  setClearConversationFn,
+  setGetConversationIdFn,
+  clearSystemPromptRefreshFn,
+  clearSystemToolFunctions,
+} from './systemPromptTools.js'
