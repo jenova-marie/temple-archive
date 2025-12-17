@@ -166,6 +166,8 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
           claim: err.claim,
           issuer: config.issuer,
           audience: config.audience,
+          // SECURITY TODO: Remove token logging before production
+          token,
         },
         "JWT verification failed",
       );
