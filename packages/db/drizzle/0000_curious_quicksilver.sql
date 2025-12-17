@@ -1,10 +1,9 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 --> statement-breakpoint
 CREATE TABLE "conversations" (
-	"conversation_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"conversation_id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"status" text DEFAULT 'active',
@@ -13,9 +12,9 @@ CREATE TABLE "conversations" (
 );
 --> statement-breakpoint
 CREATE TABLE "crisis_events" (
-	"event_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"conversation_id" uuid,
-	"user_id" uuid NOT NULL,
+	"event_id" text PRIMARY KEY NOT NULL,
+	"conversation_id" text,
+	"user_id" text NOT NULL,
 	"crisis_level" integer NOT NULL,
 	"patterns" jsonb NOT NULL,
 	"action_taken" text NOT NULL,
@@ -24,9 +23,9 @@ CREATE TABLE "crisis_events" (
 );
 --> statement-breakpoint
 CREATE TABLE "messages" (
-	"message_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"conversation_id" uuid NOT NULL,
-	"user_id" uuid NOT NULL,
+	"message_id" text PRIMARY KEY NOT NULL,
+	"conversation_id" text NOT NULL,
+	"user_id" text NOT NULL,
 	"role" text NOT NULL,
 	"content" text NOT NULL,
 	"embedding" vector(1536),
@@ -35,8 +34,8 @@ CREATE TABLE "messages" (
 );
 --> statement-breakpoint
 CREATE TABLE "session_summaries" (
-	"summary_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"conversation_id" uuid NOT NULL,
+	"summary_id" text PRIMARY KEY NOT NULL,
+	"conversation_id" text NOT NULL,
 	"time_window_start" timestamp with time zone NOT NULL,
 	"time_window_end" timestamp with time zone NOT NULL,
 	"summary_text" text NOT NULL,
@@ -46,8 +45,18 @@ CREATE TABLE "session_summaries" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "system_prompts" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"content" text NOT NULL,
+	"variables" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"active" boolean DEFAULT false NOT NULL,
+	"created" timestamp with time zone NOT NULL,
+	"updated" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "user_profiles" (
-	"user_id" uuid PRIMARY KEY NOT NULL,
+	"user_id" text PRIMARY KEY NOT NULL,
 	"recovery_phase" text,
 	"sobriety_date" date,
 	"triggers" text[] DEFAULT '{}',
@@ -59,7 +68,7 @@ CREATE TABLE "user_profiles" (
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
-	"user_id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" text PRIMARY KEY NOT NULL,
 	"email" text,
 	"display_name" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -82,5 +91,5 @@ CREATE INDEX "idx_crisis_events_level" ON "crisis_events" USING btree ("crisis_l
 CREATE INDEX "idx_messages_conversation" ON "messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_messages_user" ON "messages" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_summaries_conversation" ON "session_summaries" USING btree ("conversation_id","created_at");--> statement-breakpoint
-CREATE INDEX "idx_messages_embedding" ON "messages" USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);--> statement-breakpoint
-CREATE INDEX "idx_summaries_embedding" ON "session_summaries" USING hnsw ("summary_embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+CREATE INDEX "idx_system_prompts_name" ON "system_prompts" USING btree ("name");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_system_prompts_active_unique" ON "system_prompts" USING btree ("name") WHERE active = true;

@@ -45,6 +45,20 @@ vi.mock("@recoverysky/agent", () => ({
 // Mock recoveryTools
 vi.mock("@recoverysky/tools", () => ({
   recoveryTools: {},
+  getMemoryTools: vi.fn().mockReturnValue({}),
+  setMemoryToolTraceContext: vi.fn(),
+  clearMemoryToolTraceContext: vi.fn(),
+  setGetConversationIdFn: vi.fn(),
+  refreshSystemPrompt: {
+    description: 'Mock refresh system prompt',
+    inputSchema: {},
+    execute: vi.fn().mockResolvedValue({ success: true }),
+  },
+  clearConversation: {
+    description: 'Mock clear conversation',
+    inputSchema: {},
+    execute: vi.fn().mockResolvedValue({ success: true }),
+  },
 }));
 
 function createTraceContext(): TraceContext {

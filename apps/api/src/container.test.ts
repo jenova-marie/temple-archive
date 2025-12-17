@@ -57,6 +57,8 @@ vi.mock('@recoverysky/memory', () => ({
 vi.mock('@recoverysky/tools', () => ({
   setMemoryToolProviders: vi.fn(),
   setBootstrapOrchestrator: vi.fn(),
+  setSystemPromptRefreshFn: vi.fn(),
+  setClearConversationFn: vi.fn(),
 }))
 
 vi.mock('@recoverysky/db', () => ({

@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1765086032701,
-      "tag": "0000_heavy_stepford_cuckoos",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1765883655209,
-      "tag": "0001_cold_speed_demon",
+      "when": 1765888866189,
+      "tag": "0000_curious_quicksilver",
       "breakpoints": true
     }
   ]
