@@ -96,6 +96,64 @@ function extractRoles(claims: ZitadelClaims): string[] {
 }
 
 /**
+ * Userinfo response from Zitadel
+ */
+interface UserinfoResponse {
+  sub: string;
+  name?: string;
+  given_name?: string;
+  family_name?: string;
+  preferred_username?: string;
+  email?: string;
+  email_verified?: boolean;
+  locale?: string;
+}
+
+/**
+ * Fetch user profile from Zitadel userinfo endpoint
+ * This gets the profile claims that aren't in the access token
+ */
+async function fetchUserinfo(
+  issuer: string,
+  accessToken: string,
+  logger: ReturnType<typeof getLogger>
+): Promise<UserinfoResponse | null> {
+  const userinfoUrl = `${issuer.replace(/\/$/, "")}/oidc/v1/userinfo`;
+
+  try {
+    const response = await fetch(userinfoUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      logger.warn(
+        { status: response.status, statusText: response.statusText },
+        "Userinfo request failed"
+      );
+      return null;
+    }
+
+    const userinfo = (await response.json()) as UserinfoResponse;
+    logger.debug(
+      {
+        sub: userinfo.sub,
+        name: userinfo.name,
+        email: userinfo.email,
+        given_name: userinfo.given_name,
+        family_name: userinfo.family_name,
+      },
+      "Userinfo fetched successfully"
+    );
+    return userinfo;
+  } catch (error) {
+    logger.warn({ error }, "Failed to fetch userinfo");
+    return null;
+  }
+}
+
+/**
  * Create authentication middleware for Zitadel
  *
  * Usage:
@@ -141,16 +199,25 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
 
       const claims = payload as ZitadelClaims;
 
+      // Fetch profile data from userinfo endpoint (access tokens don't include profile claims)
+      const userinfo = await fetchUserinfo(config.issuer, token, logger);
+
+      // Build user object - prefer userinfo data, fall back to JWT claims
       req.user = {
         id: claims.sub,
-        email: claims.email,
-        name: claims.name || claims.preferred_username,
+        email: userinfo?.email || claims.email,
+        name: userinfo?.name || userinfo?.given_name || claims.name || claims.preferred_username,
         roles: extractRoles(claims),
         claims,
       };
 
       logger.debug(
-        { userId: req.user.id, roles: req.user.roles },
+        {
+          userId: req.user.id,
+          roles: req.user.roles,
+          name: req.user.name,
+          email: req.user.email,
+        },
         "User authenticated",
       );
 
