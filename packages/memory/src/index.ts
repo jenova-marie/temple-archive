@@ -130,3 +130,15 @@ export {
   StubBootstrapOrchestrator,
   type BootstrapOrchestratorDeps,
 } from './bootstrap/index.js'
+
+// Context compaction
+export {
+  ContextCompactor,
+  StubContextCompactor,
+  type CompactionConfig,
+  type CompactionError,
+  type IContextCompactor,
+  type SummaryMetadata,
+  DEFAULT_COMPACTION_CONFIG,
+  loadCompactionConfig,
+} from './compaction/index.js'
