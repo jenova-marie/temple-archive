@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/config" },
     { "path": "packages/types" },
+    { "path": "packages/shared" },
     { "path": "packages/observability" },
     { "path": "packages/db" },
     { "path": "packages/memory" },

@@ -1,7 +1,7 @@
-# RecoverySky Agent - Production Compose
+# Pippa Agent & Web - Production Compose
 #
 # Build and run:
-#   docker-compose -f opt/compose.yml up -d --build
+#   docker-compose up -d --build
 #
 # Requires:
 #   - Environment variables set on host
@@ -12,6 +12,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: agent
       secrets:
         - npmrc
     container_name: pippa-agent
@@ -88,6 +89,34 @@ services:
     #   timeout: 10s
     #   start_period: 10s
     #   retries: 3
+
+  pippa-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+      secrets:
+        - npmrc
+    container_name: pippa-web
+    restart: unless-stopped
+    networks:
+      - bad-bitch-net
+    ports:
+      - "61665:80"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:80/",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
 
 networks:
   bad-bitch-net:

@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.4
 
-# RecoverySky Agent - Multi-stage Alpine build
+# Pippa Agent & Web - Multi-stage Alpine build
 #
 # Build with npmrc secret for private registry:
-#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t recoverysky-agent .
+#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t pippa-agent .
+#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc --target web -t pippa-web .
 #
 # Or via compose:
-#   docker-compose -f opt/docker-compose.yml build
+#   docker-compose build
 
 # =============================================================================
 # Stage 1: Base with pnpm
@@ -38,7 +39,10 @@ COPY packages/evaluation/package.json ./packages/evaluation/
 COPY packages/tools/package.json ./packages/tools/
 COPY packages/pipeline/package.json ./packages/pipeline/
 COPY packages/cli/package.json ./packages/cli/
+COPY packages/config/package.json ./packages/config/
+COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
 
 # Install dependencies with cache mount and npmrc secret for private registry
 RUN --mount=type=cache,target=/root/.pnpm-store \
@@ -55,19 +59,32 @@ FROM deps AS builder
 COPY packages/ ./packages/
 COPY apps/ ./apps/
 
-# Build all packages
+# Build all packages (including web)
 RUN pnpm build:all
 
 # =============================================================================
-# Stage 4: Production
+# Stage 4: Web Builder (separate stage for web-specific build)
 # =============================================================================
-FROM node:22-alpine AS production
+FROM deps AS web-builder
+
+# Copy source code
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+
+# Build shared package first, then web app
+RUN pnpm --filter @pippa/shared build && \
+    pnpm --filter @pippa/web build
+
+# =============================================================================
+# Stage 5: Agent Production
+# =============================================================================
+FROM node:22-alpine AS agent
 
 RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
 # Add non-root user
-RUN addgroup -g 1001 -S recoverysky && \
-    adduser -S recoverysky -u 1001 -G recoverysky
+RUN addgroup -g 1001 -S pippa && \
+    adduser -S pippa -u 1001 -G pippa
 
 WORKDIR /app
 
@@ -86,6 +103,7 @@ COPY --from=builder /app/packages/evaluation/package.json ./packages/evaluation/
 COPY --from=builder /app/packages/tools/package.json ./packages/tools/
 COPY --from=builder /app/packages/pipeline/package.json ./packages/pipeline/
 COPY --from=builder /app/packages/cli/package.json ./packages/cli/
+COPY --from=builder /app/packages/config/package.json ./packages/config/
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 
 # Copy npmrc for production install
@@ -108,12 +126,13 @@ COPY --from=builder /app/packages/evaluation/dist ./packages/evaluation/dist
 COPY --from=builder /app/packages/tools/dist ./packages/tools/dist
 COPY --from=builder /app/packages/pipeline/dist ./packages/pipeline/dist
 COPY --from=builder /app/packages/cli/dist ./packages/cli/dist
+COPY --from=builder /app/packages/config/dist ./packages/config/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
 # Set ownership
-RUN chown -R recoverysky:recoverysky /app
+RUN chown -R pippa:pippa /app
 
-USER recoverysky
+USER pippa
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -124,3 +143,28 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 CMD ["node", "apps/api/dist/index.js"]
+
+# =============================================================================
+# Stage 6: Web Production (nginx)
+# =============================================================================
+FROM nginx:alpine AS web
+
+# Copy nginx configuration
+COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy built web assets
+COPY --from=web-builder /app/apps/web/dist /usr/share/nginx/html
+
+# Add non-root user support
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
