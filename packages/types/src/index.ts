@@ -62,6 +62,18 @@ export type {
   // Legacy (deprecated)
   IKnowledgeStore,
   Entity,
+  // L3 Memory Cadillac types
+  CanonicalType,
+  SourceEntry,
+  L3Entity,
+  L3Observation,
+  L3Relationship,
+  L3EntityWithObservations,
+  EnrichedL3Entity,
+  ConversationContext,
+  ScoredL3Entity,
+  L3RetrievalOptions,
+  L3RetrievalResult,
 } from './memory.js'
 
 // Crisis types

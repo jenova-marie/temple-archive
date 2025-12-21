@@ -720,3 +720,192 @@ export interface ArchiveListItem {
   archivedAt: number
   size: number
 }
+
+// ============================================================================
+// L3 Memory Types - Cadillac Knowledge Graph
+// ============================================================================
+
+/**
+ * Canonical entity types for the knowledge graph.
+ * These are the 6 fixed types that all entities are normalized to.
+ */
+export type CanonicalType =
+  | 'person'       // friends, family, colleagues, historical figures
+  | 'place'        // cities, restaurants, parks, home
+  | 'organization' // companies, schools, teams
+  | 'concept'      // ideas, beliefs, preferences, skills
+  | 'event'        // meetings, trips, milestones
+  | 'thing'        // objects, products, possessions
+
+/**
+ * Source entry for Deep Memory provenance tracking.
+ * Records when and how an entity was extracted.
+ */
+export interface SourceEntry {
+  /** Message ID where extraction occurred */
+  messageId: string
+  /** Conversation ID where extraction occurred */
+  conversationId: string
+  /** Type of extraction event */
+  action: 'created' | 'updated' | 'extracted'
+  /** Timestamp of extraction */
+  timestamp: number
+}
+
+/**
+ * L3 Entity in the knowledge graph.
+ * The core unit of memory - people, places, concepts, events, things.
+ */
+export interface L3Entity {
+  /** Unique entity identifier (time-sortable) */
+  id: string
+  /** Canonical lowercase name */
+  name: string
+  /** Display name with original casing */
+  displayName: string
+  /** Alternate names for this entity */
+  aliases: string[]
+  /** Normalized type from fixed set */
+  canonicalType: CanonicalType
+  /** Freeform LLM-assigned tags */
+  labels: string[]
+  /** 384-dim embedding for graph-local search (MiniLM) */
+  embedding?: number[]
+  /** Importance score 0-1 */
+  importance: number
+  /** First extraction timestamp */
+  firstSeen: number
+  /** Most recent mention timestamp */
+  lastSeen: number
+  /** Number of times mentioned */
+  mentionCount: number
+  /** LLM-generated summary */
+  summary?: string
+  /** Deep Memory provenance tracking */
+  sourceHistory: SourceEntry[]
+  /** Flexible additional metadata */
+  metadata: Record<string, unknown>
+}
+
+/**
+ * L3 Observation - a fact or insight about an entity.
+ * Observations are first-class nodes enabling granular semantic search.
+ */
+export interface L3Observation {
+  /** Unique observation identifier (time-sortable) */
+  id: string
+  /** The factual content */
+  content: string
+  /** 384-dim embedding for semantic search (MiniLM) */
+  embedding?: number[]
+  /** When this observation was recorded */
+  createdAt: number
+  /** Source conversation */
+  conversationId: string
+  /** Source message */
+  messageId: string
+  /** Extraction confidence 0-1 */
+  confidence: number
+  /** ID of observation this supersedes (if any) */
+  supersedes?: string
+}
+
+/**
+ * L3 Relationship between entities.
+ * Uses single RELATES_TO type with semantic type property.
+ */
+export interface L3Relationship {
+  /** Source entity name */
+  from: string
+  /** Target entity name */
+  to: string
+  /** Semantic relationship type (e.g., "works_with", "parent_of") */
+  type: string
+  /** Relationship strength 0-1 */
+  strength: number
+  /** Context about the relationship */
+  context?: string
+  /** When relationship started (if known) */
+  since?: number
+  /** When relationship ended (if known) */
+  until?: number
+  /** Who/what created this relationship */
+  source: 'agent' | 'user' | 'system'
+  /** Source conversation */
+  conversationId?: string
+  /** Source message */
+  messageId?: string
+  /** Creation timestamp */
+  createdAt: number
+}
+
+/**
+ * Entity with observations attached.
+ */
+export interface L3EntityWithObservations extends L3Entity {
+  observations: L3Observation[]
+}
+
+/**
+ * Entity enriched with Deep Memory conversation context.
+ */
+export interface EnrichedL3Entity extends L3EntityWithObservations {
+  /** Conversation contexts from sourceHistory */
+  conversationContexts: ConversationContext[]
+}
+
+/**
+ * Conversation context for Deep Memory.
+ */
+export interface ConversationContext {
+  /** Type of extraction event */
+  action: 'created' | 'updated' | 'extracted'
+  /** When this occurred */
+  timestamp: number
+  /** Messages around the source message */
+  messages: Message[]
+}
+
+/**
+ * Result from L3 retrieval with scoring.
+ */
+export interface ScoredL3Entity extends L3Entity {
+  /** Relevance score (combined from multiple signals) */
+  score: number
+  /** Graph distance from query entity (if applicable) */
+  graphDistance?: number
+}
+
+/**
+ * Options for L3 retrieval.
+ */
+export interface L3RetrievalOptions {
+  /** Maximum token budget for context */
+  maxTokens?: number
+  /** Filter by canonical type */
+  canonicalType?: CanonicalType
+  /** Minimum semantic similarity score */
+  scoreThreshold?: number
+  /** Maximum results */
+  limit?: number
+  /** Include observations */
+  includeObservations?: boolean
+  /** Include Deep Memory context */
+  includeConversationContext?: boolean
+  /** Deep Memory context strategy */
+  contextStrategy?: 'latest' | 'created_and_latest' | 'all'
+  /** Message window for Deep Memory */
+  messageWindow?: number
+}
+
+/**
+ * Result from L3 memory retrieval.
+ */
+export interface L3RetrievalResult {
+  /** Retrieved entities with observations and context */
+  entities: EnrichedL3Entity[]
+  /** Total entities matched (before limit) */
+  totalMatched: number
+  /** Approximate token count */
+  tokenCount: number
+}
