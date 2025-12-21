@@ -132,6 +132,18 @@ describe("redis/client", () => {
       ).toBe("env-user");
     });
 
+    it("does not include password in options when not defined", () => {
+      // Ensure env vars are not set
+      delete process.env.REDIS_PASSWORD;
+      delete process.env.REDIS_USERNAME;
+
+      const client = createRedisClient();
+      const options = (client as { _options: Record<string, unknown> })._options;
+
+      expect("password" in options).toBe(false);
+      expect("username" in options).toBe(false);
+    });
+
     it("creates client with database number", () => {
       const client = createRedisClient({ db: 5 });
 
