@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { TraceContext } from "@recoverysky/types";
+import type { TraceContext } from "@pippa/types";
 
 // Use vi.hoisted to create mock functions and classes that can be used in vi.mock
 const { mockCreate, MockAPIError } = vi.hoisted(() => {

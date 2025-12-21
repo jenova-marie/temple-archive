@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PostgresSessionStore } from "../../src/stores/PostgresSessionStore.js";
-import type { Message, TraceContext, UserProfile } from "@recoverysky/types";
+import type { Message, TraceContext, UserProfile } from "@pippa/types";
 
 // Mock observability
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

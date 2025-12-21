@@ -12,75 +12,75 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { CRISIS_PATTERNS, type CrisisPattern } from './patterns.js'
+} from "@pippa/types";
+import { ok } from "@pippa/types";
+import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+import { CRISIS_PATTERNS, type CrisisPattern } from "./patterns.js";
 
 export interface KeywordCrisisDetectorConfig {
   /** Crisis level threshold for emergency (default: 9) */
-  emergencyThreshold: CrisisLevel
+  emergencyThreshold: CrisisLevel;
   /** Crisis level threshold for resource injection (default: 7) */
-  resourceThreshold: CrisisLevel
+  resourceThreshold: CrisisLevel;
 }
 
 export class KeywordCrisisDetector implements ICrisisDetector {
-  private readonly config: KeywordCrisisDetectorConfig
-  private readonly patterns: CrisisPattern[]
+  private readonly config: KeywordCrisisDetectorConfig;
+  private readonly patterns: CrisisPattern[];
 
   constructor(config?: Partial<KeywordCrisisDetectorConfig>) {
     this.config = {
       emergencyThreshold: 9,
       resourceThreshold: 7,
       ...config,
-    }
-    this.patterns = CRISIS_PATTERNS
+    };
+    this.patterns = CRISIS_PATTERNS;
   }
 
   async detect(
     message: string,
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<Result<CrisisCheckResult, CrisisError>> {
-    return withSpan('KeywordCrisisDetector.detect', async () => {
-      const startTime = performance.now()
-      const logger = getLogger().child({ requestId: ctx.requestId })
+    return withSpan("KeywordCrisisDetector.detect", async () => {
+      const startTime = performance.now();
+      const logger = getLogger().child({ requestId: ctx.requestId });
 
-      const detectedPatterns: DetectedPattern[] = []
-      let maxLevel: CrisisLevel = 1
+      const detectedPatterns: DetectedPattern[] = [];
+      let maxLevel: CrisisLevel = 1;
 
       // Normalize message for matching
-      const normalizedMessage = message.toLowerCase()
+      const normalizedMessage = message.toLowerCase();
 
       // Check each pattern
       for (const pattern of this.patterns) {
-        const matches = this.matchPattern(normalizedMessage, message, pattern)
+        const matches = this.matchPattern(normalizedMessage, message, pattern);
 
         if (matches.length > 0) {
           for (const match of matches) {
-            detectedPatterns.push(match)
+            detectedPatterns.push(match);
 
             // Track highest level
             const adjustedLevel = this.adjustLevel(
               pattern.baseLevel,
               normalizedMessage,
-              pattern
-            )
+              pattern,
+            );
             if (adjustedLevel > maxLevel) {
-              maxLevel = adjustedLevel as CrisisLevel
+              maxLevel = adjustedLevel as CrisisLevel;
             }
           }
         }
       }
 
       // Determine action based on level
-      const action = this.determineAction(maxLevel)
-      const triggerEmergency = maxLevel >= this.config.emergencyThreshold
+      const action = this.determineAction(maxLevel);
+      const triggerEmergency = maxLevel >= this.config.emergencyThreshold;
 
-      const processingTimeMs = performance.now() - startTime
+      const processingTimeMs = performance.now() - startTime;
 
       // Record metrics
       if (maxLevel > 1) {
-        pipelineMetrics.crisisDetections.add(1, { level: String(maxLevel) })
+        pipelineMetrics.crisisDetections.add(1, { level: String(maxLevel) });
       }
 
       logger.debug(
@@ -90,8 +90,8 @@ export class KeywordCrisisDetector implements ICrisisDetector {
           processingTimeMs,
           triggerEmergency,
         },
-        'Crisis detection completed'
-      )
+        "Crisis detection completed",
+      );
 
       return ok({
         level: maxLevel,
@@ -99,89 +99,90 @@ export class KeywordCrisisDetector implements ICrisisDetector {
         triggerEmergency,
         action,
         processingTimeMs,
-      })
-    })
+      });
+    });
   }
 
   private matchPattern(
     normalizedMessage: string,
     originalMessage: string,
-    pattern: CrisisPattern
+    pattern: CrisisPattern,
   ): DetectedPattern[] {
-    const matches: DetectedPattern[] = []
+    const matches: DetectedPattern[] = [];
 
     for (const regex of pattern.patterns) {
-      const match = originalMessage.match(regex)
+      const match = originalMessage.match(regex);
 
       if (match) {
         // Check for dampeners (false positive reducers)
         const hasDampener = pattern.dampeners.some((dampener) =>
-          normalizedMessage.includes(dampener.toLowerCase())
-        )
+          normalizedMessage.includes(dampener.toLowerCase()),
+        );
 
         if (hasDampener) {
-          continue // Skip this match due to dampener
+          continue; // Skip this match due to dampener
         }
 
         // Calculate confidence based on boost keywords
         const boostCount = pattern.boostKeywords.filter((keyword) =>
-          normalizedMessage.includes(keyword.toLowerCase())
-        ).length
+          normalizedMessage.includes(keyword.toLowerCase()),
+        ).length;
 
-        const confidence = Math.min(0.6 + boostCount * 0.1, 1.0)
+        const confidence = Math.min(0.6 + boostCount * 0.1, 1.0);
 
         matches.push({
           type: pattern.type,
           confidence,
           matchedText: match[0],
-          position: match.index !== undefined
-            ? { start: match.index, end: match.index + match[0].length }
-            : undefined,
-        })
+          position:
+            match.index !== undefined
+              ? { start: match.index, end: match.index + match[0].length }
+              : undefined,
+        });
       }
     }
 
-    return matches
+    return matches;
   }
 
   private adjustLevel(
     baseLevel: CrisisLevel,
     normalizedMessage: string,
-    pattern: CrisisPattern
+    pattern: CrisisPattern,
   ): number {
-    let level = baseLevel
+    let level = baseLevel;
 
     // Boost for urgency keywords
     const boostCount = pattern.boostKeywords.filter((keyword) =>
-      normalizedMessage.includes(keyword.toLowerCase())
-    ).length
+      normalizedMessage.includes(keyword.toLowerCase()),
+    ).length;
 
     if (boostCount > 0) {
-      level = Math.min(level + Math.floor(boostCount / 2), 10) as CrisisLevel
+      level = Math.min(level + Math.floor(boostCount / 2), 10) as CrisisLevel;
     }
 
     // Reduce for dampeners
     const dampenerCount = pattern.dampeners.filter((dampener) =>
-      normalizedMessage.includes(dampener.toLowerCase())
-    ).length
+      normalizedMessage.includes(dampener.toLowerCase()),
+    ).length;
 
     if (dampenerCount > 0) {
-      level = Math.max(level - dampenerCount, 1) as CrisisLevel
+      level = Math.max(level - dampenerCount, 1) as CrisisLevel;
     }
 
-    return level
+    return level;
   }
 
-  private determineAction(level: CrisisLevel): CrisisCheckResult['action'] {
+  private determineAction(level: CrisisLevel): CrisisCheckResult["action"] {
     if (level >= this.config.emergencyThreshold) {
-      return 'emergency_protocol'
+      return "emergency_protocol";
     }
     if (level >= this.config.resourceThreshold) {
-      return 'inject_resources'
+      return "inject_resources";
     }
     if (level >= 4) {
-      return 'monitor'
+      return "monitor";
     }
-    return 'none'
+    return "none";
   }
 }

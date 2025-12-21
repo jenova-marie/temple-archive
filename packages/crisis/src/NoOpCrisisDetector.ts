@@ -8,8 +8,8 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok } from '@recoverysky/types'
+} from '@pippa/types'
+import { ok } from '@pippa/types'
 
 export class NoOpCrisisDetector implements ICrisisDetector {
   async detect(

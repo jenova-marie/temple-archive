@@ -13,8 +13,8 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk'
-import type { IKnowledgeStore, Entity, TraceContext } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { IKnowledgeStore, Entity, TraceContext } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import type { IMemoryContextProvider } from '../retrieval/MemoryContextProvider.js'
 
 /**

@@ -1,5 +1,5 @@
 /**
- * @recoverysky/config
+ * @pippa/config
  *
  * Centralized configuration management for Pippa Agent.
  *
@@ -16,7 +16,7 @@
  *
  * @example
  * ```typescript
- * import { loadConfig, type Config } from '@recoverysky/config'
+ * import { loadConfig, type Config } from '@pippa/config'
  *
  * const config = loadConfig()
  * console.log(config.app.port) // 3333

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Neo4jKnowledgeStore } from "../../src/stores/Neo4jKnowledgeStore.js";
-import type { Entity, TraceContext } from "@recoverysky/types";
+import type { Entity, TraceContext } from "@pippa/types";
 
 // Mock observability
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

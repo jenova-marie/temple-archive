@@ -6,7 +6,7 @@
  */
 
 import { QdrantClient } from '@qdrant/js-client-rest'
-import { getLogger } from '@recoverysky/observability'
+import { getLogger } from '@pippa/observability'
 
 export interface QdrantClientConfig {
   /** Qdrant server URL (default: QDRANT_URL env var or http://localhost:6333) */

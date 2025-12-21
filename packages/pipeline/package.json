@@ -1,5 +1,5 @@
 {
-  "name": "@recoverysky/pipeline",
+  "name": "@pippa/pipeline",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,14 +19,14 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@recoverysky/types": "workspace:*",
-    "@recoverysky/observability": "workspace:*",
-    "@recoverysky/memory": "workspace:*",
-    "@recoverysky/crisis": "workspace:*",
-    "@recoverysky/safety": "workspace:*",
-    "@recoverysky/agent": "workspace:*",
-    "@recoverysky/evaluation": "workspace:*",
-    "@recoverysky/tools": "workspace:*"
+    "@pippa/types": "workspace:*",
+    "@pippa/observability": "workspace:*",
+    "@pippa/memory": "workspace:*",
+    "@pippa/crisis": "workspace:*",
+    "@pippa/safety": "workspace:*",
+    "@pippa/agent": "workspace:*",
+    "@pippa/evaluation": "workspace:*",
+    "@pippa/tools": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

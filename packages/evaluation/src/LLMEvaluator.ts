@@ -21,9 +21,9 @@ import type {
   AssembledContext,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import { StubEvaluator } from './StubEvaluator.js'
 
 export type EvaluationMode = 'all' | `sample:${number}` | 'on_demand'

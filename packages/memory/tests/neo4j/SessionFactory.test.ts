@@ -3,7 +3,7 @@ import { SessionFactory } from "../../src/neo4j/SessionFactory.js"
 import type { Driver, Session } from "neo4j-driver"
 
 // Mock observability
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

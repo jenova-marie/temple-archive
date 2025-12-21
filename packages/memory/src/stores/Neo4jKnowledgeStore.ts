@@ -48,9 +48,9 @@ import type {
   L3Observation,
   SourceEntry,
   CanonicalType,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import { nanoid } from 'nanoid'
 
 export interface Neo4jKnowledgeStoreConfig {

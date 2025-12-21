@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { KeywordCrisisDetector } from "../src/KeywordCrisisDetector.js";
-import type { TraceContext } from "@recoverysky/types";
+import type { TraceContext } from "@pippa/types";
 
 // Mock observability to avoid side effects
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

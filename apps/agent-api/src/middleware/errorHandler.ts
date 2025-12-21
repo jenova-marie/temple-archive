@@ -3,7 +3,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express'
-import { getLogger, pipelineMetrics } from '@recoverysky/observability'
+import { getLogger, pipelineMetrics } from '@pippa/observability'
 
 /**
  * Custom error class with status code

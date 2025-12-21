@@ -1,5 +1,5 @@
 {
-  "name": "@recoverysky/tools",
+  "name": "@pippa/tools",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,10 +19,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@recoverysky/types": "workspace:*",
-    "@recoverysky/observability": "workspace:*",
-    "@recoverysky/db": "workspace:*",
-    "@recoverysky/memory": "workspace:*",
+    "@pippa/types": "workspace:*",
+    "@pippa/observability": "workspace:*",
+    "@pippa/db": "workspace:*",
+    "@pippa/memory": "workspace:*",
     "ai": "^5.0.108",
     "zod": "^4.2.1"
   },

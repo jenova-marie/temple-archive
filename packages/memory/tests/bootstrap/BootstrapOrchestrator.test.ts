@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ok } from '@recoverysky/types'
+import { ok } from '@pippa/types'
 import {
   BootstrapOrchestrator,
   StubBootstrapOrchestrator,

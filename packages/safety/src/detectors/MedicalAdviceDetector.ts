@@ -12,8 +12,8 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk'
-import type { TraceContext, SafetyViolation } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { TraceContext, SafetyViolation } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 
 export interface MedicalAdviceMatch {
   pattern: string

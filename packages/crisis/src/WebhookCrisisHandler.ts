@@ -16,9 +16,9 @@ import type {
   DetectedPattern,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import { CRISIS_RESOURCES } from './patterns.js'
 
 export interface WebhookCrisisHandlerConfig {

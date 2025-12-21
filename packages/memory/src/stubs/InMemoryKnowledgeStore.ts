@@ -8,30 +8,33 @@ import type {
   StoreError,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+} from "@pippa/types";
+import { ok } from "@pippa/types";
+import { getLogger, withSpan } from "@pippa/observability";
 
 interface Relationship {
-  from: string
-  to: string
-  type: string
-  properties: Record<string, unknown>
+  from: string;
+  to: string;
+  type: string;
+  properties: Record<string, unknown>;
 }
 
 export class InMemoryKnowledgeStore implements IKnowledgeStore {
-  private entities: Map<string, Entity> = new Map()
-  private relationships: Relationship[] = []
+  private entities: Map<string, Entity> = new Map();
+  private relationships: Relationship[] = [];
 
-  async upsertEntity(entity: Entity, ctx: TraceContext): Promise<Result<void, StoreError>> {
-    return withSpan('InMemoryKnowledgeStore.upsertEntity', async () => {
+  async upsertEntity(
+    entity: Entity,
+    ctx: TraceContext,
+  ): Promise<Result<void, StoreError>> {
+    return withSpan("InMemoryKnowledgeStore.upsertEntity", async () => {
       const logger = getLogger().child({
         entityId: entity.entityId,
         entityName: entity.name,
         requestId: ctx.requestId,
-      })
+      });
 
-      const existing = this.entities.get(entity.name.toLowerCase())
+      const existing = this.entities.get(entity.name.toLowerCase());
 
       if (existing) {
         // Update existing entity
@@ -39,16 +42,16 @@ export class InMemoryKnowledgeStore implements IKnowledgeStore {
           ...existing,
           lastMentioned: entity.lastMentioned,
           properties: { ...existing.properties, ...entity.properties },
-        })
-        logger.debug('Entity updated in L3')
+        });
+        logger.debug("Entity updated in L3");
       } else {
         // Create new entity
-        this.entities.set(entity.name.toLowerCase(), entity)
-        logger.debug('Entity created in L3')
+        this.entities.set(entity.name.toLowerCase(), entity);
+        logger.debug("Entity created in L3");
       }
 
-      return ok(undefined)
-    })
+      return ok(undefined);
+    });
   }
 
   async createRelationship(
@@ -56,29 +59,36 @@ export class InMemoryKnowledgeStore implements IKnowledgeStore {
     toEntity: string,
     relationshipType: string,
     properties: Record<string, unknown>,
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<Result<void, StoreError>> {
-    return withSpan('InMemoryKnowledgeStore.createRelationship', async () => {
+    return withSpan("InMemoryKnowledgeStore.createRelationship", async () => {
       const logger = getLogger().child({
         fromEntity,
         toEntity,
         relationshipType,
         requestId: ctx.requestId,
-      })
+      });
 
       // Check if relationship already exists
       const existing = this.relationships.find(
         (r) =>
           r.from.toLowerCase() === fromEntity.toLowerCase() &&
           r.to.toLowerCase() === toEntity.toLowerCase() &&
-          r.type === relationshipType
-      )
+          r.type === relationshipType,
+      );
 
       if (existing) {
         // Update strength if it exists
-        const strength = (existing.properties.strength as number) || 0
-        existing.properties = { ...existing.properties, ...properties, strength: strength + 1 }
-        logger.debug({ strength: strength + 1 }, 'Relationship strength increased in L3')
+        const strength = (existing.properties.strength as number) || 0;
+        existing.properties = {
+          ...existing.properties,
+          ...properties,
+          strength: strength + 1,
+        };
+        logger.debug(
+          { strength: strength + 1 },
+          "Relationship strength increased in L3",
+        );
       } else {
         // Create new relationship
         this.relationships.push({
@@ -86,109 +96,109 @@ export class InMemoryKnowledgeStore implements IKnowledgeStore {
           to: toEntity.toLowerCase(),
           type: relationshipType,
           properties: { ...properties, strength: 1 },
-        })
-        logger.debug('Relationship created in L3')
+        });
+        logger.debug("Relationship created in L3");
       }
 
-      return ok(undefined)
-    })
+      return ok(undefined);
+    });
   }
 
   async getRelatedEntities(
     entityName: string,
     hops: number,
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<Result<Entity[], StoreError>> {
-    return withSpan('InMemoryKnowledgeStore.getRelatedEntities', async () => {
+    return withSpan("InMemoryKnowledgeStore.getRelatedEntities", async () => {
       const logger = getLogger().child({
         entityName,
         hops,
         requestId: ctx.requestId,
-      })
+      });
 
-      const visited = new Set<string>()
-      const results: Entity[] = []
-      let frontier = [entityName.toLowerCase()]
+      const visited = new Set<string>();
+      const results: Entity[] = [];
+      let frontier = [entityName.toLowerCase()];
 
       for (let hop = 0; hop < hops && frontier.length > 0; hop++) {
-        const nextFrontier: string[] = []
+        const nextFrontier: string[] = [];
 
         for (const current of frontier) {
-          if (visited.has(current)) continue
-          visited.add(current)
+          if (visited.has(current)) continue;
+          visited.add(current);
 
           // Find all relationships involving this entity
           for (const rel of this.relationships) {
             if (rel.from === current && !visited.has(rel.to)) {
-              nextFrontier.push(rel.to)
+              nextFrontier.push(rel.to);
             }
             if (rel.to === current && !visited.has(rel.from)) {
-              nextFrontier.push(rel.from)
+              nextFrontier.push(rel.from);
             }
           }
         }
 
-        frontier = nextFrontier
+        frontier = nextFrontier;
       }
 
       // Get entity objects for all visited nodes (except the starting entity)
       for (const name of visited) {
         if (name !== entityName.toLowerCase()) {
-          const entity = this.entities.get(name)
+          const entity = this.entities.get(name);
           if (entity) {
-            results.push(entity)
+            results.push(entity);
           }
         }
       }
 
-      logger.debug({ count: results.length }, 'Related entities found in L3')
-      return ok(results)
-    })
+      logger.debug({ count: results.length }, "Related entities found in L3");
+      return ok(results);
+    });
   }
 
   async searchEntities(
     pattern: string,
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<Result<Entity[], StoreError>> {
-    return withSpan('InMemoryKnowledgeStore.searchEntities', async () => {
-      const logger = getLogger().child({ pattern, requestId: ctx.requestId })
+    return withSpan("InMemoryKnowledgeStore.searchEntities", async () => {
+      const logger = getLogger().child({ pattern, requestId: ctx.requestId });
 
-      const lowerPattern = pattern.toLowerCase()
-      const results: Entity[] = []
+      const lowerPattern = pattern.toLowerCase();
+      const results: Entity[] = [];
 
       for (const entity of this.entities.values()) {
         if (
           entity.name.toLowerCase().includes(lowerPattern) ||
           entity.type.toLowerCase().includes(lowerPattern)
         ) {
-          results.push(entity)
+          results.push(entity);
         }
       }
 
-      logger.debug({ count: results.length }, 'Entity search completed in L3')
-      return ok(results)
-    })
+      logger.debug({ count: results.length }, "Entity search completed in L3");
+      return ok(results);
+    });
   }
 
   /**
    * Clear all data (for testing)
    */
   clear(): void {
-    this.entities.clear()
-    this.relationships = []
+    this.entities.clear();
+    this.relationships = [];
   }
 
   /**
    * Get entity count (for monitoring)
    */
   entityCount(): number {
-    return this.entities.size
+    return this.entities.size;
   }
 
   /**
    * Get relationship count (for monitoring)
    */
   relationshipCount(): number {
-    return this.relationships.length
+    return this.relationships.length;
   }
 }

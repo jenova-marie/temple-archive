@@ -9,8 +9,8 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from "@recoverysky/types";
-import { ok } from "@recoverysky/types";
+} from "@pippa/types";
+import { ok } from "@pippa/types";
 import { CRISIS_RESOURCES } from "../patterns.js";
 
 export class StubCrisisHandler implements ICrisisHandler {

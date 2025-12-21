@@ -9,7 +9,7 @@
 
 import { z } from 'zod'
 import { tool } from 'ai'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan } from '@pippa/observability'
 
 /**
  * Log user's mood

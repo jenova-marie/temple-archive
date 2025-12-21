@@ -4,11 +4,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DeepMemoryService, type IDeepMemorySessionStore } from '../../src/deepmemory/DeepMemoryService.js'
-import type { L3EntityWithObservations, Message, TraceContext, SourceEntry } from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
+import type { L3EntityWithObservations, Message, TraceContext, SourceEntry } from '@pippa/types'
+import { ok, err } from '@pippa/types'
 
 // Mock observability
-vi.mock('@recoverysky/observability', () => ({
+vi.mock('@pippa/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

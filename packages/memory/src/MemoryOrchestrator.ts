@@ -20,9 +20,9 @@ import type {
   SessionEntities,
   Entity,
   UserProfile,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 
 export interface MemoryOrchestratorConfig {
   /** Maximum messages to retrieve from L1 */
@@ -374,10 +374,10 @@ export class MemoryOrchestrator {
 
   private assembleContext(
     messages: Message[],
-    userProfile: import('@recoverysky/types').UserProfile | null,
+    userProfile: import('@pippa/types').UserProfile | null,
     sessionState: SessionState,
-    previousSessions: import('@recoverysky/types').SessionSummary[],
-    semanticMatches: import('@recoverysky/types').SemanticMatch[],
+    previousSessions: import('@pippa/types').SessionSummary[],
+    semanticMatches: import('@pippa/types').SemanticMatch[],
     relatedEntities?: Entity[],
     displayName?: string
   ): AssembledContext {

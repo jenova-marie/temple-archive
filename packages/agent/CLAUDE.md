@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Package Overview
 
-`@recoverysky/agent` is part of the RecoverySky monorepo - an AI chatbot agent for addiction recovery support. This package provides:
+`@pippa/agent` is part of the RecoverySky monorepo - an AI chatbot agent for addiction recovery support. This package provides:
 - Dynamic system prompt builder for the "Sky" AI companion
 - Agent provider interface (`IAgentProvider`) for LLM integration
 - Mock implementation for testing
@@ -29,12 +29,12 @@ pnpm clean
 
 ### Monorepo Context
 This is a pnpm workspace monorepo. Sibling packages:
-- `@recoverysky/types` - Shared TypeScript types (dependency)
-- `@recoverysky/observability` - Logging/tracing utilities (dependency)
-- `@recoverysky/crisis` - Crisis detection
-- `@recoverysky/memory` - Multi-tier memory system
-- `@recoverysky/pipeline` - Message processing pipeline
-- `@recoverysky/tools` - Agent tools (findMeetings, logMood, etc.)
+- `@pippa/types` - Shared TypeScript types (dependency)
+- `@pippa/observability` - Logging/tracing utilities (dependency)
+- `@pippa/crisis` - Crisis detection
+- `@pippa/memory` - Multi-tier memory system
+- `@pippa/pipeline` - Message processing pipeline
+- `@pippa/tools` - Agent tools (findMeetings, logMood, etc.)
 
 ### Core Components
 
@@ -52,7 +52,7 @@ This is a pnpm workspace monorepo. Sibling packages:
 - Context-aware responses for crisis, relapse, greetings, mood
 - Configurable delay and custom mock responses via `setMockResponse()`
 
-### Key Types (from @recoverysky/types)
+### Key Types (from @pippa/types)
 
 ```typescript
 interface IAgentProvider {
@@ -69,7 +69,7 @@ interface AgentInput {
 ```
 
 ### Result Pattern
-Uses `Result<T, E>` (ok/err pattern) from `@recoverysky/types` for error handling.
+Uses `Result<T, E>` (ok/err pattern) from `@pippa/types` for error handling.
 
 ## TypeScript Configuration
 

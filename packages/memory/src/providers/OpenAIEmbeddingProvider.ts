@@ -12,9 +12,9 @@ import type {
   EmbeddingOptions,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 
 export interface OpenAIEmbeddingConfig {
   /** OpenAI API key (defaults to OPENAI_API_KEY env var) */

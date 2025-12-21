@@ -1,5 +1,5 @@
 {
-  "name": "@recoverysky/agent",
+  "name": "@pippa/agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@recoverysky/types": "workspace:*",
-    "@recoverysky/observability": "workspace:*",
+    "@pippa/types": "workspace:*",
+    "@pippa/observability": "workspace:*",
     "@ai-sdk/anthropic": "^2.0.53",
     "ai": "^5.0.106"
   },

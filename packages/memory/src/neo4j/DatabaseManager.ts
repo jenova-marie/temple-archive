@@ -11,7 +11,7 @@
  * from mcp-neo4j-memory-server.
  */
 
-import { getLogger } from "@recoverysky/observability"
+import { getLogger } from "@pippa/observability"
 import type { SessionFactory } from "./SessionFactory.js"
 
 /**

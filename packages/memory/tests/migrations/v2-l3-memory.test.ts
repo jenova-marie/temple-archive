@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Driver, Session, Result, Record as Neo4jRecord } from 'neo4j-driver'
 
 // Mock observability
-vi.mock('@recoverysky/observability', () => ({
+vi.mock('@pippa/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

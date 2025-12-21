@@ -4,9 +4,9 @@
  * Handles persisting conversation memory caches and loading from past conversations.
  */
 
-import type { Result, StoreError } from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { Result, StoreError } from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import { eq, inArray } from 'drizzle-orm'
 import type { IMemoryCachePersistence, IConversationMemoryCache } from './types.js'
 

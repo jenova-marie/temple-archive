@@ -15,9 +15,9 @@ import {
   type UIMessage,
 } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
-import type { PipelineInput, TraceContext } from '@recoverysky/types'
-import type { Pipeline } from '@recoverysky/pipeline'
-import { getLogger } from '@recoverysky/observability'
+import type { PipelineInput, TraceContext } from '@pippa/types'
+import type { Pipeline } from '@pippa/pipeline'
+import { getLogger } from '@pippa/observability'
 import {
   recoveryTools,
   meetingTools,
@@ -25,7 +25,7 @@ import {
   getMemoryTools,
   setMemoryToolTraceContext,
   clearMemoryToolTraceContext,
-} from '@recoverysky/tools'
+} from '@pippa/tools'
 
 /**
  * Chat request body schema - matches existing recoverysky-api format
@@ -72,7 +72,7 @@ function extractLastUserMessage(messages: Array<{ role: string; parts?: Array<{ 
   return null
 }
 
-import type { UserProfile } from '@recoverysky/types'
+import type { UserProfile } from '@pippa/types'
 
 interface RequestUserData {
   userId: string

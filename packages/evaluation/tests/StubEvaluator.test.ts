@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StubEvaluator } from "../src/StubEvaluator.js";
-import type { TraceContext, AssembledContext } from "@recoverysky/types";
+import type { TraceContext, AssembledContext } from "@pippa/types";
 
 // Mock observability
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

@@ -8,8 +8,8 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok } from '@recoverysky/types'
+} from '@pippa/types'
+import { ok } from '@pippa/types'
 
 export class StubCrisisDetector implements ICrisisDetector {
   private mockResult: CrisisCheckResult = {

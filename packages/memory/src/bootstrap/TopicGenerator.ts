@@ -7,9 +7,9 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk'
-import type { TraceContext, Result, StoreError } from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { TraceContext, Result, StoreError } from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import type { ITopicGenerator, Exchange, BootstrapConfig } from './types.js'
 
 /**

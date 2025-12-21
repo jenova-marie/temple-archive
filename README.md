@@ -44,7 +44,7 @@ The CLI provides an interactive way to chat with the agent:
 
 ```bash
 # Build and use the CLI
-pnpm --filter @recoverysky/cli build
+pnpm --filter @pippa/cli build
 
 # Start interactive chat
 node packages/cli/dist/index.js
@@ -488,7 +488,7 @@ pnpm build
 pnpm build:all
 
 # Build specific package
-pnpm --filter @recoverysky/memory build
+pnpm --filter @pippa/memory build
 ```
 
 ### Test
@@ -504,7 +504,7 @@ pnpm test:watch
 pnpm vitest run --coverage
 
 # Test specific package
-pnpm --filter @recoverysky/pipeline test
+pnpm --filter @pippa/pipeline test
 ```
 
 ### Test Coverage
@@ -513,16 +513,16 @@ The project maintains comprehensive unit test coverage using Vitest with mock-ba
 
 | Package | Tests | Key Areas |
 |---------|-------|-----------|
-| @recoverysky/types | 33 | Result types, domain errors |
-| @recoverysky/observability | 48 | Logging, tracing, metrics |
-| @recoverysky/crisis | 126 | Detection patterns, handlers, evaluators |
-| @recoverysky/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator |
-| @recoverysky/db | 20 | Schema, PostgresSessionStore |
-| @recoverysky/agent | 50 | VercelAIAgentProvider, prompt builder |
-| @recoverysky/safety | 13 | PII, medical, enabling detectors |
-| @recoverysky/evaluation | 14 | LLMEvaluator, scoring |
-| @recoverysky/tools | 37 | Recovery tools, meeting client, memory tools |
-| @recoverysky/cli | ~20 | Commands, chat, health |
+| @pippa/types | 33 | Result types, domain errors |
+| @pippa/observability | 48 | Logging, tracing, metrics |
+| @pippa/crisis | 126 | Detection patterns, handlers, evaluators |
+| @pippa/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator |
+| @pippa/db | 20 | Schema, PostgresSessionStore |
+| @pippa/agent | 50 | VercelAIAgentProvider, prompt builder |
+| @pippa/safety | 13 | PII, medical, enabling detectors |
+| @pippa/evaluation | 14 | LLMEvaluator, scoring |
+| @pippa/tools | 37 | Recovery tools, meeting client, memory tools |
+| @pippa/cli | ~20 | Commands, chat, health |
 | **Total** | **470+** | |
 
 All tests use mocks for external dependencies (Redis, PostgreSQL, Neo4j, Qdrant, AI providers).

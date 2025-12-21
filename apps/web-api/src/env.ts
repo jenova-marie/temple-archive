@@ -1,10 +1,10 @@
-import { config } from 'dotenv';
-import { resolve } from 'path';
-import { createEnv } from '@t3-oss/env-core';
-import { z } from 'zod';
+import { config } from "dotenv";
+import { resolve } from "path";
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
 
 // Load .env from apps/web-api directory before validating
-config({ path: resolve(import.meta.dirname, '../.env') });
+config({ path: resolve(import.meta.dirname, "../.env") });
 
 export const env = createEnv({
   server: {
@@ -12,12 +12,12 @@ export const env = createEnv({
     DATABASE_URL: z.string().url(),
 
     // Groq API (speech-to-text) - optional
-    GROQ_API_KEY: z.string().optional().default(''),
+    GROQ_API_KEY: z.string().optional().default(""),
 
     // Server
     PORT: z
       .string()
-      .default('3001')
+      .default("61665")
       .transform((s) => parseInt(s, 10))
       .pipe(z.number().min(1).max(65535)),
 
@@ -25,11 +25,13 @@ export const env = createEnv({
     ZITADEL_ISSUER: z.string().url().optional(),
     ZITADEL_AUDIENCE: z.string().optional(),
     ZITADEL_CLIENT_ID: z.string().optional(),
-    DISABLE_AUTH: z.enum(['true', 'false']).default('false'),
+    DISABLE_AUTH: z.enum(["true", "false"]).default("false"),
 
     // Observability
-    LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
-    SERVICE_NAME: z.string().default('web-api'),
+    LOG_LEVEL: z
+      .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
+      .default("info"),
+    SERVICE_NAME: z.string().default("web-api"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

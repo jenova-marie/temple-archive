@@ -11,7 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import type {
   Message,
   TraceContext,
@@ -20,8 +20,8 @@ import type {
   ToolCall,
   L3Observation,
   L3Entity,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
 import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
 
 /**

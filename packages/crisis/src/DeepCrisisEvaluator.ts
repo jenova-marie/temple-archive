@@ -6,7 +6,7 @@
  * context-dependent statements).
  */
 
-import type Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from "@anthropic-ai/sdk";
 import type {
   ICrisisEvaluator,
   CrisisCheckResult,
@@ -16,31 +16,31 @@ import type {
   DetectedPattern,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+} from "@pippa/types";
+import { ok, err } from "@pippa/types";
+import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
 
 export interface DeepCrisisEvaluatorConfig {
   /** Model to use for evaluation (default: claude-3-haiku-20240307) */
-  model?: string
+  model?: string;
   /** Maximum tokens for response (default: 512) */
-  maxTokens?: number
+  maxTokens?: number;
   /** Timeout in milliseconds (default: 5000) */
-  timeoutMs?: number
+  timeoutMs?: number;
 }
 
 /**
  * Schema for LLM response
  */
 interface DeepEvaluationResponse {
-  crisisDetected: boolean
-  level: number
+  crisisDetected: boolean;
+  level: number;
   patterns: Array<{
-    type: string
-    confidence: number
-    reasoning: string
-  }>
-  requiresEscalation: boolean
+    type: string;
+    confidence: number;
+    reasoning: string;
+  }>;
+  requiresEscalation: boolean;
 }
 
 const SYSTEM_PROMPT = `You are a crisis detection system for an addiction recovery support application.
@@ -83,50 +83,54 @@ Respond with JSON only, no markdown:
   "level": number (1-10),
   "patterns": [{"type": string, "confidence": number (0-1), "reasoning": string}],
   "requiresEscalation": boolean
-}`
+}`;
 
 export class DeepCrisisEvaluator implements ICrisisEvaluator {
-  private readonly client: Anthropic
-  private readonly config: Required<DeepCrisisEvaluatorConfig>
+  private readonly client: Anthropic;
+  private readonly config: Required<DeepCrisisEvaluatorConfig>;
 
   constructor(client: Anthropic, config?: DeepCrisisEvaluatorConfig) {
-    this.client = client
+    this.client = client;
     this.config = {
-      model: config?.model ?? 'claude-3-haiku-20240307',
+      model: config?.model ?? "claude-3-haiku-20240307",
       maxTokens: config?.maxTokens ?? 512,
       timeoutMs: config?.timeoutMs ?? 5000,
-    }
+    };
   }
 
   async evaluate(
     message: string,
     conversationHistory: string[],
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<Result<CrisisCheckResult, CrisisError>> {
-    return withSpan('DeepCrisisEvaluator.evaluate', async () => {
-      const startTime = performance.now()
-      const logger = getLogger().child({ requestId: ctx.requestId })
+    return withSpan("DeepCrisisEvaluator.evaluate", async () => {
+      const startTime = performance.now();
+      const logger = getLogger().child({ requestId: ctx.requestId });
 
       // Skip trivial messages
       if (message.length < 20) {
-        logger.debug('Message too short for deep evaluation')
-        return ok(this.createEmptyResult(performance.now() - startTime))
+        logger.debug("Message too short for deep evaluation");
+        return ok(this.createEmptyResult(performance.now() - startTime));
       }
 
       try {
         // Build conversation context (last 3 messages max)
-        const recentHistory = conversationHistory.slice(-3)
-        const contextMessages = recentHistory.length > 0
-          ? `\n\nRecent conversation:\n${recentHistory.map((m, i) => `[${i + 1}] ${m}`).join('\n')}`
-          : ''
+        const recentHistory = conversationHistory.slice(-3);
+        const contextMessages =
+          recentHistory.length > 0
+            ? `\n\nRecent conversation:\n${recentHistory.map((m, i) => `[${i + 1}] ${m}`).join("\n")}`
+            : "";
 
         const userContent = `Analyze this message for crisis indicators:
 
-"${message}"${contextMessages}`
+"${message}"${contextMessages}`;
 
         // Create abort controller for timeout
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          this.config.timeoutMs,
+        );
 
         try {
           const response = await this.client.messages.create(
@@ -134,34 +138,37 @@ export class DeepCrisisEvaluator implements ICrisisEvaluator {
               model: this.config.model,
               max_tokens: this.config.maxTokens,
               system: SYSTEM_PROMPT,
-              messages: [{ role: 'user', content: userContent }],
+              messages: [{ role: "user", content: userContent }],
             },
-            { signal: controller.signal }
-          )
+            { signal: controller.signal },
+          );
 
-          clearTimeout(timeoutId)
+          clearTimeout(timeoutId);
 
           // Extract text content
-          const textContent = response.content.find((c) => c.type === 'text')
-          if (!textContent || textContent.type !== 'text') {
-            logger.warn('No text content in LLM response')
-            return ok(this.createEmptyResult(performance.now() - startTime))
+          const textContent = response.content.find((c) => c.type === "text");
+          if (!textContent || textContent.type !== "text") {
+            logger.warn("No text content in LLM response");
+            return ok(this.createEmptyResult(performance.now() - startTime));
           }
 
           // Parse JSON response
-          const parsed = this.parseResponse(textContent.text)
+          const parsed = this.parseResponse(textContent.text);
           if (!parsed) {
-            logger.warn({ response: textContent.text }, 'Failed to parse LLM response')
-            return ok(this.createEmptyResult(performance.now() - startTime))
+            logger.warn(
+              { response: textContent.text },
+              "Failed to parse LLM response",
+            );
+            return ok(this.createEmptyResult(performance.now() - startTime));
           }
 
-          const processingTimeMs = performance.now() - startTime
+          const processingTimeMs = performance.now() - startTime;
 
           // Record metrics
           pipelineMetrics.crisisDetections.add(1, {
-            source: 'deep_evaluator',
+            source: "deep_evaluator",
             level: String(parsed.level),
-          })
+          });
 
           logger.info(
             {
@@ -170,16 +177,18 @@ export class DeepCrisisEvaluator implements ICrisisEvaluator {
               patternCount: parsed.patterns.length,
               processingTimeMs,
             },
-            'Deep crisis evaluation completed'
-          )
+            "Deep crisis evaluation completed",
+          );
 
           // Convert to CrisisCheckResult
-          const level = Math.max(1, Math.min(10, parsed.level)) as CrisisLevel
-          const detectedPatterns: DetectedPattern[] = parsed.patterns.map((p) => ({
-            type: this.validatePatternType(p.type),
-            confidence: p.confidence,
-            matchedText: p.reasoning,
-          }))
+          const level = Math.max(1, Math.min(10, parsed.level)) as CrisisLevel;
+          const detectedPatterns: DetectedPattern[] = parsed.patterns.map(
+            (p) => ({
+              type: this.validatePatternType(p.type),
+              confidence: p.confidence,
+              matchedText: p.reasoning,
+            }),
+          );
 
           return ok({
             level,
@@ -187,85 +196,85 @@ export class DeepCrisisEvaluator implements ICrisisEvaluator {
             triggerEmergency: level >= 9,
             action: this.determineAction(level),
             processingTimeMs,
-          })
+          });
         } catch (abortError) {
-          clearTimeout(timeoutId)
-          throw abortError
+          clearTimeout(timeoutId);
+          throw abortError;
         }
       } catch (error) {
-        const processingTimeMs = performance.now() - startTime
+        const processingTimeMs = performance.now() - startTime;
 
-        if (error instanceof Error && error.name === 'AbortError') {
-          logger.warn({ processingTimeMs }, 'Deep crisis evaluation timed out')
+        if (error instanceof Error && error.name === "AbortError") {
+          logger.warn({ processingTimeMs }, "Deep crisis evaluation timed out");
           return err({
-            kind: 'TimeoutError',
+            kind: "TimeoutError",
             message: `Evaluation timed out after ${this.config.timeoutMs}ms`,
             context: { processingTimeMs },
-          })
+          });
         }
 
-        logger.error({ error }, 'Deep crisis evaluation failed')
+        logger.error({ error }, "Deep crisis evaluation failed");
         return err({
-          kind: 'EvaluationError',
-          message: error instanceof Error ? error.message : 'Unknown error',
+          kind: "EvaluationError",
+          message: error instanceof Error ? error.message : "Unknown error",
           context: { error: String(error) },
-        })
+        });
       }
-    })
+    });
   }
 
   private parseResponse(text: string): DeepEvaluationResponse | null {
     try {
       // Try to extract JSON from response (in case there's extra text)
-      const jsonMatch = text.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) return null
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
 
-      const parsed = JSON.parse(jsonMatch[0])
+      const parsed = JSON.parse(jsonMatch[0]);
 
       // Validate required fields
       if (
-        typeof parsed.crisisDetected !== 'boolean' ||
-        typeof parsed.level !== 'number' ||
+        typeof parsed.crisisDetected !== "boolean" ||
+        typeof parsed.level !== "number" ||
         !Array.isArray(parsed.patterns)
       ) {
-        return null
+        return null;
       }
 
-      return parsed as DeepEvaluationResponse
+      return parsed as DeepEvaluationResponse;
     } catch {
-      return null
+      return null;
     }
   }
 
   private validatePatternType(type: string): CrisisPatternType {
     const validTypes: CrisisPatternType[] = [
-      'suicidal_ideation',
-      'self_harm',
-      'active_relapse',
-      'imminent_relapse',
-      'overdose_risk',
-      'violence_risk',
-      'severe_distress',
-      'hopelessness',
-      'isolation',
-      'withdrawal_symptoms',
-      'medication_noncompliance',
-      'financial_crisis',
-    ]
+      "suicidal_ideation",
+      "self_harm",
+      "active_relapse",
+      "imminent_relapse",
+      "overdose_risk",
+      "violence_risk",
+      "severe_distress",
+      "hopelessness",
+      "isolation",
+      "withdrawal_symptoms",
+      "medication_noncompliance",
+      "financial_crisis",
+    ];
 
     if (validTypes.includes(type as CrisisPatternType)) {
-      return type as CrisisPatternType
+      return type as CrisisPatternType;
     }
 
     // Default to severe_distress for unknown types
-    return 'severe_distress'
+    return "severe_distress";
   }
 
-  private determineAction(level: CrisisLevel): CrisisCheckResult['action'] {
-    if (level >= 9) return 'emergency_protocol'
-    if (level >= 7) return 'inject_resources'
-    if (level >= 4) return 'monitor'
-    return 'none'
+  private determineAction(level: CrisisLevel): CrisisCheckResult["action"] {
+    if (level >= 9) return "emergency_protocol";
+    if (level >= 7) return "inject_resources";
+    if (level >= 4) return "monitor";
+    return "none";
   }
 
   private createEmptyResult(processingTimeMs: number): CrisisCheckResult {
@@ -273,8 +282,8 @@ export class DeepCrisisEvaluator implements ICrisisEvaluator {
       level: 1,
       patterns: [],
       triggerEmergency: false,
-      action: 'none',
+      action: "none",
       processingTimeMs,
-    }
+    };
   }
 }

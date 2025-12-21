@@ -11,8 +11,8 @@
  * - Physical addresses
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import type { TraceContext, SafetyViolation } from '@recoverysky/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import type { TraceContext, SafetyViolation } from '@pippa/types'
 
 export type PIIType =
   | 'ssn'

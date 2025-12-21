@@ -1,11 +1,11 @@
-# @recoverysky/agent
+# @pippa/agent
 
 AI agent provider and system prompt builder for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @recoverysky/agent
+pnpm add @pippa/agent
 ```
 
 ## Overview
@@ -19,7 +19,7 @@ This package provides:
 ## Quick Start
 
 ```typescript
-import { buildSystemPrompt, MockAgentProvider } from '@recoverysky/agent'
+import { buildSystemPrompt, MockAgentProvider } from '@pippa/agent'
 
 // Build a context-aware system prompt
 const systemPrompt = buildSystemPrompt(assembledContext, crisisCheck)
@@ -210,8 +210,8 @@ class MockAgentProvider implements IAgentProvider {
 ## Usage Example
 
 ```typescript
-import { buildSystemPrompt, MockAgentProvider } from '@recoverysky/agent'
-import type { AssembledContext, CrisisCheckResult } from '@recoverysky/types'
+import { buildSystemPrompt, MockAgentProvider } from '@pippa/agent'
+import type { AssembledContext, CrisisCheckResult } from '@pippa/types'
 
 const context: AssembledContext = {
   messages: [/* recent messages */],

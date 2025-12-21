@@ -8,8 +8,8 @@
  * - Finalize conversation: L1 → L2, topic summary → L4
  */
 
-import type { IMemoryStore, IVectorStore, IEmbeddingProvider, TraceContext } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { IMemoryStore, IVectorStore, IEmbeddingProvider, TraceContext } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import type {
   IBootstrapOrchestrator,
   IConversationMemoryCache,

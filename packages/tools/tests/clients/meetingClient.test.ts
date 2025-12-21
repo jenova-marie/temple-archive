@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MeetingClient, getMeetingClient, resetMeetingClient } from '../../src/clients/meetingClient.js'
 
 // Mock observability
-vi.mock('@recoverysky/observability', () => ({
+vi.mock('@pippa/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

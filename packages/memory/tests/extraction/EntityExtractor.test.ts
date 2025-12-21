@@ -8,11 +8,11 @@ import type {
   Message,
   TraceContext,
   IKnowledgeStore,
-} from "@recoverysky/types";
-import { ok } from "@recoverysky/types";
+} from "@pippa/types";
+import { ok } from "@pippa/types";
 
 // Mock observability
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

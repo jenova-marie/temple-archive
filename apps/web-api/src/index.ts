@@ -1,4 +1,4 @@
-import { initializeObservability, shutdownObservability, getLogger } from '@recoverysky/observability';
+import { initializeObservability, shutdownObservability, getLogger } from '@pippa/observability';
 import { buildApp } from './app.js';
 import { env } from './env.js';
 

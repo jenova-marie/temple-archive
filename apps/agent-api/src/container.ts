@@ -6,8 +6,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, IKnowledgeStore, ICrisisDetector, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@recoverysky/types'
-import { getDefaultPipelineConfig } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, IKnowledgeStore, ICrisisDetector, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@pippa/types'
+import { getDefaultPipelineConfig } from '@pippa/types'
 import {
   MemoryOrchestrator,
   InMemoryContextStore,
@@ -55,18 +55,18 @@ import {
   loadL3ContextConfig,
   // Memory Reflector
   MemoryReflector,
-} from '@recoverysky/memory'
-import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, setLiteratureRepository, setLiteratureQdrantStore, setLiteratureEmbeddingProvider, setLiteratureToolsConfig, type MemoryToolAccessLevel } from '@recoverysky/tools'
-import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
-import { KeywordCrisisDetector, NoOpCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
-import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
-import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
-import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
-import { Pipeline, type PipelineDependencies } from '@recoverysky/pipeline'
-import { getLogger } from '@recoverysky/observability'
-import { SystemPromptRepository, UserRepository, LiteratureRepository } from '@recoverysky/db'
+} from '@pippa/memory'
+import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, setLiteratureRepository, setLiteratureQdrantStore, setLiteratureEmbeddingProvider, setLiteratureToolsConfig, type MemoryToolAccessLevel } from '@pippa/tools'
+import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@pippa/db'
+import { KeywordCrisisDetector, NoOpCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@pippa/crisis'
+import { StubSafetyValidator, SafetyValidator } from '@pippa/safety'
+import { MockAgentProvider, VercelAIAgentProvider } from '@pippa/agent'
+import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@pippa/evaluation'
+import { Pipeline, type PipelineDependencies } from '@pippa/pipeline'
+import { getLogger } from '@pippa/observability'
+import { SystemPromptRepository, UserRepository, LiteratureRepository } from '@pippa/db'
 
-import type { UserProfile } from '@recoverysky/types'
+import type { UserProfile } from '@pippa/types'
 
 export interface RequestUserData {
   userId: string
@@ -486,7 +486,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
   if (memoryToolAccess !== 'off' && !useStubs) {
     // Set up memory tool providers so tools can access the knowledge store
     // This needs to be set before the pipeline uses the tools
-    let currentTraceContext: import('@recoverysky/types').TraceContext | null = null
+    let currentTraceContext: import('@pippa/types').TraceContext | null = null
 
     setMemoryToolProviders(
       () => knowledgeStore,

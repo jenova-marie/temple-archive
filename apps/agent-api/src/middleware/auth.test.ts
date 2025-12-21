@@ -4,7 +4,7 @@ import { createAuthMiddleware, getAuthMiddleware, resetAuthMiddleware, type Zita
 import * as jose from 'jose'
 
 // Mock observability
-vi.mock('@recoverysky/observability', () => ({
+vi.mock('@pippa/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

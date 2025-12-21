@@ -1,5 +1,5 @@
 {
-  "name": "@recoverysky/db",
+  "name": "@pippa/db",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -35,8 +35,8 @@
     "db:studio:prod": "drizzle-kit studio --config=drizzle.config.prod.ts"
   },
   "dependencies": {
-    "@recoverysky/observability": "workspace:*",
-    "@recoverysky/types": "workspace:*",
+    "@pippa/observability": "workspace:*",
+    "@pippa/types": "workspace:*",
     "drizzle-orm": "^0.38.3",
     "pg": "^8.13.1"
   },

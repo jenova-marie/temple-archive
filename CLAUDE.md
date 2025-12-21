@@ -40,10 +40,10 @@ pnpm typecheck
 pnpm lint
 
 # Build specific package
-pnpm --filter @recoverysky/memory build
+pnpm --filter @pippa/memory build
 
 # Test specific package
-pnpm --filter @recoverysky/pipeline test
+pnpm --filter @pippa/pipeline test
 
 # Run API on different port
 PORT=3333 pnpm dev
@@ -56,13 +56,13 @@ docker-compose up -d
 
 ```bash
 # Generate migration from schema changes
-pnpm --filter @recoverysky/db db:generate
+pnpm --filter @pippa/db db:generate
 
 # Run migrations (local)
-pnpm --filter @recoverysky/db db:migrate:local
+pnpm --filter @pippa/db db:migrate:local
 
 # Open Drizzle Studio (database browser)
-pnpm --filter @recoverysky/db db:studio:local
+pnpm --filter @pippa/db db:studio:local
 ```
 
 ## Architecture Overview
@@ -73,15 +73,15 @@ This is a **pnpm monorepo** for a personal AI companion. The system uses a **mul
 
 ```
 apps/api
-    └── @recoverysky/pipeline
-            ├── @recoverysky/memory ─── @recoverysky/db
-            ├── @recoverysky/crisis
-            ├── @recoverysky/safety
-            ├── @recoverysky/tools
-            ├── @recoverysky/agent
-            └── @recoverysky/evaluation
-                    └── @recoverysky/observability
-                            └── @recoverysky/types
+    └── @pippa/pipeline
+            ├── @pippa/memory ─── @pippa/db
+            ├── @pippa/crisis
+            ├── @pippa/safety
+            ├── @pippa/tools
+            ├── @pippa/agent
+            └── @pippa/evaluation
+                    └── @pippa/observability
+                            └── @pippa/types
 ```
 
 ### Core Packages
@@ -136,7 +136,7 @@ All external services are injected via `apps/api/src/container.ts`. Key environm
 All fallible operations return `Result<T, E>` instead of throwing:
 
 ```typescript
-import { ok, err, type Result } from '@recoverysky/types'
+import { ok, err, type Result } from '@pippa/types'
 
 async function operation(): Promise<Result<Data, MyError>> {
   if (failed) return err({ kind: 'NotFound', message: '...', context: {} })
@@ -165,7 +165,7 @@ Swap implementations via `apps/api/src/container.ts`.
 All operations use `withSpan()` for tracing and `getLogger()` for structured logging:
 
 ```typescript
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 
 async function myOperation(ctx: TraceContext) {
   return withSpan('MyClass.myOperation', async () => {
@@ -226,7 +226,7 @@ System prompts are fetched fresh from the `system_prompts` table on each chat re
 - **Fallback**: Database unavailable → uses hardcoded default
 
 ```typescript
-import { SystemPromptRepository } from '@recoverysky/db'
+import { SystemPromptRepository } from '@pippa/db'
 const repo = new SystemPromptRepository(db)
 const result = await repo.findActive('base-identity')
 ```
@@ -235,7 +235,7 @@ const result = await repo.findActive('base-identity')
 
 1. Create `packages/<name>/` with `package.json`, `tsconfig.json`, `src/index.ts`
 2. Add reference to root `tsconfig.json`
-3. Add workspace dependency: `pnpm --filter @recoverysky/<consumer> add @recoverysky/<name>`
+3. Add workspace dependency: `pnpm --filter @pippa/<consumer> add @pippa/<name>`
 4. Export via `src/index.ts` and ensure `.js` extensions on local imports
 
 ## Iris MCP

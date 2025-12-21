@@ -41,9 +41,9 @@ COPY packages/pipeline/package.json ./packages/pipeline/
 COPY packages/cli/package.json ./packages/cli/
 COPY packages/config/package.json ./packages/config/
 COPY packages/shared/package.json ./packages/shared/
-COPY apps/api/package.json ./apps/api/
+COPY apps/agent-api/package.json ./apps/agent-api/
 COPY apps/web-api/package.json ./apps/web-api/
-COPY apps/web/package.json ./apps/web/
+COPY apps/web-app/package.json ./apps/web-app/
 
 # Install dependencies with cache mount and npmrc secret for private registry
 RUN --mount=type=cache,target=/root/.pnpm-store \
@@ -66,7 +66,7 @@ RUN pnpm build:all
 # =============================================================================
 # Stage 4: Web Builder (separate stage for web-specific build)
 # =============================================================================
-FROM deps AS web-builder
+FROM deps AS web-app-builder
 
 # Copy source code
 COPY packages/ ./packages/
@@ -74,12 +74,12 @@ COPY apps/ ./apps/
 
 # Build shared package first, then web app
 RUN pnpm --filter @pippa/shared build && \
-    pnpm --filter @pippa/web build
+    pnpm --filter @pippa/web-app build
 
 # =============================================================================
 # Stage 5: Agent Production
 # =============================================================================
-FROM node:22-bookworm AS agent
+FROM node:22-bookworm AS agent-api
 
 RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
@@ -105,7 +105,7 @@ COPY --from=builder /app/packages/tools/package.json ./packages/tools/
 COPY --from=builder /app/packages/pipeline/package.json ./packages/pipeline/
 COPY --from=builder /app/packages/cli/package.json ./packages/cli/
 COPY --from=builder /app/packages/config/package.json ./packages/config/
-COPY --from=builder /app/apps/api/package.json ./apps/api/
+COPY --from=builder /app/apps/agent-api/package.json ./apps/agent-api/
 
 # Copy npmrc for production install
 COPY --from=deps /app/.npmrc ./
@@ -128,7 +128,7 @@ COPY --from=builder /app/packages/tools/dist ./packages/tools/dist
 COPY --from=builder /app/packages/pipeline/dist ./packages/pipeline/dist
 COPY --from=builder /app/packages/cli/dist ./packages/cli/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/agent-api/dist ./apps/agent-api/dist
 
 # Set ownership
 RUN chown -R pippa:pippa /app
@@ -136,11 +136,11 @@ RUN chown -R pippa:pippa /app
 USER pippa
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=61664
 
-EXPOSE 3000
+EXPOSE 61664
 
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["node", "apps/agent-api/dist/index.js"]
 
 # =============================================================================
 # Stage 6: Web API Production
@@ -186,22 +186,22 @@ RUN chown -R pippa:pippa /app
 USER pippa
 
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=61665
 
-EXPOSE 3001
+EXPOSE 61665
 
 CMD ["node", "apps/web-api/dist/index.js"]
 
 # =============================================================================
 # Stage 7: Web Production (nginx)
 # =============================================================================
-FROM nginx:alpine AS web
+FROM nginx:alpine AS web-app
 
 # Copy nginx configuration
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web-app/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built web assets
-COPY --from=web-builder /app/apps/web/dist /usr/share/nginx/html
+COPY --from=web-app-builder /app/apps/web-app/dist /usr/share/nginx/html
 
 # Add non-root user support
 RUN chown -R nginx:nginx /usr/share/nginx/html && \

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Request, Response, NextFunction } from 'express'
 
 // Mock observability - must be in vi.mock factory
-vi.mock('@recoverysky/observability', () => ({
+vi.mock('@pippa/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock('@recoverysky/observability', () => ({
 
 // Import after mocks
 import { HttpError, errorHandler, notFoundHandler } from './errorHandler.js'
-import { pipelineMetrics } from '@recoverysky/observability'
+import { pipelineMetrics } from '@pippa/observability'
 
 describe('errorHandler middleware', () => {
   let mockReq: Partial<Request>

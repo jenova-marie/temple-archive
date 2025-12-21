@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Package Overview
 
-This is `@recoverysky/pipeline`, the main orchestrator for RecoverySky Agent message processing. It coordinates a 6-stage pipeline: crisis detection → memory retrieval → agent processing → safety validation → evaluation → persistence.
+This is `@pippa/pipeline`, the main orchestrator for RecoverySky Agent message processing. It coordinates a 6-stage pipeline: crisis detection → memory retrieval → agent processing → safety validation → evaluation → persistence.
 
 ## Commands
 
@@ -33,7 +33,7 @@ The `Pipeline` class orchestrates message processing through these stages:
 
 ### Result Pattern
 
-All operations return `Result<T, E>` types from `@recoverysky/types`. Check `result.ok` before accessing `result.value` or `result.error`.
+All operations return `Result<T, E>` types from `@pippa/types`. Check `result.ok` before accessing `result.value` or `result.error`.
 
 ### Dependencies (Injected)
 
@@ -48,6 +48,6 @@ All operations return `Result<T, E>` types from `@recoverysky/types`. Check `res
 ### Monorepo Context
 
 Part of a pnpm workspace. Related packages:
-- `@recoverysky/types` - Shared types and interfaces
-- `@recoverysky/observability` - Logging/tracing via `getLogger()`, `withSpan()`, `pipelineMetrics`
-- `@recoverysky/memory`, `@recoverysky/crisis`, `@recoverysky/safety`, `@recoverysky/agent`, `@recoverysky/evaluation`
+- `@pippa/types` - Shared types and interfaces
+- `@pippa/observability` - Logging/tracing via `getLogger()`, `withSpan()`, `pipelineMetrics`
+- `@pippa/memory`, `@pippa/crisis`, `@pippa/safety`, `@pippa/agent`, `@pippa/evaluation`

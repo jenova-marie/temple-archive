@@ -5,7 +5,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
   default: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock("@recoverysky/observability", () => ({
   }),
 }));
 
-vi.mock("@recoverysky/memory", () => ({
+vi.mock("@pippa/memory", () => ({
   MemoryOrchestrator: vi.fn().mockImplementation(() => ({})),
   InMemoryContextStore: vi.fn().mockImplementation(() => ({})),
   InMemorySessionStore: vi.fn().mockImplementation(() => ({})),
@@ -65,14 +65,14 @@ vi.mock("@recoverysky/memory", () => ({
   }),
 }));
 
-vi.mock("@recoverysky/tools", () => ({
+vi.mock("@pippa/tools", () => ({
   setMemoryToolProviders: vi.fn(),
   setBootstrapOrchestrator: vi.fn(),
   setSystemPromptRefreshFn: vi.fn(),
   setClearConversationFn: vi.fn(),
 }));
 
-vi.mock("@recoverysky/db", () => ({
+vi.mock("@pippa/db", () => ({
   createDatabaseClient: vi.fn().mockReturnValue({}),
   PostgresSessionStore: vi.fn().mockImplementation(() => ({})),
   SystemPromptRepository: vi.fn().mockImplementation(() => ({
@@ -85,29 +85,29 @@ vi.mock("@recoverysky/db", () => ({
   UserCacheStore: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@recoverysky/crisis", () => ({
+vi.mock("@pippa/crisis", () => ({
   KeywordCrisisDetector: vi.fn().mockImplementation(() => ({})),
   StubCrisisHandler: vi.fn().mockImplementation(() => ({})),
   DeepCrisisEvaluator: vi.fn().mockImplementation(() => ({})),
   WebhookCrisisHandler: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@recoverysky/safety", () => ({
+vi.mock("@pippa/safety", () => ({
   StubSafetyValidator: vi.fn().mockImplementation(() => ({})),
   SafetyValidator: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@recoverysky/agent", () => ({
+vi.mock("@pippa/agent", () => ({
   MockAgentProvider: vi.fn().mockImplementation(() => ({})),
   VercelAIAgentProvider: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@recoverysky/evaluation", () => ({
+vi.mock("@pippa/evaluation", () => ({
   StubEvaluator: vi.fn().mockImplementation(() => ({})),
   LLMEvaluator: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@recoverysky/pipeline", () => ({
+vi.mock("@pippa/pipeline", () => ({
   Pipeline: vi.fn().mockImplementation(() => ({})),
 }));
 
@@ -124,18 +124,18 @@ import {
   OpenAIEmbeddingProvider,
   QdrantVectorStore,
   createQdrantClient,
-} from "@recoverysky/memory";
-import { createDatabaseClient, PostgresSessionStore } from "@recoverysky/db";
+} from "@pippa/memory";
+import { createDatabaseClient, PostgresSessionStore } from "@pippa/db";
 import {
   KeywordCrisisDetector,
   StubCrisisHandler,
   DeepCrisisEvaluator,
   WebhookCrisisHandler,
-} from "@recoverysky/crisis";
-import { StubSafetyValidator } from "@recoverysky/safety";
-import { MockAgentProvider, VercelAIAgentProvider } from "@recoverysky/agent";
-import { StubEvaluator } from "@recoverysky/evaluation";
-import { Pipeline } from "@recoverysky/pipeline";
+} from "@pippa/crisis";
+import { StubSafetyValidator } from "@pippa/safety";
+import { MockAgentProvider, VercelAIAgentProvider } from "@pippa/agent";
+import { StubEvaluator } from "@pippa/evaluation";
+import { Pipeline } from "@pippa/pipeline";
 import Anthropic from "@anthropic-ai/sdk";
 
 describe("container", () => {

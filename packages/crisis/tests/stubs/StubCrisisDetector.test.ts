@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { StubCrisisDetector } from "../../src/stubs/StubCrisisDetector.js";
-import type { TraceContext, CrisisCheckResult } from "@recoverysky/types";
+import type { TraceContext, CrisisCheckResult } from "@pippa/types";
 
 function createTraceContext(): TraceContext {
   return {

@@ -1,11 +1,11 @@
-# @recoverysky/pipeline
+# @pippa/pipeline
 
 Main orchestrator for the RecoverySky Agent message processing pipeline.
 
 ## Installation
 
 ```bash
-pnpm add @recoverysky/pipeline
+pnpm add @pippa/pipeline
 ```
 
 ## Overview
@@ -22,9 +22,9 @@ This package coordinates the complete message processing flow:
 ## Quick Start
 
 ```typescript
-import { Pipeline } from '@recoverysky/pipeline'
-import { MemoryOrchestrator } from '@recoverysky/memory'
-import { KeywordCrisisDetector } from '@recoverysky/crisis'
+import { Pipeline } from '@pippa/pipeline'
+import { MemoryOrchestrator } from '@pippa/memory'
+import { KeywordCrisisDetector } from '@pippa/crisis'
 // ... other imports
 
 const pipeline = new Pipeline({
@@ -310,10 +310,10 @@ pnpm typecheck
 
 ## Dependencies
 
-- [@recoverysky/types](../types) - Shared types
-- [@recoverysky/observability](../observability) - Logging/tracing
-- [@recoverysky/memory](../memory) - Memory orchestration
-- [@recoverysky/crisis](../crisis) - Crisis detection
-- [@recoverysky/safety](../safety) - Safety validation
-- [@recoverysky/agent](../agent) - Agent provider
-- [@recoverysky/evaluation](../evaluation) - Response evaluation
+- [@pippa/types](../types) - Shared types
+- [@pippa/observability](../observability) - Logging/tracing
+- [@pippa/memory](../memory) - Memory orchestration
+- [@pippa/crisis](../crisis) - Crisis detection
+- [@pippa/safety](../safety) - Safety validation
+- [@pippa/agent](../agent) - Agent provider
+- [@pippa/evaluation](../evaluation) - Response evaluation

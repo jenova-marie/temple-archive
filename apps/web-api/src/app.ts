@@ -6,8 +6,8 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { getLogger } from "@recoverysky/observability";
-import { sql } from "@recoverysky/db";
+import { getLogger } from "@pippa/observability";
+import { sql } from "@pippa/db";
 import authPlugin from "./plugins/auth.js";
 import { transcribeRoutes } from "./routes/transcribe.js";
 import { historyRoutes } from "./routes/history.js";
@@ -23,7 +23,7 @@ export async function buildApp() {
   const logger = getLogger().child({ component: "fastify" });
 
   const app = Fastify({
-    // Disable Fastify's built-in logger - use @recoverysky/observability instead
+    // Disable Fastify's built-in logger - use @pippa/observability instead
     logger: false,
   });
 
@@ -38,10 +38,11 @@ export async function buildApp() {
 
   // Log request completion
   app.addHook("onResponse", async (request, reply) => {
-    const reqLogger = (request as unknown as { logger: typeof logger }).logger || logger;
+    const reqLogger =
+      (request as unknown as { logger: typeof logger }).logger || logger;
     reqLogger.info(
       { statusCode: reply.statusCode, responseTime: reply.elapsedTime },
-      "Request completed"
+      "Request completed",
     );
   });
 
@@ -81,7 +82,7 @@ export async function buildApp() {
     logger.warn("Auth plugin registered in bypass mode (DISABLE_AUTH=true)");
   } else {
     logger.warn(
-      "Auth not configured (ZITADEL_ISSUER or ZITADEL_AUDIENCE missing) - routes unprotected"
+      "Auth not configured (ZITADEL_ISSUER or ZITADEL_AUDIENCE missing) - routes unprotected",
     );
   }
 

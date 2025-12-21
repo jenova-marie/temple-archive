@@ -1,4 +1,4 @@
-# @recoverysky/cli
+# @pippa/cli
 
 Command-line interface for interacting with the RecoverySky Agent API.
 
@@ -6,10 +6,10 @@ Command-line interface for interacting with the RecoverySky Agent API.
 
 ```bash
 # From monorepo root
-pnpm add @recoverysky/cli
+pnpm add @pippa/cli
 
 # Build
-pnpm --filter @recoverysky/cli build
+pnpm --filter @pippa/cli build
 
 # Link globally (optional)
 cd packages/cli && pnpm link --global

@@ -5,7 +5,7 @@
  * The goal is to detect potential crisis situations in <10ms.
  */
 
-import type { CrisisPatternType, CrisisLevel } from '@recoverysky/types'
+import type { CrisisPatternType, CrisisLevel } from '@pippa/types'
 
 export interface CrisisPattern {
   /** Pattern type */

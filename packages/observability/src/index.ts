@@ -22,7 +22,7 @@ import {
 } from '@jenova-marie/wonder-logger'
 import { trace, metrics, SpanStatusCode } from '@opentelemetry/api'
 import type { Span } from '@opentelemetry/api'
-import type { DomainError } from '@recoverysky/types'
+import type { DomainError } from '@pippa/types'
 import {
   isTest,
   isTracingEnabled,

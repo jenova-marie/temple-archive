@@ -8,9 +8,9 @@
  * Supports optional Redis caching via UserCacheStore for reduced DB hits.
  */
 
-import type { Result, TraceContext } from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { Result, TraceContext } from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import { eq } from 'drizzle-orm'
 import type { DatabaseClient } from '../client.js'
 import { users, type User } from '../schema/index.js'

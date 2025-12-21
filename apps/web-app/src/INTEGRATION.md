@@ -69,7 +69,7 @@ A functioning Zoom App requires a **frontend + backend + Redis** architecture:
 | Service | Internal Port | External (localhost) | Purpose |
 |---------|---------------|---------------------|---------|
 | Backend | 3000 | 8000 | OAuth, sessions, API proxy |
-| Frontend | 9090 | 3001 | React dev server |
+| Frontend | 9090 | 61665 | React dev server |
 | Redis | 6379 | 6379 | Token/session storage |
 | ngrok | - | 443 | HTTPS tunnel to backend |
 
@@ -1196,7 +1196,7 @@ services:
     working_dir: /home/node/app
     command: "npm start"
     ports:
-      - "127.0.0.1:3001:9090"     # Frontend dev server
+      - "127.0.0.1:61665:9090"     # Frontend dev server
     environment:
       - PORT=9090
       - PUBLIC_URL=${PUBLIC_URL}/api/zoomapp/proxy

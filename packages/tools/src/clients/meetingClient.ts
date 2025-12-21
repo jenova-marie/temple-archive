@@ -5,7 +5,7 @@
  * Supports finding live meetings, scheduled meetings, and meeting schedules.
  */
 
-import { getLogger } from '@recoverysky/observability'
+import { getLogger } from '@pippa/observability'
 
 /**
  * Meeting data from the API

@@ -9,7 +9,7 @@ import type {
   UserProfile,
   SessionState,
   SessionEntities,
-} from "@recoverysky/types";
+} from "@pippa/types";
 
 function createMinimalContext(): AssembledContext {
   return {

@@ -5,7 +5,7 @@
  * older messages to reduce context size while preserving semantic information.
  */
 
-import type { Message, TraceContext } from '@recoverysky/types'
+import type { Message, TraceContext } from '@pippa/types'
 
 /**
  * Configuration for context compaction

@@ -8,7 +8,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
-import { getLogger } from "@recoverysky/observability";
+import { getLogger } from "@pippa/observability";
 
 /**
  * Zitadel JWT claims

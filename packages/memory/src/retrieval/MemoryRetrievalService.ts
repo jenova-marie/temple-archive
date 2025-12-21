@@ -9,7 +9,7 @@
  * - Token budget fitting
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import type {
   L3Entity,
   L3EntityWithObservations,
@@ -17,8 +17,8 @@ import type {
   TraceContext,
   Result,
   StoreError,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
 import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
 import type { DeepMemoryService, ContextStrategy } from '../deepmemory/DeepMemoryService.js'
 import type { MiniLMEmbeddingProvider } from '../embeddings/MiniLMProvider.js'

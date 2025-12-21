@@ -12,7 +12,7 @@ pnpm clean       # Remove dist/
 
 ## Package Overview
 
-This is `@recoverysky/evaluation`, a response quality evaluation package for the RecoverySky Agent system. It evaluates AI-generated responses for quality, relevance, empathy, and recovery-appropriateness.
+This is `@pippa/evaluation`, a response quality evaluation package for the RecoverySky Agent system. It evaluates AI-generated responses for quality, relevance, empathy, and recovery-appropriateness.
 
 ## Architecture
 
@@ -25,9 +25,9 @@ The package uses a simple interface (`IEvaluator`) with four scoring dimensions:
 - **recoveryScore**: Recovery-appropriate language, penalizes harmful phrases (0.0-1.0)
 - **overallScore**: Weighted average (quality 20%, relevance 30%, empathy 30%, recovery 20%)
 
-**Dependencies**: Uses `@recoverysky/types` for interfaces and `@recoverysky/observability` for tracing/logging.
+**Dependencies**: Uses `@pippa/types` for interfaces and `@pippa/observability` for tracing/logging.
 
-## Key Interfaces (from @recoverysky/types)
+## Key Interfaces (from @pippa/types)
 
 ```typescript
 interface IEvaluator {

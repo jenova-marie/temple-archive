@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Package Overview
 
-`@recoverysky/crisis` is a real-time crisis detection package for the RecoverySky Agent system. It performs fast pre-flight crisis detection using keyword and pattern matching, with a target of **<10ms** detection time.
+`@pippa/crisis` is a real-time crisis detection package for the RecoverySky Agent system. It performs fast pre-flight crisis detection using keyword and pattern matching, with a target of **<10ms** detection time.
 
 ## Commands
 
@@ -38,8 +38,8 @@ For testing, use `StubCrisisDetector` and `StubCrisisHandler` from `src/stubs/`.
 ### Dependencies
 
 This package depends on sibling workspace packages:
-- `@recoverysky/types` - Type definitions (`ICrisisDetector`, `CrisisCheckResult`, etc.)
-- `@recoverysky/observability` - Logging and metrics (`getLogger`, `withSpan`, `pipelineMetrics`)
+- `@pippa/types` - Type definitions (`ICrisisDetector`, `CrisisCheckResult`, etc.)
+- `@pippa/observability` - Logging and metrics (`getLogger`, `withSpan`, `pipelineMetrics`)
 
 ## Detection Algorithm
 
@@ -56,4 +56,4 @@ This package depends on sibling workspace packages:
 
 ## Result Types
 
-Uses `Result<T, E>` pattern from `@recoverysky/types` - check `result.ok` before accessing `result.value`.
+Uses `Result<T, E>` pattern from `@pippa/types` - check `result.ok` before accessing `result.value`.

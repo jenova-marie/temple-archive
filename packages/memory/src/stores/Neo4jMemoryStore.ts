@@ -32,9 +32,9 @@ import type {
   StoreError,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 
 export interface Neo4jMemoryStoreConfig {
   /**

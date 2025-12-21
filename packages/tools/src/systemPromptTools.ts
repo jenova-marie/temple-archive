@@ -8,7 +8,7 @@
 
 import { z } from 'zod'
 import { tool } from 'ai'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan } from '@pippa/observability'
 
 /**
  * Callback type for refreshing the base identity

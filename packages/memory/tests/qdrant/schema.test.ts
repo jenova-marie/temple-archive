@@ -10,7 +10,7 @@ import {
 } from "../../src/qdrant/schema.js";
 
 // Mock observability
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

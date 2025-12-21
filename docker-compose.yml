@@ -8,59 +8,56 @@
 #   - External services (Redis, PostgreSQL, Neo4j, Qdrant)
 
 services:
-  pippa-agent:
+  pippa-agent-api:
     build:
       context: .
       dockerfile: Dockerfile
-      target: agent
+      target: agent-api
       secrets:
         - npmrc
-    container_name: pippa-agent
+    container_name: pippa-agent-api
     restart: unless-stopped
     networks:
       - bad-bitch-net
     ports:
-      - "61664:3000"
+      - "${AGENT_API_PORT}:${AGENT_API_PORT}"
     volumes:
       - ./spiffe-bundle.pem:/spiffe-bundle.pem:ro
     environment:
       - NODE_EXTRA_CA_CERTS=/spiffe-bundle.pem
 
       # Application
-      - NODE_ENV
-      - PORT
-      - LOG_LEVEL
-      - USE_STUBS
+      - NODE_ENV=development
+      - PORT=${AGENT_API_PORT}
+      - LOG_LEVEL=debug
+      - USE_STUBS=false
 
       # AI Providers
       - ANTHROPIC_API_KEY
       - OPENAI_API_KEY
 
-      # Authentication
-      - ZITADEL_ISSUER
-      - ZITADEL_AUDIENCE
+      # Authentication (disable for local dev)
+      - DISABLE_AUTH
 
       # Memory config
       - MEMORY_CONTEXT_MODE
       - MEMORY_TOOL_ACCESS
 
-      # L1: Redis
-      - REDIS_URL
-      # - REDIS_USERNAME=pippa
-      # - REDIS_PASSWORD=${REDIS_AGENT_PASSWORD}
+      # L1: Redis (on bad-bitch-net)
+      - REDIS_URL=redis://redis:6379
 
-      # L2: PostgreSQL
-      - DATABASE_URL
+      # L2: PostgreSQL (on bad-bitch-net)
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pippa
 
-      # L3: Neo4j
-      - NEO4J_URI
-      - NEO4J_USER
+      # L3: Neo4j (on bad-bitch-net)
+      - NEO4J_URI=neo4j://neo4j:7687
+      - NEO4J_USER=neo4j
       - NEO4J_PASSWORD
-      - NEO4J_DATABASE
-      - NEO4J_DATABASE_PER_USER
+      - NEO4J_DATABASE=neo4j
+      - NEO4J_DATABASE_PER_USER=true
 
-      # L4: Qdrant
-      - QDRANT_URL
+      # L4: Qdrant (on bad-bitch-net)
+      - QDRANT_URL=http://qdrant:6333
       - QDRANT_API_KEY
 
       # Observability
@@ -90,33 +87,57 @@ services:
     #   start_period: 10s
     #   retries: 3
 
-  pippa-web:
+  pippa-web-api:
     build:
       context: .
       dockerfile: Dockerfile
-      target: web
+      target: web-api
       secrets:
         - npmrc
-    container_name: pippa-web
+    container_name: pippa-web-api
     restart: unless-stopped
     networks:
       - bad-bitch-net
     ports:
-      - "61665:80"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:80/",
-        ]
-      interval: 30s
-      timeout: 10s
-      start_period: 5s
-      retries: 3
+      - "${WEB_API_PORT}:${WEB_API_PORT}"
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - PORT=${WEB_API_PORT}
+
+      # L2: PostgreSQL (on bad-bitch-net)
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pippa
+
+      # LLM Provider
+      - GROQ_API_KEY
+
+  pippa-web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web-app
+      secrets:
+        - npmrc
+    container_name: pippa-web-app
+    restart: unless-stopped
+    networks:
+      - bad-bitch-net
+    ports:
+      - "${WEB_APP_PORT}:80"
+    # healthcheck:
+    #   test:
+    #     [
+    #       "CMD",
+    #       "wget",
+    #       "--no-verbose",
+    #       "--tries=1",
+    #       "--spider",
+    #       "http://localhost:80/",
+    #     ]
+    #   interval: 30s
+    #   timeout: 10s
+    #   start_period: 5s
+    #   retries: 3
 
 networks:
   bad-bitch-net:

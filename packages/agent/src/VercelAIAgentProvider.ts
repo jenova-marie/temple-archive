@@ -13,11 +13,11 @@ import type {
   AgentResponse,
   AgentError,
   ToolDefinition,
-} from '@recoverysky/types'
-import type { StreamChunk, ToolCall } from '@recoverysky/types'
-import type { TraceContext } from '@recoverysky/types'
-import { ok, err, type Result } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
+} from '@pippa/types'
+import type { StreamChunk, ToolCall } from '@pippa/types'
+import type { TraceContext } from '@pippa/types'
+import { ok, err, type Result } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 
 /**
  * Configuration for VercelAIAgentProvider

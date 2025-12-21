@@ -31,12 +31,12 @@ import type {
   PipelineDiagnostics,
   SafetyValidationResult,
   EvaluationResult,
-} from '@recoverysky/types'
-import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
-import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext } from '@recoverysky/memory'
-import { buildSystemPrompt } from '@recoverysky/agent'
-import { recoveryTools, meetingTools, getMemoryTools, literatureTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
+} from '@pippa/types'
+import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext } from '@pippa/memory'
+import { buildSystemPrompt } from '@pippa/agent'
+import { recoveryTools, meetingTools, getMemoryTools, literatureTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
 
 /**
  * Memory tool names for filtering tool calls during post-processing.
@@ -1255,8 +1255,8 @@ export class Pipeline {
       // TODO: Get recent insights and mentioned entities from knowledge store
       // For now, we'll use empty arrays - the reflector will still work
       // but won't have context to avoid duplicates
-      const recentInsights: import('@recoverysky/types').L3Observation[] = []
-      const mentionedEntities: import('@recoverysky/types').L3Entity[] = []
+      const recentInsights: import('@pippa/types').L3Observation[] = []
+      const mentionedEntities: import('@pippa/types').L3Entity[] = []
 
       logger.debug(
         {

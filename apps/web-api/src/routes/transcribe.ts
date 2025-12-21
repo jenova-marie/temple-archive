@@ -8,7 +8,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { transcriptionRepository } from "../db/index.js";
 import { transcribeAudio } from "../services/groq.js";
-import { getLogger, withSpan } from "@recoverysky/observability";
+import { getLogger, withSpan } from "@pippa/observability";
 import { nanoid } from "nanoid";
 import {
   MAX_AUDIO_SIZE_BYTES,

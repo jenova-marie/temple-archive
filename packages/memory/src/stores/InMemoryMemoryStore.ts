@@ -20,9 +20,9 @@ import type {
   StoreError,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger } from '@pippa/observability'
 
 interface StoredRelation {
   from: string

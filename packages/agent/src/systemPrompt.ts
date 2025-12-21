@@ -2,7 +2,7 @@
  * Dynamic system prompt builder for the RecoverySky agent
  */
 
-import type { AssembledContext, CrisisCheckResult } from "@recoverysky/types";
+import type { AssembledContext, CrisisCheckResult } from "@pippa/types";
 
 /**
  * Options for building the system prompt

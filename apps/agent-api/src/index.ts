@@ -4,7 +4,7 @@
  * Express server for the Pippa AI companion agent
  */
 
-import { loadConfig, type Config } from "@recoverysky/config";
+import { loadConfig, type Config } from "@pippa/config";
 
 // Load configuration (YAML + env vars)
 // This must happen before other imports that might read process.env
@@ -17,7 +17,7 @@ import {
   initializeObservability,
   shutdownObservability,
   getLogger,
-} from "@recoverysky/observability";
+} from "@pippa/observability";
 import { createContainer } from "./container.js";
 import { createChatRouter } from "./routes/chat.js";
 import { createHealthRouter } from "./routes/health.js";

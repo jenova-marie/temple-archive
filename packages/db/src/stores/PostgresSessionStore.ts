@@ -14,9 +14,9 @@ import type {
   SessionSummary,
   StoreError,
   TraceContext,
-} from '@recoverysky/types'
-import { ok, err, type Result } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok, err, type Result } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import { eq, desc, asc, and, lte, gt, sql } from 'drizzle-orm'
 import type { DatabaseClient } from '../client.js'
 import {

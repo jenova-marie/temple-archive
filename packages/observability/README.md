@@ -1,11 +1,11 @@
-# @recoverysky/observability
+# @pippa/observability
 
 Unified observability stack for the RecoverySky Agent system, built on [wonder-logger](https://github.com/jenova-marie/wonder-logger).
 
 ## Installation
 
 ```bash
-pnpm add @recoverysky/observability
+pnpm add @pippa/observability
 ```
 
 ## Overview
@@ -25,7 +25,7 @@ import {
   getLogger,
   withSpan,
   pipelineMetrics,
-} from '@recoverysky/observability'
+} from '@pippa/observability'
 
 // Initialize at application startup
 initializeObservability()
@@ -77,7 +77,7 @@ In test environments (`NODE_ENV=test`), the package automatically:
 - Disables tracing/metrics exports
 
 ```typescript
-import { getMemoryLogs, clearMemoryLogs } from '@recoverysky/observability'
+import { getMemoryLogs, clearMemoryLogs } from '@pippa/observability'
 
 // In tests
 const logs = getMemoryLogs('recoverysky-agent')
@@ -160,8 +160,8 @@ Pre-defined metrics for the RecoverySky pipeline:
 ## Integration with Domain Errors
 
 ```typescript
-import { recordSpanError } from '@recoverysky/observability'
-import type { DomainError } from '@recoverysky/types'
+import { recordSpanError } from '@pippa/observability'
+import type { DomainError } from '@pippa/types'
 
 const error: DomainError = {
   kind: 'ValidationError',

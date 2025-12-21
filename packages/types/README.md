@@ -1,11 +1,11 @@
-# @recoverysky/types
+# @pippa/types
 
 Shared TypeScript type definitions for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @recoverysky/types
+pnpm add @pippa/types
 ```
 
 ## Overview
@@ -29,9 +29,9 @@ import type {
   Message,
   CrisisLevel,
   Result,
-} from '@recoverysky/types'
+} from '@pippa/types'
 
-import { ok, err, isOk, unwrap } from '@recoverysky/types'
+import { ok, err, isOk, unwrap } from '@pippa/types'
 
 // Create a successful result
 const success = ok({ data: 'value' })
@@ -138,7 +138,7 @@ andThen<T, U, E>(result: Result<T, E>, fn: (value: T) => Result<U, E>): Result<U
 ### Observability Converters
 
 ```typescript
-import { toLogContext, toSpanAttributes, toMetricLabels } from '@recoverysky/types'
+import { toLogContext, toSpanAttributes, toMetricLabels } from '@pippa/types'
 
 // Convert domain errors for logging
 logger.error(toLogContext(error), 'Operation failed')
@@ -156,7 +156,7 @@ The package uses explicit exports:
 
 ```typescript
 // Main export
-import { ok, err, type Result } from '@recoverysky/types'
+import { ok, err, type Result } from '@pippa/types'
 ```
 
 ## Development

@@ -6,7 +6,7 @@
  */
 
 import { eq, and } from 'drizzle-orm'
-import { ok, err, type Result, type DomainError } from '@recoverysky/types'
+import { ok, err, type Result, type DomainError } from '@pippa/types'
 import { systemPrompts, type SystemPrompt } from '../schema/systemPrompts.js'
 import type { DatabaseClient } from '../client.js'
 

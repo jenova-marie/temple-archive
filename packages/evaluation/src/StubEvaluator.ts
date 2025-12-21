@@ -15,9 +15,9 @@ import type {
   AssembledContext,
   TraceContext,
   Result,
-} from '@recoverysky/types'
-import { ok } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+} from '@pippa/types'
+import { ok } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 
 export class StubEvaluator implements IEvaluator {
   private mockScores: Partial<EvaluationResult> = {}

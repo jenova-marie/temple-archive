@@ -6,7 +6,7 @@
  */
 
 import type { Driver } from 'neo4j-driver'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan } from '@pippa/observability'
 
 /**
  * Cypher statements to create schema constraints and indexes

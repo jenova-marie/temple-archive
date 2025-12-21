@@ -5,7 +5,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express'
-import { getLogger } from '@recoverysky/observability'
+import { getLogger } from '@pippa/observability'
 
 export interface TracingContext {
   traceId: string

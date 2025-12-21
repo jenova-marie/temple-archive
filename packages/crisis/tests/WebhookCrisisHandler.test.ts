@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { createHmac } from "crypto";
 import { WebhookCrisisHandler } from "../src/WebhookCrisisHandler.js";
-import type { CrisisCheckResult, CrisisLevel } from "@recoverysky/types";
+import type { CrisisCheckResult, CrisisLevel } from "@pippa/types";
 
 // Mock fetch globally
 const mockFetch = vi.fn();

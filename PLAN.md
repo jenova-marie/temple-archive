@@ -5,7 +5,7 @@
 **Phases 0-8 substantially complete.** Production-ready foundation with multi-tier memory:
 
 - 10 packages in pnpm monorepo (types, observability, memory, crisis, safety, tools, agent, evaluation, pipeline, cli)
-- 1 application (apps/api) + @recoverysky/db package
+- 1 application (apps/api) + @pippa/db package
 - Pipeline orchestrator with 6-stage processing
 - **1000 tests passing** with dedicated `tests/` directories
 - Vercel AI SDK integration with Claude (VercelAIAgentProvider)
@@ -42,13 +42,13 @@
 
 **Goal:** Replace MockAgentProvider with Claude via Anthropic SDK
 
-**Package:** `@recoverysky/agent`
+**Package:** `@pippa/agent`
 
 **Tasks:**
 
 ```
 1.1 [ ] Install Anthropic SDK
-        pnpm --filter @recoverysky/agent add @anthropic-ai/sdk
+        pnpm --filter @pippa/agent add @anthropic-ai/sdk
 
 1.2 [ ] Create ClaudeAgentProvider
         packages/agent/src/ClaudeAgentProvider.ts
@@ -68,7 +68,7 @@
         - Add streaming endpoint: POST /api/chat/stream
 
 1.5 [ ] Tool Integration
-        - Connect @recoverysky/tools definitions to agent
+        - Connect @pippa/tools definitions to agent
         - Implement tool execution loop
         - Handle tool_use stop reason
 
@@ -100,7 +100,7 @@ curl -X POST http://localhost:3333/api/chat \
 
 **Goal:** Replace InMemorySessionStore with PostgreSQL
 
-**Package:** `@recoverysky/memory`
+**Package:** `@pippa/memory`
 
 **Prerequisites:**
 - PostgreSQL running (docker-compose up postgres)
@@ -110,7 +110,7 @@ curl -X POST http://localhost:3333/api/chat \
 
 ```
 2.1 [ ] Install Dependencies
-        pnpm --filter @recoverysky/memory add pg @types/pg drizzle-orm drizzle-kit
+        pnpm --filter @pippa/memory add pg @types/pg drizzle-orm drizzle-kit
 
 2.2 [ ] Database Schema (Drizzle)
         packages/memory/src/db/schema.ts
@@ -160,7 +160,7 @@ curl -X POST http://localhost:3333/api/chat \
 docker-compose up -d postgres
 
 # Run migrations
-pnpm --filter @recoverysky/memory db:migrate
+pnpm --filter @pippa/memory db:migrate
 
 # Start server
 USE_STUBS=false pnpm dev
@@ -176,7 +176,7 @@ USE_STUBS=false pnpm dev
 
 **Goal:** Replace InMemoryContextStore with Redis
 
-**Package:** `@recoverysky/memory`
+**Package:** `@pippa/memory`
 
 **Prerequisites:**
 - Redis running (docker-compose up redis)
@@ -185,7 +185,7 @@ USE_STUBS=false pnpm dev
 
 ```
 3.1 [ ] Install Dependencies
-        pnpm --filter @recoverysky/memory add ioredis @types/ioredis
+        pnpm --filter @pippa/memory add ioredis @types/ioredis
 
 3.2 [ ] RedisContextStore Implementation
         packages/memory/src/stores/RedisContextStore.ts
@@ -239,13 +239,13 @@ docker exec recoverysky-redis redis-cli keys '*'
 
 **Goal:** Generate embeddings for messages, enable semantic search
 
-**Packages:** `@recoverysky/memory`, `@recoverysky/types`
+**Packages:** `@pippa/memory`, `@pippa/types`
 
 **Tasks:**
 
 ```
 4.1 [ ] Install OpenAI SDK
-        pnpm --filter @recoverysky/memory add openai
+        pnpm --filter @pippa/memory add openai
 
 4.2 [ ] OpenAIEmbeddingProvider Implementation
         packages/memory/src/providers/OpenAIEmbeddingProvider.ts
@@ -291,7 +291,7 @@ export OPENAI_API_KEY=sk-xxx
 
 **Goal:** Replace InMemoryVectorStore with Qdrant
 
-**Package:** `@recoverysky/memory`
+**Package:** `@pippa/memory`
 
 **Prerequisites:**
 - Qdrant running (docker-compose up qdrant)
@@ -300,7 +300,7 @@ export OPENAI_API_KEY=sk-xxx
 
 ```
 5.1 [ ] Install Qdrant Client
-        pnpm --filter @recoverysky/memory add @qdrant/js-client-rest
+        pnpm --filter @pippa/memory add @qdrant/js-client-rest
 
 5.2 [ ] QdrantVectorStore Implementation
         packages/memory/src/stores/QdrantVectorStore.ts
@@ -350,7 +350,7 @@ curl http://localhost:6333/collections
 
 **Goal:** Production-ready crisis detection with alerting
 
-**Package:** `@recoverysky/crisis`
+**Package:** `@pippa/crisis`
 
 **Tasks:**
 
@@ -409,7 +409,7 @@ recoverysky chat -m "I'm having thoughts of hurting myself"
 
 **Goal:** Replace stubs with real validators
 
-**Packages:** `@recoverysky/safety`, `@recoverysky/evaluation`
+**Packages:** `@pippa/safety`, `@pippa/evaluation`
 
 **Tasks:**
 
@@ -469,7 +469,7 @@ recoverysky chat -m "I'm having thoughts of hurting myself"
 
 ```
 8.1 [x] Neo4j Driver Installation
-        neo4j-driver in @recoverysky/memory
+        neo4j-driver in @pippa/memory
 
 8.2 [x] Neo4jKnowledgeStore Implementation
         packages/memory/src/stores/Neo4jKnowledgeStore.ts
@@ -662,7 +662,7 @@ CRISIS_THRESHOLD_CRITICAL=9
 
 ```bash
 # 1. Install Anthropic SDK
-pnpm --filter @recoverysky/agent add @anthropic-ai/sdk
+pnpm --filter @pippa/agent add @anthropic-ai/sdk
 
 # 2. Create ClaudeAgentProvider (see task 1.2)
 

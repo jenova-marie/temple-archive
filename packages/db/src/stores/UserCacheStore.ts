@@ -6,9 +6,9 @@
  */
 
 import type { Redis } from 'ioredis'
-import type { UserProfile, StoreError, Result } from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger } from '@recoverysky/observability'
+import type { UserProfile, StoreError, Result } from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger } from '@pippa/observability'
 import type { User } from '../schema/index.js'
 
 /**

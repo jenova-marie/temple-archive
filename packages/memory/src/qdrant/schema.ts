@@ -4,46 +4,46 @@
  * Defines the collection configuration and payload schema for the messages collection.
  */
 
-import type { QdrantClient } from '@qdrant/js-client-rest'
-import { getLogger } from '@recoverysky/observability'
-import { createHash } from 'crypto'
+import type { QdrantClient } from "@qdrant/js-client-rest";
+import { getLogger } from "@pippa/observability";
+import { createHash } from "crypto";
 
 // Collection configuration constants
-export const COLLECTION_NAME = process.env.QDRANT_COLLECTION_NAME ?? 'messages'
-export const VECTOR_SIZE = 1536 // OpenAI text-embedding-3-small dimensions
-export const DISTANCE_METRIC = 'Cosine'
+export const COLLECTION_NAME = process.env.QDRANT_COLLECTION_NAME ?? "messages";
+export const VECTOR_SIZE = 1536; // OpenAI text-embedding-3-small dimensions
+export const DISTANCE_METRIC = "Cosine";
 
 // Search mode: 'hybrid' (dense + sparse BM25) or 'simple' (dense only)
-export type QdrantSearchMode = 'hybrid' | 'simple'
+export type QdrantSearchMode = "hybrid" | "simple";
 export const SEARCH_MODE: QdrantSearchMode =
-  (process.env.QDRANT_SEARCH_MODE as QdrantSearchMode) ?? 'hybrid'
+  (process.env.QDRANT_SEARCH_MODE as QdrantSearchMode) ?? "hybrid";
 
 // Named vector configuration for hybrid mode
-export const DENSE_VECTOR_NAME = 'dense'
-export const SPARSE_VECTOR_NAME = 'sparse'
+export const DENSE_VECTOR_NAME = "dense";
+export const SPARSE_VECTOR_NAME = "sparse";
 
 /**
  * Payload schema for message vectors
  */
 export interface MessagePayload {
   /** User identifier for filtering */
-  userId: string
+  userId: string;
   /** Conversation identifier for filtering */
-  conversationId: string
+  conversationId: string;
   /** Original message ID */
-  messageId: string
+  messageId: string;
   /** Message role (user/assistant) */
-  role: string
+  role: string;
   /** Message content for retrieval */
-  content: string
+  content: string;
   /** Unix timestamp in ms for time-based filtering */
-  timestamp: number
+  timestamp: number;
   /** Crisis level for exclusion filtering */
-  crisisLevel?: number
+  crisisLevel?: number;
   /** Extracted entities */
-  entities?: string[]
+  entities?: string[];
   /** Extracted topics */
-  topics?: string[]
+  topics?: string[];
 }
 
 /**
@@ -52,7 +52,7 @@ export interface MessagePayload {
  * to create a valid UUID that's consistent across operations.
  */
 export function messageIdToPointId(messageId: string): string {
-  const hash = createHash('sha256').update(messageId).digest('hex')
+  const hash = createHash("sha256").update(messageId).digest("hex");
   // Format as UUID: 8-4-4-4-12
   return [
     hash.slice(0, 8),
@@ -60,7 +60,7 @@ export function messageIdToPointId(messageId: string): string {
     hash.slice(12, 16),
     hash.slice(16, 20),
     hash.slice(20, 32),
-  ].join('-')
+  ].join("-");
 }
 
 /**
@@ -74,23 +74,32 @@ export async function ensureCollection(
   client: QdrantClient,
   collectionName: string = COLLECTION_NAME,
   vectorSize: number = VECTOR_SIZE,
-  searchMode: QdrantSearchMode = SEARCH_MODE
+  searchMode: QdrantSearchMode = SEARCH_MODE,
 ): Promise<void> {
-  const logger = getLogger().child({ component: 'qdrant-schema', collectionName, searchMode })
+  const logger = getLogger().child({
+    component: "qdrant-schema",
+    collectionName,
+    searchMode,
+  });
 
   try {
     // Check if collection exists
-    const collections = await client.getCollections()
-    const exists = collections.collections.some((c) => c.name === collectionName)
+    const collections = await client.getCollections();
+    const exists = collections.collections.some(
+      (c) => c.name === collectionName,
+    );
 
     if (exists) {
-      logger.debug('Collection already exists')
-      return
+      logger.debug("Collection already exists");
+      return;
     }
 
-    logger.info({ vectorSize, distance: DISTANCE_METRIC, searchMode }, 'Creating collection')
+    logger.info(
+      { vectorSize, distance: DISTANCE_METRIC, searchMode },
+      "Creating collection",
+    );
 
-    if (searchMode === 'hybrid') {
+    if (searchMode === "hybrid") {
       // Hybrid mode: named vectors (dense + sparse)
       await client.createCollection(collectionName, {
         vectors: {
@@ -112,8 +121,10 @@ export async function ensureCollection(
           default_segment_number: 2,
           indexing_threshold: 20000,
         },
-      })
-      logger.debug('Created collection with dense + sparse vectors for hybrid search')
+      });
+      logger.debug(
+        "Created collection with dense + sparse vectors for hybrid search",
+      );
     } else {
       // Simple mode: single unnamed dense vector
       await client.createCollection(collectionName, {
@@ -126,31 +137,36 @@ export async function ensureCollection(
           default_segment_number: 2,
           indexing_threshold: 20000,
         },
-      })
-      logger.debug('Created collection with single dense vector for simple search')
+      });
+      logger.debug(
+        "Created collection with single dense vector for simple search",
+      );
     }
 
     // Create payload indexes for efficient filtering
-    logger.debug('Creating payload indexes')
+    logger.debug("Creating payload indexes");
 
     await client.createPayloadIndex(collectionName, {
-      field_name: 'userId',
-      field_schema: 'keyword',
-    })
+      field_name: "userId",
+      field_schema: "keyword",
+    });
 
     await client.createPayloadIndex(collectionName, {
-      field_name: 'conversationId',
-      field_schema: 'keyword',
-    })
+      field_name: "conversationId",
+      field_schema: "keyword",
+    });
 
     await client.createPayloadIndex(collectionName, {
-      field_name: 'timestamp',
-      field_schema: 'integer',
-    })
+      field_name: "timestamp",
+      field_schema: "integer",
+    });
 
-    logger.info({ searchMode }, 'Collection created successfully with payload indexes')
+    logger.info(
+      { searchMode },
+      "Collection created successfully with payload indexes",
+    );
   } catch (error) {
-    logger.error({ error }, 'Failed to ensure collection exists')
-    throw error
+    logger.error({ error }, "Failed to ensure collection exists");
+    throw error;
   }
 }

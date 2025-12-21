@@ -5,9 +5,9 @@
  * All operations are scoped to a specific user.
  */
 
-import type { Result, TraceContext } from '@recoverysky/types'
-import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import type { Result, TraceContext } from '@pippa/types'
+import { ok, err } from '@pippa/types'
+import { getLogger, withSpan } from '@pippa/observability'
 import { eq, desc, and } from 'drizzle-orm'
 import type { DatabaseClient } from '../client.js'
 import { transcriptions, type Transcription, type NewTranscription } from '../schema/index.js'

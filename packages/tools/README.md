@@ -1,11 +1,11 @@
-# @recoverysky/tools
+# @pippa/tools
 
 AI tool definitions for the RecoverySky Agent, built with Vercel AI SDK.
 
 ## Installation
 
 ```bash
-pnpm add @recoverysky/tools
+pnpm add @pippa/tools
 ```
 
 ## Overview
@@ -20,7 +20,7 @@ This package defines tools that the AI agent can invoke to:
 ## Quick Start
 
 ```typescript
-import { recoveryTools } from '@recoverysky/tools'
+import { recoveryTools } from '@pippa/tools'
 
 // Use with Vercel AI SDK
 import { generateText } from 'ai'
@@ -173,7 +173,7 @@ export const findMeetings = tool({
 ## Integration Example
 
 ```typescript
-import { recoveryTools } from '@recoverysky/tools'
+import { recoveryTools } from '@pippa/tools'
 import { anthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 

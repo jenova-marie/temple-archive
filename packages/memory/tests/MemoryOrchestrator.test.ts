@@ -16,8 +16,8 @@ import type {
   SemanticMatch,
   Result,
   StoreError,
-} from "@recoverysky/types";
-import { ok, err } from "@recoverysky/types";
+} from "@pippa/types";
+import { ok, err } from "@pippa/types";
 
 // Mock observability - include all logger methods at root level for direct calls
 const mockLoggerMethods = {
@@ -26,7 +26,7 @@ const mockLoggerMethods = {
   warn: vi.fn(),
   error: vi.fn(),
 };
-vi.mock("@recoverysky/observability", () => ({
+vi.mock("@pippa/observability", () => ({
   getLogger: () => ({
     ...mockLoggerMethods,
     child: () => mockLoggerMethods,

@@ -9,10 +9,10 @@
 
 import { z } from 'zod'
 import { tool } from 'ai'
-import { getLogger, withSpan } from '@recoverysky/observability'
-import type { LiteratureRepository } from '@recoverysky/db/stores'
-import type { QdrantVectorStore, LiteratureSearchHit } from '@recoverysky/memory'
-import type { IEmbeddingProvider, TraceContext } from '@recoverysky/types'
+import { getLogger, withSpan } from '@pippa/observability'
+import type { LiteratureRepository } from '@pippa/db/stores'
+import type { QdrantVectorStore, LiteratureSearchHit } from '@pippa/memory'
+import type { IEmbeddingProvider, TraceContext } from '@pippa/types'
 
 /**
  * Configuration for literature tools

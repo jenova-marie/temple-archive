@@ -6,7 +6,7 @@
  */
 
 import { Router, type Request, type Response } from 'express'
-import { getLogger } from '@recoverysky/observability'
+import { getLogger } from '@pippa/observability'
 import type { Container } from '../container.js'
 
 export function createGuidesRouter(container: Container): Router {

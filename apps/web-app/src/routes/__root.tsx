@@ -5,7 +5,6 @@ import {
   Outlet,
   useLocation,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import { useScrollStore } from "@/stores/scrollStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -126,8 +125,6 @@ function RootLayout() {
       <main className="container mx-auto px-4 py-6">
         <Outlet />
       </main>
-
-      {import.meta.env.DEV && <TanStackRouterDevtools />}
     </div>
   );
 }

@@ -5,7 +5,7 @@
  */
 
 import neo4j, { type Driver, type Session, type SessionConfig } from 'neo4j-driver'
-import { getLogger } from '@recoverysky/observability'
+import { getLogger } from '@pippa/observability'
 
 export interface Neo4jConfig {
   /** Neo4j bolt URI (e.g., bolt://localhost:7687) */

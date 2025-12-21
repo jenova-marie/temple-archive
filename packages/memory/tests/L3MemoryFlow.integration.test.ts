@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import neo4j, { Driver } from 'neo4j-driver'
 import { Neo4jKnowledgeStore } from '../src/stores/Neo4jKnowledgeStore.js'
 import { EntityExtractor, type ExtractionMode } from '../src/extraction/EntityExtractor.js'
-import type { Entity, Message, TraceContext, L3Entity } from '@recoverysky/types'
+import type { Entity, Message, TraceContext, L3Entity } from '@pippa/types'
 import Anthropic from '@anthropic-ai/sdk'
 
 // Skip if not running integration tests
