@@ -156,3 +156,11 @@ export {
   type EmbeddingBatchJobConfig,
   type UnembeddedItem,
 } from './jobs/index.js'
+
+// Deep Memory (source context enrichment)
+export {
+  DeepMemoryService,
+  type IDeepMemorySessionStore,
+  type ContextStrategy,
+  type DeepMemoryServiceConfig,
+} from './deepmemory/index.js'
