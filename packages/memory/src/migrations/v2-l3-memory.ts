@@ -13,7 +13,7 @@
  */
 
 import type { Driver, Session } from 'neo4j-driver'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 
 /**
  * Migration result
@@ -69,6 +69,7 @@ const TYPE_MAPPING: Record<string, string> = {
  */
 export async function migrateToL3Memory(driver: Driver): Promise<MigrationResult> {
   return withSpan('migrateToL3Memory', async () => {
+    const startTime = Date.now()
     const logger = getLogger().child({ component: 'L3Migration' })
     const result: MigrationResult = {
       success: false,
@@ -84,30 +85,50 @@ export async function migrateToL3Memory(driver: Driver): Promise<MigrationResult
       logger.info('Starting L3 Memory migration')
 
       // Step 1: Add new fields to entities
+      const step1Start = Date.now()
       result.entitiesUpdated = await migrateEntityFields(session, logger)
+      logger.debug({ durationMs: Date.now() - step1Start }, 'Step 1 complete')
 
       // Step 2: Extract observations from properties.context
+      const step2Start = Date.now()
       result.observationsCreated = await extractObservations(session, logger)
+      logger.debug({ durationMs: Date.now() - step2Start }, 'Step 2 complete')
 
       // Step 3: Convert typed relationships to RELATES_TO
+      const step3Start = Date.now()
       result.relationshipsConverted = await convertRelationships(session, logger)
+      logger.debug({ durationMs: Date.now() - step3Start }, 'Step 3 complete')
 
       // Step 4: Create indexes for new fields (if not exist)
+      const step4Start = Date.now()
       await createIndexes(session, logger)
+      logger.debug({ durationMs: Date.now() - step4Start }, 'Step 4 complete')
 
       result.success = true
+      const totalDurationMs = Date.now() - startTime
+
       logger.info(
         {
           entitiesUpdated: result.entitiesUpdated,
           observationsCreated: result.observationsCreated,
           relationshipsConverted: result.relationshipsConverted,
+          durationMs: totalDurationMs,
         },
         'L3 Memory migration complete'
       )
+
+      // Record metrics
+      pipelineMetrics.stageDuration.record(totalDurationMs, { stage: 'l3_migration' })
     } catch (error) {
+      const durationMs = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : String(error)
       result.errors.push(errorMessage)
-      logger.error({ error }, 'L3 Memory migration failed')
+      logger.debug(
+        { error, stack: error instanceof Error ? error.stack : undefined, durationMs },
+        'L3 Memory migration failed - full error'
+      )
+      logger.error({ errorMessage, durationMs }, 'L3 Memory migration failed')
+      pipelineMetrics.errors.add(1, { kind: 'l3_migration_error' })
     } finally {
       await session.close()
     }

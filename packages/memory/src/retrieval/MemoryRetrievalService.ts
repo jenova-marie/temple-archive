@@ -9,7 +9,7 @@
  * - Token budget fitting
  */
 
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import type {
   L3Entity,
   L3EntityWithObservations,
@@ -135,6 +135,7 @@ export class MemoryRetrievalService {
     ctx: TraceContext
   ): Promise<Result<RetrievalResult, StoreError>> {
     return withSpan('MemoryRetrievalService.retrieve', async () => {
+      const startTime = Date.now()
       const logger = getLogger().child({
         userId,
         queryLength: query.length,
@@ -143,22 +144,41 @@ export class MemoryRetrievalService {
 
       const opts = { ...DEFAULT_OPTIONS, ...options }
 
+      logger.debug(
+        {
+          limit: opts.limit,
+          maxTokens: opts.maxTokens,
+          includeObservations: opts.includeObservations,
+          includeConversationContext: opts.includeConversationContext,
+          contextStrategy: opts.contextStrategy,
+          minScore: opts.minScore,
+        },
+        'Starting L3 memory retrieval'
+      )
+
       try {
         // 1. Generate query embedding for future semantic search
         // Note: Semantic search via embedding will be added when Neo4j vector index is ready
         let hasEmbedding = false
+        const embedStartTime = Date.now()
         if (this.miniLM) {
           const embedResult = await this.miniLM.embedOne(query)
           if (embedResult.ok) {
             hasEmbedding = true
-            // TODO: Use embedding for vector search when findEntitiesByEmbedding is implemented
-            logger.debug('Query embedding generated for future semantic search')
+            logger.debug(
+              { durationMs: Date.now() - embedStartTime },
+              'Query embedding generated for semantic search'
+            )
+          } else {
+            logger.debug({ error: embedResult.error }, 'Query embedding generation failed')
           }
         }
 
         // 2. Search channels - currently using text-based search
         // Fulltext search on entity names
+        const searchStartTime = Date.now()
         const searchResult = await this.neo4jStore.searchEntities(query, ctx)
+        const searchDurationMs = Date.now() - searchStartTime
 
         let searchResults: L3Entity[] = []
         if (searchResult.ok) {
@@ -177,30 +197,59 @@ export class MemoryRetrievalService {
             sourceHistory: [],
             metadata: e.properties ?? {},
           }))
+          logger.debug(
+            { found: searchResults.length, durationMs: searchDurationMs },
+            'Entity search completed'
+          )
+        } else {
+          logger.debug(
+            { error: searchResult.error, query: query.slice(0, 100), durationMs: searchDurationMs },
+            'Entity search failed - full error details'
+          )
+          logger.warn({ errorKind: searchResult.error.kind, durationMs: searchDurationMs }, 'Entity search failed')
         }
 
         // 3. Merge and deduplicate
         const merged = this.mergeResults(searchResults)
-        logger.debug({ merged: merged.length }, 'Merged search results')
+        logger.debug({ before: searchResults.length, after: merged.length }, 'Results merged and deduplicated')
 
         // 4. Get observations for entities
         let entitiesWithObs: L3EntityWithObservations[] = []
-        if (opts.includeObservations) {
+        if (opts.includeObservations && merged.length > 0) {
+          const obsStartTime = Date.now()
           entitiesWithObs = await this.fetchObservations(merged, ctx)
+          const totalObs = entitiesWithObs.reduce((sum, e) => sum + e.observations.length, 0)
+          logger.debug(
+            { entities: merged.length, observations: totalObs, durationMs: Date.now() - obsStartTime },
+            'Observations fetched'
+          )
         } else {
           entitiesWithObs = merged.map((e) => ({ ...e, observations: [] }))
         }
 
         // 5. Score and rank
+        const scoreStartTime = Date.now()
         const scored = this.scoreEntities(entitiesWithObs, hasEmbedding)
         const ranked = scored
           .filter((e) => e.score >= opts.minScore)
           .sort((a, b) => b.score - a.score)
           .slice(0, opts.limit)
 
+        const filteredOut = scored.length - ranked.length
+        logger.debug(
+          {
+            scored: scored.length,
+            returned: ranked.length,
+            filteredByScore: filteredOut,
+            durationMs: Date.now() - scoreStartTime,
+          },
+          'Entities scored and ranked'
+        )
+
         // 6. Deep Memory enrichment
         let enriched: EnrichedL3Entity[]
-        if (opts.includeConversationContext && this.deepMemory) {
+        if (opts.includeConversationContext && this.deepMemory && ranked.length > 0) {
+          // Deep Memory enrichment is logged internally
           enriched = await this.deepMemory.enrichWithContext(
             ranked,
             opts.contextStrategy,
@@ -208,19 +257,35 @@ export class MemoryRetrievalService {
           )
         } else {
           enriched = ranked.map((e) => ({ ...e, conversationContexts: [] }))
+          if (ranked.length > 0 && !this.deepMemory) {
+            logger.debug('Deep Memory not configured, skipping enrichment')
+          }
         }
 
         // 7. Format and fit to token budget
+        const formatStartTime = Date.now()
         const formatted = this.formatForAgent(enriched, opts.maxTokens)
+        logger.debug(
+          { tokenCount: formatted.tokenCount, maxTokens: opts.maxTokens, durationMs: Date.now() - formatStartTime },
+          'Context formatted for agent'
+        )
 
+        const totalDurationMs = Date.now() - startTime
         logger.info(
           {
             totalMatched: merged.length,
             returned: enriched.length,
             tokenCount: formatted.tokenCount,
+            durationMs: totalDurationMs,
+            hasEmbedding,
+            deepMemoryEnabled: opts.includeConversationContext && !!this.deepMemory,
           },
-          'Memory retrieval complete'
+          'L3 memory retrieval complete'
         )
+
+        // Record metrics
+        pipelineMetrics.stageDuration.record(totalDurationMs, { stage: 'l3_memory_retrieval' })
+        pipelineMetrics.stageDuration.record(searchDurationMs, { stage: 'l3_entity_search' })
 
         return ok({
           entities: enriched,
@@ -229,7 +294,13 @@ export class MemoryRetrievalService {
           formattedContext: formatted.text,
         })
       } catch (error) {
-        logger.error({ error }, 'Memory retrieval failed')
+        const durationMs = Date.now() - startTime
+        logger.debug(
+          { error, stack: error instanceof Error ? error.stack : undefined, query: query.slice(0, 100), durationMs },
+          'L3 memory retrieval failed - full error'
+        )
+        logger.error({ errorMessage: error instanceof Error ? error.message : String(error), durationMs }, 'L3 memory retrieval failed')
+        pipelineMetrics.errors.add(1, { kind: 'l3_retrieval_error' })
         return err({
           kind: 'UnexpectedError',
           message: 'Memory retrieval failed',

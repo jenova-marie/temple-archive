@@ -7,7 +7,7 @@
  * For high-precision semantic search, use OpenAI embeddings in L4 (Qdrant).
  */
 
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import type { Result } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
 
@@ -144,7 +144,10 @@ export class MiniLMEmbeddingProvider {
         })
       }
 
+      const startTime = Date.now()
+
       try {
+        logger.debug({ count: texts.length }, 'Generating MiniLM embeddings')
         const embeddings: number[][] = []
 
         for (const text of texts) {
@@ -164,10 +167,27 @@ export class MiniLMEmbeddingProvider {
           embeddings.push(embedding)
         }
 
-        logger.debug({ count: texts.length, dim: embeddings[0]?.length }, 'Generated embeddings')
+        const durationMs = Date.now() - startTime
+        const avgPerText = texts.length > 0 ? Math.round(durationMs / texts.length) : 0
+
+        logger.debug(
+          {
+            count: texts.length,
+            dim: embeddings[0]?.length,
+            durationMs,
+            avgPerTextMs: avgPerText,
+          },
+          'MiniLM embeddings generated'
+        )
+
+        // Record metrics
+        pipelineMetrics.stageDuration.record(durationMs, { stage: 'miniLM_embed' })
+
         return ok(embeddings)
       } catch (error) {
-        logger.error({ error }, 'Failed to generate embeddings')
+        const durationMs = Date.now() - startTime
+        logger.error({ error, durationMs }, 'Failed to generate MiniLM embeddings')
+        pipelineMetrics.errors.add(1, { kind: 'miniLM_embedding_error' })
         return err({
           kind: 'EmbeddingError',
           message: 'Failed to generate embeddings',

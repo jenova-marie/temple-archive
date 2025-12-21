@@ -7,7 +7,7 @@
  * Runs on a configurable interval (default 30 seconds).
  */
 
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import type { TraceContext } from '@recoverysky/types'
 import type { MiniLMEmbeddingProvider } from '../embeddings/MiniLMProvider.js'
 import type { OpenAIEmbeddingProvider } from '../providers/OpenAIEmbeddingProvider.js'
@@ -157,7 +157,8 @@ export class EmbeddingBatchJob {
     try {
       await this.processQueue(ctx)
     } catch (error) {
-      logger.error({ error }, 'Embedding batch job tick failed')
+      logger.debug({ error, stack: error instanceof Error ? error.stack : undefined }, 'Embedding batch job tick failed - full error')
+      logger.error({ errorMessage: error instanceof Error ? error.message : String(error) }, 'Embedding batch job tick failed')
     }
 
     // Schedule next tick
@@ -175,50 +176,75 @@ export class EmbeddingBatchJob {
       })
 
       if (this.processing) {
-        logger.debug('Already processing, skipping')
+        logger.debug('Already processing, skipping this tick')
         return 0
       }
 
       this.processing = true
+      const batchStartTime = Date.now()
 
       try {
         // 1. Find items needing embeddings
+        logger.debug({ batchSize: this.config.batchSize }, 'Fetching unembedded items')
+        const fetchStartTime = Date.now()
         const pendingResult = await this.neo4jStore.getUnembeddedItems(
           this.config.batchSize,
           ctx
         )
+        const fetchDurationMs = Date.now() - fetchStartTime
 
         if (!pendingResult.ok) {
-          logger.error({ error: pendingResult.error }, 'Failed to get unembedded items')
+          logger.debug({ error: pendingResult.error, durationMs: fetchDurationMs }, 'Failed to get unembedded items - full error')
+          logger.error({ errorKind: pendingResult.error.kind, durationMs: fetchDurationMs }, 'Failed to get unembedded items')
+          pipelineMetrics.errors.add(1, { kind: 'embedding_batch_fetch_error' })
           return 0
         }
 
         const pending = pendingResult.value
         if (pending.length === 0) {
-          logger.debug('No items need embedding')
+          logger.debug({ fetchDurationMs }, 'No items need embedding')
           return 0
         }
 
-        logger.info({ count: pending.length }, 'Processing embedding batch')
+        const entityCount = pending.filter((i) => i.type === 'entity').length
+        const observationCount = pending.filter((i) => i.type === 'observation').length
+
+        logger.info(
+          { count: pending.length, entities: entityCount, observations: observationCount },
+          'Processing embedding batch'
+        )
 
         // 2. Generate L3 embeddings (MiniLM - local)
         const texts = pending.map((item) => item.text)
+        const l3StartTime = Date.now()
         const l3Result = await this.miniLM.embed(texts)
+        const l3DurationMs = Date.now() - l3StartTime
 
         if (!l3Result.ok) {
-          logger.error({ error: l3Result.error }, 'Failed to generate L3 embeddings')
+          logger.debug({ error: l3Result.error, textCount: texts.length, durationMs: l3DurationMs }, 'Failed to generate L3 embeddings - full error')
+          logger.error({ errorKind: l3Result.error.kind, durationMs: l3DurationMs }, 'Failed to generate L3 embeddings')
+          pipelineMetrics.errors.add(1, { kind: 'embedding_batch_l3_error' })
           return 0
         }
 
+        logger.debug({ count: texts.length, durationMs: l3DurationMs }, 'L3 embeddings generated')
+
         // 3. Generate L4 embeddings (OpenAI)
+        const l4StartTime = Date.now()
         const l4Result = await this.openAI.embedBatch(texts, ctx)
+        const l4DurationMs = Date.now() - l4StartTime
 
         if (!l4Result.ok) {
-          logger.error({ error: l4Result.error }, 'Failed to generate L4 embeddings')
+          logger.debug({ error: l4Result.error, textCount: texts.length, durationMs: l4DurationMs }, 'Failed to generate L4 embeddings - full error')
+          logger.warn({ errorKind: l4Result.error.kind, durationMs: l4DurationMs }, 'Failed to generate L4 embeddings, continuing with L3 only')
+          pipelineMetrics.errors.add(1, { kind: 'embedding_batch_l4_error' })
           // Continue with just L3 embeddings if L4 fails
+        } else {
+          logger.debug({ count: texts.length, durationMs: l4DurationMs }, 'L4 embeddings generated')
         }
 
         // 4. Update Neo4j with L3 embeddings
+        const neo4jStartTime = Date.now()
         const updateResult = await this.neo4jStore.batchUpdateEmbeddings(
           pending.map((item, i) => ({
             id: item.id,
@@ -227,14 +253,20 @@ export class EmbeddingBatchJob {
           })),
           ctx
         )
+        const neo4jDurationMs = Date.now() - neo4jStartTime
 
         if (!updateResult.ok) {
-          logger.error({ error: updateResult.error }, 'Failed to update L3 embeddings')
+          logger.debug({ error: updateResult.error, itemCount: pending.length, durationMs: neo4jDurationMs }, 'Failed to update L3 embeddings in Neo4j - full error')
+          logger.error({ errorKind: updateResult.error.kind, durationMs: neo4jDurationMs }, 'Failed to update L3 embeddings in Neo4j')
+          pipelineMetrics.errors.add(1, { kind: 'embedding_batch_neo4j_error' })
+        } else {
+          logger.debug({ count: pending.length, durationMs: neo4jDurationMs }, 'L3 embeddings stored in Neo4j')
         }
 
         // 5. Update Qdrant with L4 embeddings (if available)
         // TODO: Add batchUpsertEntities method to QdrantVectorStore
         if (l4Result.ok && 'batchUpsertEntities' in this.qdrantStore) {
+          const qdrantStartTime = Date.now()
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const qdrantResult = await (this.qdrantStore as any).batchUpsertEntities(
             pending.map((item, i) => ({
@@ -245,15 +277,36 @@ export class EmbeddingBatchJob {
             })),
             ctx
           )
+          const qdrantDurationMs = Date.now() - qdrantStartTime
 
           if (!qdrantResult.ok) {
-            logger.error({ error: qdrantResult.error }, 'Failed to update L4 embeddings')
+            logger.debug({ error: qdrantResult.error, itemCount: pending.length, durationMs: qdrantDurationMs }, 'Failed to update L4 embeddings in Qdrant - full error')
+            logger.error({ errorKind: qdrantResult.error.kind, durationMs: qdrantDurationMs }, 'Failed to update L4 embeddings in Qdrant')
+            pipelineMetrics.errors.add(1, { kind: 'embedding_batch_qdrant_error' })
+          } else {
+            logger.debug({ count: pending.length, durationMs: qdrantDurationMs }, 'L4 embeddings stored in Qdrant')
           }
         } else if (l4Result.ok) {
           logger.debug('Skipping L4 embedding storage - batchUpsertEntities not implemented')
         }
 
-        logger.info({ processed: pending.length }, 'Embedding batch complete')
+        const totalDurationMs = Date.now() - batchStartTime
+        logger.info(
+          {
+            processed: pending.length,
+            entities: entityCount,
+            observations: observationCount,
+            durationMs: totalDurationMs,
+            l3DurationMs,
+            l4DurationMs: l4Result.ok ? l4DurationMs : null,
+            neo4jDurationMs,
+          },
+          'Embedding batch complete'
+        )
+
+        // Record metrics
+        pipelineMetrics.stageDuration.record(totalDurationMs, { stage: 'embedding_batch' })
+
         return pending.length
       } finally {
         this.processing = false

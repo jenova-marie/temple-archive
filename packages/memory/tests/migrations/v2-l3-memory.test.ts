@@ -19,6 +19,12 @@ vi.mock('@recoverysky/observability', () => ({
     }),
   }),
   withSpan: vi.fn().mockImplementation((_name, fn) => fn()),
+  pipelineMetrics: {
+    stageDuration: { record: vi.fn() },
+    errors: { add: vi.fn() },
+    memoryCacheHits: { add: vi.fn() },
+    memoryCacheMisses: { add: vi.fn() },
+  },
 }))
 
 // Import after mocking

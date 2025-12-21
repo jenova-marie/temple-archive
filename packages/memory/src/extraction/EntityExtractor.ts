@@ -16,7 +16,7 @@ import type {
   SourceEntry,
 } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
 
 /**
@@ -768,10 +768,26 @@ export class EntityExtractor {
     nameResolutionMap: Map<string, string>,
     ctx: TraceContext
   ): Promise<void> {
+    const startTime = Date.now()
     const logger = getLogger().child({ requestId: ctx.requestId })
     const now = Date.now()
     const conversationId = userMessage.conversationId
     const messageId = userMessage.id
+
+    logger.debug(
+      {
+        entityCount: result.entities.length,
+        relationshipCount: result.relationships.length,
+        observationCount: result.observations?.length ?? 0,
+        conversationId,
+      },
+      'Starting L3 persistence'
+    )
+
+    let entitiesCreated = 0
+    let entitiesUpdated = 0
+    let observationsCreated = 0
+    let relationshipsCreated = 0
 
     // Store entities using L3 methods
     for (const entity of result.entities) {
@@ -798,8 +814,18 @@ export class EntityExtractor {
       )
 
       if (!l3Result.ok) {
-        logger.warn({ error: l3Result.error, entity: entity.name }, 'Failed to store L3 entity')
+        logger.debug(
+          { error: l3Result.error, entity: entity.name, canonicalType: toCanonicalType(entity.type) },
+          'L3 entity upsert failed - full error'
+        )
+        logger.warn({ errorKind: l3Result.error.kind, entity: entity.name }, 'Failed to store L3 entity')
         continue
+      }
+
+      if (action === 'created') {
+        entitiesCreated++
+      } else {
+        entitiesUpdated++
       }
 
       // Track source history for Deep Memory
@@ -816,10 +842,11 @@ export class EntityExtractor {
         ctx
       )
       if (!historyResult.ok) {
-        logger.warn(
-          { error: historyResult.error, entity: entity.name },
-          'Failed to append source history'
+        logger.debug(
+          { error: historyResult.error, entity: entity.name, sourceEntry },
+          'Source history append failed - full error'
         )
+        logger.warn({ errorKind: historyResult.error.kind, entity: entity.name }, 'Failed to append source history')
       }
     }
 
@@ -837,10 +864,13 @@ export class EntityExtractor {
           ctx
         )
         if (!obsResult.ok) {
-          logger.warn(
-            { error: obsResult.error, entityName: obs.entityName },
-            'Failed to create observation'
+          logger.debug(
+            { error: obsResult.error, entityName: obs.entityName, content: obs.content.slice(0, 100) },
+            'Observation creation failed - full error'
           )
+          logger.warn({ errorKind: obsResult.error.kind, entityName: obs.entityName }, 'Failed to create observation')
+        } else {
+          observationsCreated++
         }
       }
     }
@@ -881,9 +911,30 @@ export class EntityExtractor {
         ctx
       )
       if (!relResult.ok) {
-        logger.warn({ error: relResult.error, relationship: rel }, 'Failed to store L3 relationship')
+        logger.debug(
+          { error: relResult.error, from: resolvedFrom, to: resolvedTo, type: rel.type },
+          'L3 relationship creation failed - full error'
+        )
+        logger.warn({ errorKind: relResult.error.kind, from: resolvedFrom, to: resolvedTo }, 'Failed to store L3 relationship')
+      } else {
+        relationshipsCreated++
       }
     }
+
+    const durationMs = Date.now() - startTime
+    logger.info(
+      {
+        entitiesCreated,
+        entitiesUpdated,
+        observationsCreated,
+        relationshipsCreated,
+        durationMs,
+      },
+      'L3 persistence complete'
+    )
+
+    // Record metrics
+    pipelineMetrics.stageDuration.record(durationMs, { stage: 'l3_entity_persist' })
   }
 
   /**
