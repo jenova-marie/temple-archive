@@ -15,10 +15,12 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Deduplicate React to prevent "Invalid hook call" errors
+    dedupe: ["react", "react-dom"],
   },
-  // Pre-bundle VAD/ONNX deps to convert CommonJS to ESM
+  // Pre-bundle deps to convert CommonJS to ESM and deduplicate React
   optimizeDeps: {
-    include: ["@ricky0123/vad-react", "@ricky0123/vad-web", "onnxruntime-web"],
+    include: ["@ricky0123/vad-react", "react", "react-dom"],
   },
   server: {
     proxy: {
