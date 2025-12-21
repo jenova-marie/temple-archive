@@ -13,7 +13,7 @@
     "build": "pnpm -r --filter=!api build",
     "build:all": "pnpm -r build",
     "build:docker:local": "DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t recoverysky-agent .",
-    "dev": "pnpm --filter api dev",
+    "dev": "pnpm -r --parallel --filter './apps/*' dev",
     "start": "pnpm --filter api start",
     "test": "vitest run",
     "test:watch": "vitest",
