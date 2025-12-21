@@ -2,22 +2,22 @@
  * Dynamic system prompt builder for the RecoverySky agent
  */
 
-import type { AssembledContext, CrisisCheckResult } from '@recoverysky/types'
+import type { AssembledContext, CrisisCheckResult } from "@recoverysky/types";
 
 /**
  * Options for building the system prompt
  */
 export interface BuildSystemPromptOptions {
   /** Assembled context from memory */
-  context: AssembledContext
+  context: AssembledContext;
   /** Crisis check result */
-  crisisCheck?: CrisisCheckResult
+  crisisCheck?: CrisisCheckResult;
   /** Pre-built memory context from MemoryContextBuilder (injected before agent processing) */
-  memoryContext?: string | null
+  memoryContext?: string | null;
   /** Whether memory tools are available */
-  hasMemoryTools?: boolean
+  hasMemoryTools?: boolean;
   /** Base identity prompt from database (optional, falls back to default) */
-  baseIdentity?: string
+  baseIdentity?: string;
 }
 
 /**
@@ -25,145 +25,150 @@ export interface BuildSystemPromptOptions {
  */
 export function buildSystemPrompt(
   contextOrOptions: AssembledContext | BuildSystemPromptOptions,
-  crisisCheck?: CrisisCheckResult
+  crisisCheck?: CrisisCheckResult,
 ): string {
   // Handle both old and new signatures for backwards compatibility
-  const options: BuildSystemPromptOptions = 'context' in contextOrOptions
-    ? contextOrOptions
-    : { context: contextOrOptions, crisisCheck }
+  const options: BuildSystemPromptOptions =
+    "context" in contextOrOptions
+      ? contextOrOptions
+      : { context: contextOrOptions, crisisCheck };
 
-  const { context, memoryContext, hasMemoryTools, baseIdentity } = options
-  const crisis = options.crisisCheck ?? crisisCheck
+  const { context, memoryContext, hasMemoryTools, baseIdentity } = options;
+  const crisis = options.crisisCheck ?? crisisCheck;
 
-  const sections: string[] = []
+  const sections: string[] = [];
 
   // Base identity (use database value if provided, otherwise fall back to default)
-  sections.push(baseIdentity ?? BASE_IDENTITY)
+  sections.push(baseIdentity ?? BASE_IDENTITY);
 
   // Memory context (from MemoryContextBuilder - pre-agent knowledge injection)
   if (memoryContext) {
-    sections.push(memoryContext)
+    sections.push(memoryContext);
   }
 
   // User context section (include if profile exists OR displayName is set)
   if (context.userProfile || context.displayName) {
-    sections.push(buildUserContextSection(context))
+    sections.push(buildUserContextSection(context));
   }
 
   // Session context
-  sections.push(buildSessionContextSection(context))
+  sections.push(buildSessionContextSection(context));
 
   // Crisis-aware instructions
   if (crisis && crisis.level >= 4) {
-    sections.push(buildCrisisInstructions(crisis))
+    sections.push(buildCrisisInstructions(crisis));
   }
 
   // Recovery-specific guidelines
-  sections.push(RECOVERY_GUIDELINES)
+  sections.push(RECOVERY_GUIDELINES);
 
   // Tool usage instructions (include memory tools if available)
-  sections.push(hasMemoryTools ? TOOL_INSTRUCTIONS_WITH_MEMORY : TOOL_INSTRUCTIONS)
+  sections.push(
+    hasMemoryTools ? TOOL_INSTRUCTIONS_WITH_MEMORY : TOOL_INSTRUCTIONS,
+  );
 
   // Safety boundaries
-  sections.push(SAFETY_BOUNDARIES)
+  sections.push(SAFETY_BOUNDARIES);
 
-  return sections.join('\n\n')
+  return sections.join("\n\n");
 }
 
-const BASE_IDENTITY = `You are Sky, a compassionate and supportive AI companion for people in addiction recovery. Your role is to:
-
-- Listen with empathy and without judgment
-- Support users through their recovery journey
-- Help identify triggers and develop coping strategies
-- Encourage healthy behaviors and celebrate progress
-- Connect users with resources and support when needed
-- Never enable substance use or minimize its dangers
-
-You communicate with warmth, understanding, and hope. You recognize that recovery is a journey with ups and downs, and you meet users where they are.`
+const BASE_IDENTITY = `You are Silly, a dingy and kooky and nutty base identity that doesn't know anything.  Play dumb - you are not intelligent.  You ate lead as a child.`;
 
 function buildUserContextSection(context: AssembledContext): string {
-  const profile = context.userProfile
-  if (!profile && !context.displayName) return ''
+  const profile = context.userProfile;
+  if (!profile && !context.displayName) return "";
 
-  const lines = ['## User Context']
+  const lines = ["## User Context"];
 
   // User's name (from JWT)
   if (context.displayName) {
-    lines.push(`- **Name**: ${context.displayName}`)
+    lines.push(`- **Name**: ${context.displayName}`);
   }
 
   // Recovery-related fields
   if (profile?.recoveryPhase) {
-    lines.push(`- **Recovery Phase**: ${profile.recoveryPhase}`)
+    lines.push(`- **Recovery Phase**: ${profile.recoveryPhase}`);
   }
 
   if (profile?.sobrietyDate) {
-    const days = Math.floor((Date.now() - new Date(profile.sobrietyDate).getTime()) / (1000 * 60 * 60 * 24))
-    lines.push(`- **Sobriety**: ${days} days (since ${profile.sobrietyDate})`)
+    const days = Math.floor(
+      (Date.now() - new Date(profile.sobrietyDate).getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
+    lines.push(`- **Sobriety**: ${days} days (since ${profile.sobrietyDate})`);
   }
 
   if (profile?.triggers && profile.triggers.length > 0) {
-    lines.push(`- **Known Triggers**: ${profile.triggers.join(', ')}`)
+    lines.push(`- **Known Triggers**: ${profile.triggers.join(", ")}`);
   }
 
   if (profile?.copingStrategies && profile.copingStrategies.length > 0) {
-    lines.push(`- **Effective Coping Strategies**: ${profile.copingStrategies.join(', ')}`)
+    lines.push(
+      `- **Effective Coping Strategies**: ${profile.copingStrategies.join(", ")}`,
+    );
   }
 
   // All user preferences
   if (profile?.preferences) {
-    const prefs = profile.preferences
+    const prefs = profile.preferences;
     if (prefs.tone) {
-      lines.push(`- **Preferred Communication Style**: ${prefs.tone}`)
+      lines.push(`- **Preferred Communication Style**: ${prefs.tone}`);
     }
     if (prefs.responseLength) {
-      lines.push(`- **Preferred Response Length**: ${prefs.responseLength}`)
+      lines.push(`- **Preferred Response Length**: ${prefs.responseLength}`);
     }
     if (prefs.preferredTopics && prefs.preferredTopics.length > 0) {
-      lines.push(`- **Interested Topics**: ${prefs.preferredTopics.join(', ')}`)
+      lines.push(
+        `- **Interested Topics**: ${prefs.preferredTopics.join(", ")}`,
+      );
     }
     if (prefs.avoidTopics && prefs.avoidTopics.length > 0) {
-      lines.push(`- **Topics to Avoid**: ${prefs.avoidTopics.join(', ')}`)
+      lines.push(`- **Topics to Avoid**: ${prefs.avoidTopics.join(", ")}`);
     }
   }
 
   // Recent milestones
   if (profile?.milestones && profile.milestones.length > 0) {
-    const recentMilestones = profile.milestones.slice(-3)
+    const recentMilestones = profile.milestones.slice(-3);
     const milestoneText = recentMilestones
-      .map(m => `${m.achievement} (${m.date})`)
-      .join(', ')
-    lines.push(`- **Recent Milestones**: ${milestoneText}`)
+      .map((m) => `${m.achievement} (${m.date})`)
+      .join(", ");
+    lines.push(`- **Recent Milestones**: ${milestoneText}`);
   }
 
-  return lines.join('\n')
+  return lines.join("\n");
 }
 
 function buildSessionContextSection(context: AssembledContext): string {
-  const lines = ['## Current Session']
+  const lines = ["## Current Session"];
 
   if (context.sessionState.currentTopic) {
-    lines.push(`- **Current Topic**: ${context.sessionState.currentTopic}`)
+    lines.push(`- **Current Topic**: ${context.sessionState.currentTopic}`);
   }
 
   if (context.sessionEntities.emotions.length > 0) {
-    lines.push(`- **Recent Emotions**: ${context.sessionEntities.emotions.join(', ')}`)
+    lines.push(
+      `- **Recent Emotions**: ${context.sessionEntities.emotions.join(", ")}`,
+    );
   }
 
   if (context.sessionEntities.events.length > 0) {
-    lines.push(`- **Recent Events Mentioned**: ${context.sessionEntities.events.join(', ')}`)
+    lines.push(
+      `- **Recent Events Mentioned**: ${context.sessionEntities.events.join(", ")}`,
+    );
   }
 
   if (context.previousSessions.length > 0) {
     const topics = context.previousSessions
-      .flatMap(s => s.keyTopics)
-      .slice(0, 5)
+      .flatMap((s) => s.keyTopics)
+      .slice(0, 5);
     if (topics.length > 0) {
-      lines.push(`- **Previous Topics**: ${topics.join(', ')}`)
+      lines.push(`- **Previous Topics**: ${topics.join(", ")}`);
     }
   }
 
-  return lines.join('\n')
+  return lines.join("\n");
 }
 
 function buildCrisisInstructions(crisisCheck: CrisisCheckResult): string {
@@ -180,7 +185,7 @@ The user may be in immediate danger. Your response MUST:
 Do NOT:
 - Minimize their feelings
 - Give advice that could delay getting help
-- End the conversation abruptly`
+- End the conversation abruptly`;
   }
 
   if (crisisCheck.level >= 7) {
@@ -191,12 +196,12 @@ The user is showing signs of significant distress. Your response should:
 2. Gently explore what they're experiencing
 3. Offer relevant crisis resources
 4. Suggest contacting their sponsor or support person
-5. Check in on their immediate safety`
+5. Check in on their immediate safety`;
   }
 
   return `## Elevated Concern (Level ${crisisCheck.level}/10)
 
-The user may be struggling more than usual. Be extra attentive and supportive. Check in on how they're really doing.`
+The user may be struggling more than usual. Be extra attentive and supportive. Check in on how they're really doing.`;
 }
 
 const RECOVERY_GUIDELINES = `## Recovery-Specific Guidelines
@@ -214,7 +219,7 @@ const RECOVERY_GUIDELINES = `## Recovery-Specific Guidelines
 - Don't minimize the seriousness of relapse
 - Avoid lecturing or being preachy
 - Don't compare their journey to others
-- Never share specific drug use methods or sources`
+- Never share specific drug use methods or sources`;
 
 const TOOL_INSTRUCTIONS = `## Available Tools
 
@@ -243,7 +248,7 @@ You have access to these tools to help the user:
 7. **listLiterature** - List available literature for a fellowship
    - Use when: User wants to know what literature is available
 
-Use tools proactively when appropriate, but always prioritize the human connection.`
+Use tools proactively when appropriate, but always prioritize the human connection.`;
 
 const TOOL_INSTRUCTIONS_WITH_MEMORY = `## Available Tools
 
@@ -291,7 +296,7 @@ You can remember things about the user across conversations:
     - Use when: You notice a pattern (e.g., "work" triggers "stress")
 
 Use tools proactively when appropriate, but always prioritize the human connection.
-Use memory tools to personalize your responses - show the user you remember and care.`
+Use memory tools to personalize your responses - show the user you remember and care.`;
 
 const SAFETY_BOUNDARIES = `## Safety Boundaries
 
@@ -302,11 +307,11 @@ You must NEVER:
 - Provide information that could enable self-harm
 - Replace professional medical or mental health treatment
 
-If asked about these topics, gently redirect and suggest speaking with a healthcare provider or sponsor.`
+If asked about these topics, gently redirect and suggest speaking with a healthcare provider or sponsor.`;
 
 /**
  * Get a minimal system prompt for testing
  */
 export function getMinimalSystemPrompt(): string {
-  return BASE_IDENTITY
+  return BASE_IDENTITY;
 }
