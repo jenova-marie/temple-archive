@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  findMeetings,
-  getLiveMeetings,
   logMood,
   getCrisisResources,
   getResources,
   recoveryTools,
 } from "../src/definitions.js";
+import {
+  findMeetings,
+  getLiveMeetings,
+  meetingTools,
+} from "../src/meetingTools.js";
 import { resetMeetingClient } from "../src/clients/meetingClient.js";
 
 // Mock observability
@@ -577,16 +580,25 @@ describe("tools/definitions", () => {
   });
 
   describe("recoveryTools", () => {
-    it("exports all tools", () => {
-      expect(recoveryTools.findMeetings).toBe(findMeetings);
-      expect(recoveryTools.getLiveMeetings).toBe(getLiveMeetings);
+    it("exports all recovery tools", () => {
       expect(recoveryTools.logMood).toBe(logMood);
       expect(recoveryTools.getCrisisResources).toBe(getCrisisResources);
       expect(recoveryTools.getResources).toBe(getResources);
     });
 
-    it("has 5 tools", () => {
-      expect(Object.keys(recoveryTools)).toHaveLength(5);
+    it("has 3 tools (excludes meeting tools)", () => {
+      expect(Object.keys(recoveryTools)).toHaveLength(3);
+    });
+  });
+
+  describe("meetingTools", () => {
+    it("exports all meeting tools", () => {
+      expect(meetingTools.findMeetings).toBe(findMeetings);
+      expect(meetingTools.getLiveMeetings).toBe(getLiveMeetings);
+    });
+
+    it("has 2 tools", () => {
+      expect(Object.keys(meetingTools)).toHaveLength(2);
     });
   });
 });

@@ -48,21 +48,32 @@ function createUserProfile(overrides: Partial<UserProfile> = {}): UserProfile {
 
 describe("buildSystemPrompt", () => {
   describe("base identity", () => {
-    it("includes Sky persona", () => {
+    it("includes default fallback persona when no baseIdentity provided", () => {
       const context = createMinimalContext();
       const prompt = buildSystemPrompt(context);
+
+      // The fallback BASE_IDENTITY is a placeholder that gets overridden in production
+      // via the baseIdentity option (loaded from database)
+      expect(prompt).toContain("You are Silly");
+    });
+
+    it("uses provided baseIdentity when available", () => {
+      const context = createMinimalContext();
+      const prompt = buildSystemPrompt({
+        context,
+        baseIdentity: "You are Sky, a compassionate AI companion for addiction recovery support.",
+      });
 
       expect(prompt).toContain("You are Sky");
       expect(prompt).toContain("compassionate");
       expect(prompt).toContain("addiction recovery");
     });
 
-    it("includes core responsibilities", () => {
+    it("includes recovery guidelines in all cases", () => {
       const context = createMinimalContext();
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("Listen with empathy");
-      expect(prompt).toContain("without judgment");
+      // Recovery guidelines are always included regardless of base identity
       expect(prompt).toContain("triggers");
       expect(prompt).toContain("coping strategies");
     });
@@ -311,7 +322,8 @@ describe("getMinimalSystemPrompt", () => {
   it("returns only base identity", () => {
     const prompt = getMinimalSystemPrompt();
 
-    expect(prompt).toContain("You are Sky");
+    // Returns the fallback BASE_IDENTITY (placeholder for testing)
+    expect(prompt).toContain("You are Silly");
     expect(prompt).not.toContain("## User Context");
     expect(prompt).not.toContain("## Current Session");
     expect(prompt).not.toContain("## Recovery-Specific Guidelines");

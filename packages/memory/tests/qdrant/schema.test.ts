@@ -23,8 +23,11 @@ vi.mock("@recoverysky/observability", () => ({
 
 describe("qdrant/schema", () => {
   describe("constants", () => {
-    it("has correct collection name", () => {
-      expect(COLLECTION_NAME).toBe("messages");
+    it("has correct collection name from env or default", () => {
+      // COLLECTION_NAME reads from QDRANT_COLLECTION_NAME env var, defaulting to 'messages'
+      // In test environment, it may be set to a different value (e.g., 'pippa')
+      const expectedName = process.env.QDRANT_COLLECTION_NAME ?? "messages";
+      expect(COLLECTION_NAME).toBe(expectedName);
     });
 
     it("has correct vector size for OpenAI embeddings", () => {
@@ -100,10 +103,11 @@ describe("qdrant/schema", () => {
 
     it("does nothing if collection already exists", async () => {
       mockClient.getCollections.mockResolvedValue({
-        collections: [{ name: "messages" }],
+        collections: [{ name: "test-collection" }],
       });
 
-      await ensureCollection(mockClient as any);
+      // Pass explicit collection name to avoid env var dependency
+      await ensureCollection(mockClient as any, "test-collection");
 
       expect(mockClient.createCollection).not.toHaveBeenCalled();
       expect(mockClient.createPayloadIndex).not.toHaveBeenCalled();
@@ -172,7 +176,8 @@ describe("qdrant/schema", () => {
       mockClient.createCollection.mockResolvedValue(undefined);
       mockClient.createPayloadIndex.mockResolvedValue(undefined);
 
-      await ensureCollection(mockClient as any);
+      // Pass explicit collection name to avoid env var dependency
+      await ensureCollection(mockClient as any, "messages", 1536, "hybrid");
 
       // Should create 3 indexes: userId, conversationId, timestamp
       expect(mockClient.createPayloadIndex).toHaveBeenCalledTimes(3);

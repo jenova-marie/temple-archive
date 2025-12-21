@@ -17,25 +17,32 @@ import type {
 } from "@recoverysky/types";
 import { MemoryOrchestrator } from "@recoverysky/memory";
 
-// Mock observability
-vi.mock("@recoverysky/observability", () => ({
-  getLogger: () => ({
-    child: () => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
+// Mock observability - include all logger methods at root level for direct calls
+vi.mock("@recoverysky/observability", () => {
+  const mockLoggerMethods = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  return {
+    getLogger: () => ({
+      ...mockLoggerMethods,
+      child: () => ({
+        ...mockLoggerMethods,
+        child: () => mockLoggerMethods,
+      }),
     }),
-  }),
-  withSpan: (_name: string, fn: () => Promise<unknown>) => fn(),
-  pipelineMetrics: {
-    stageDuration: { record: vi.fn() },
-    tokensUsed: { add: vi.fn() },
-    crisisDetections: { add: vi.fn() },
-    memoryCacheHits: { add: vi.fn() },
-    memoryCacheMisses: { add: vi.fn() },
-  },
-}));
+    withSpan: (_name: string, fn: () => Promise<unknown>) => fn(),
+    pipelineMetrics: {
+      stageDuration: { record: vi.fn() },
+      tokensUsed: { add: vi.fn() },
+      crisisDetections: { add: vi.fn() },
+      memoryCacheHits: { add: vi.fn() },
+      memoryCacheMisses: { add: vi.fn() },
+    },
+  };
+});
 
 // Mock buildSystemPrompt
 vi.mock("@recoverysky/agent", () => ({
@@ -45,6 +52,8 @@ vi.mock("@recoverysky/agent", () => ({
 // Mock recoveryTools
 vi.mock("@recoverysky/tools", () => ({
   recoveryTools: {},
+  meetingTools: {},
+  literatureTools: {},
   getMemoryTools: vi.fn().mockReturnValue({}),
   setMemoryToolTraceContext: vi.fn(),
   clearMemoryToolTraceContext: vi.fn(),

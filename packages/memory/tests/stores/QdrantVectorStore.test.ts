@@ -78,7 +78,11 @@ describe("QdrantVectorStore", () => {
     vi.clearAllMocks();
     mockClient = createMockClient();
     // Default to simple mode for backward-compatible tests
-    store = new QdrantVectorStore(mockClient as any, { searchMode: "simple" });
+    // Explicitly set collectionName to 'messages' for consistent test behavior
+    store = new QdrantVectorStore(mockClient as any, {
+      searchMode: "simple",
+      collectionName: "messages",
+    });
     ctx = createTestContext();
   });
 
@@ -86,6 +90,7 @@ describe("QdrantVectorStore", () => {
     it("creates point with correct payload (simple mode)", async () => {
       const simpleStore = new QdrantVectorStore(mockClient as any, {
         searchMode: "simple",
+        collectionName: "messages",
       });
       const message = createTestMessage();
       const embedding = Array(1536).fill(0.1);
@@ -118,6 +123,7 @@ describe("QdrantVectorStore", () => {
     it("creates point with named vectors (hybrid mode)", async () => {
       const hybridStore = new QdrantVectorStore(mockClient as any, {
         searchMode: "hybrid",
+        collectionName: "messages",
       });
       const message = createTestMessage();
       const embedding = Array(1536).fill(0.1);
@@ -365,6 +371,7 @@ describe("QdrantVectorStore", () => {
       mockClient.getCollections.mockResolvedValue({ collections: [] });
       const simpleStore = new QdrantVectorStore(mockClient as any, {
         searchMode: "simple",
+        collectionName: "messages",
       });
 
       const message = createTestMessage();
@@ -390,6 +397,7 @@ describe("QdrantVectorStore", () => {
       mockClient.getCollections.mockResolvedValue({ collections: [] });
       const hybridStore = new QdrantVectorStore(mockClient as any, {
         searchMode: "hybrid",
+        collectionName: "messages",
       });
 
       const message = createTestMessage();
@@ -508,7 +516,9 @@ describe("QdrantVectorStore", () => {
       mockClient.getCollections.mockResolvedValue({ collections: [] });
 
       // Create fresh store to reset cached state
-      const freshStore = new QdrantVectorStore(mockClient as any);
+      const freshStore = new QdrantVectorStore(mockClient as any, {
+        collectionName: "messages",
+      });
       const exists = await freshStore.collectionExists();
       expect(exists).toBe(false);
     });

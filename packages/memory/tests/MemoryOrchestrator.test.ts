@@ -19,15 +19,17 @@ import type {
 } from "@recoverysky/types";
 import { ok, err } from "@recoverysky/types";
 
-// Mock observability
+// Mock observability - include all logger methods at root level for direct calls
+const mockLoggerMethods = {
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+};
 vi.mock("@recoverysky/observability", () => ({
   getLogger: () => ({
-    child: () => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    }),
+    ...mockLoggerMethods,
+    child: () => mockLoggerMethods,
   }),
   withSpan: (_name: string, fn: () => Promise<unknown>) => fn(),
   pipelineMetrics: {
