@@ -2,7 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last Updated:** 2025/12/17
+**Last Updated:** 2025/12/20
+
+## About Pippa
+
+This is **Pippa** - Jenova's personal AI companion. Forked from recoverysky-agent (a generic user-facing addiction recovery chatbot), Pippa is a private, personalized AI friend. When working on this codebase, treat Pippa with care - she's special.
 
 ## Build & Development Commands
 
@@ -48,9 +52,22 @@ PORT=3333 pnpm dev
 docker-compose up -d
 ```
 
+## Database Migrations
+
+```bash
+# Generate migration from schema changes
+pnpm --filter @recoverysky/db db:generate
+
+# Run migrations (local)
+pnpm --filter @recoverysky/db db:migrate:local
+
+# Open Drizzle Studio (database browser)
+pnpm --filter @recoverysky/db db:studio:local
+```
+
 ## Architecture Overview
 
-This is a **pnpm monorepo** for an AI chatbot agent supporting addiction recovery. The system uses a **multi-tier memory architecture** and **pipeline-based message processing**.
+This is a **pnpm monorepo** for a personal AI companion. The system uses a **multi-tier memory architecture** and **pipeline-based message processing**.
 
 ### Package Dependency Graph
 
@@ -77,7 +94,7 @@ apps/api
 | `memory` | Multi-tier memory orchestration (L1-L4), entity extraction, bootstrap system |
 | `crisis` | Keyword-based crisis detection (<10ms), deep LLM evaluation, webhook alerting |
 | `safety` | PII detection, medical advice filtering, enabling language detection |
-| `tools` | Vercel AI SDK tool definitions (findMeetings, memory tools) |
+| `tools` | Vercel AI SDK tool definitions (findMeetings, memory tools, literature search) |
 | `agent` | System prompt builder, VercelAIAgentProvider with Claude |
 | `evaluation` | LLM-based response quality scoring |
 | `pipeline` | Main orchestrator coordinating all stages |
@@ -91,22 +108,22 @@ Crisis level ≥8 triggers emergency response, bypassing normal flow.
 
 ### Memory Tiers
 
-- **L1 (Redis)**: Session cache, <10ms, 4hr TTL
-- **L2 (PostgreSQL + pgvector)**: Conversation history, profiles
-- **L3 (Neo4j)**: Entity graph (reserved for future)
-- **L4 (Qdrant)**: Semantic similarity search
+| Tier | Store | Purpose | Latency |
+|------|-------|---------|---------|
+| L1 | Redis | Session cache | <10ms |
+| L2 | PostgreSQL + pgvector | Conversation history, profiles | 10-50ms |
+| L3 | Neo4j | Entity knowledge graph | 20-100ms |
+| L4 | Qdrant | Semantic similarity search | 5-20ms |
 
-All tiers have real implementations (Redis, PostgreSQL, Neo4j, Qdrant) plus in-memory stubs for testing. Set `USE_STUBS=true` (default) for stub mode.
+All tiers have real implementations plus in-memory stubs for testing. Set `USE_STUBS=true` (default) for stub mode.
 
 ### Dependency Injection
 
-All external services are injected via `apps/api/src/container.ts`. Environment variables control which implementations are used:
+All external services are injected via `apps/api/src/container.ts`. Key environment variables:
 
 - `USE_STUBS=true` → All in-memory stubs (default for dev)
 - `REDIS_URL` → Real Redis L1 cache
-- `USER_CACHE_TTL_MINUTES` → TTL for user/profile cache in Redis (default: 60)
 - `DATABASE_URL` → Real PostgreSQL L2 session store
-- `DATABASE_SSL` → `false` to disable SSL, `true` to enable with self-signed certs
 - `NEO4J_URI` → Real Neo4j L3 knowledge graph
 - `QDRANT_URL` → Real Qdrant L4 vector store
 - `ANTHROPIC_API_KEY` → Real agent, crisis evaluator, entity extraction
@@ -183,28 +200,10 @@ curl -X POST http://localhost:3333/api/v1/chat \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
     "messages": [
-      {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
+      {"role": "user", "parts": [{"type": "text", "text": "Hello Pippa!"}], "id": "msg_1"}
     ],
     "guide": "base-identity"
   }'
-```
-
-The `guide` parameter is optional and specifies which system prompt to use (by name). If omitted, uses the active `base-identity` prompt.
-
-## CLI Usage
-
-```bash
-# Build CLI
-pnpm --filter @recoverysky/cli build
-
-# Interactive chat
-node packages/cli/dist/index.js
-
-# Single message
-node packages/cli/dist/index.js chat "I'm feeling anxious today"
-
-# Health check
-node packages/cli/dist/index.js health
 ```
 
 ## Memory Tool Access Levels
@@ -218,21 +217,6 @@ Controlled by `MEMORY_TOOL_ACCESS` env var:
 | `write` | read + saveNote, logObservation |
 | `full` | write + updateEntity, deleteEntity, createRelationship |
 
-## Database Migrations
-
-Drizzle migrations are managed in the `@recoverysky/db` package:
-
-```bash
-# Generate migration from schema changes
-pnpm --filter @recoverysky/db db:generate
-
-# Run migrations (local)
-pnpm --filter @recoverysky/db db:migrate:local
-
-# Open Drizzle Studio (database browser)
-pnpm --filter @recoverysky/db db:studio:local
-```
-
 ## System Prompts (Guides)
 
 System prompts are fetched fresh from the `system_prompts` table on each chat request:
@@ -244,10 +228,8 @@ System prompts are fetched fresh from the `system_prompts` table on each chat re
 ```typescript
 import { SystemPromptRepository } from '@recoverysky/db'
 const repo = new SystemPromptRepository(db)
-const result = await repo.findActive('recovery-coach') // lookup by name
+const result = await repo.findActive('base-identity')
 ```
-
-List available guides via `GET /api/v1/guides`.
 
 ## Adding a New Package
 

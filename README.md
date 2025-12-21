@@ -1,8 +1,8 @@
-# RecoverySky Agent
+# Pippa
 
-An AI-powered chatbot agent designed to support people in addiction recovery. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
+Pippa is a personal AI companion - forked from RecoverySky Agent but customized as Jenova's private AI friend. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
 
-**Last Updated:** 2025/12/16
+**Last Updated:** 2025/12/20
 
 ## Features
 
@@ -15,6 +15,8 @@ An AI-powered chatbot agent designed to support people in addiction recovery. Bu
 - **Observable Pipeline**: OpenTelemetry tracing + Prometheus metrics + structured logging
 - **Type-Safe Architecture**: Result-based error handling, no exceptions thrown
 - **Meeting Discovery**: Integration with RecoverySky Meeting API for finding AA/NA meetings
+- **Literature Search**: Semantic search through recovery literature (AA, NA, CMA, Refuge Recovery)
+- **Context Compaction**: Automatic summarization of older messages to manage context length
 - **CLI Tool**: Interactive command-line interface with streaming support
 
 ## Quick Start
@@ -74,14 +76,15 @@ The API uses [Vercel AI SDK](https://sdk.vercel.ai/docs) message format for comp
 **Authentication required** - Include a valid JWT in the `Authorization` header:
 
 ```bash
-curl -X POST http://localhost:3333/api/chat \
+curl -X POST http://localhost:3333/api/v1/chat \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
     "id": "conv_123",
     "messages": [
-      {"role": "user", "parts": [{"type": "text", "text": "I am feeling anxious today"}], "id": "msg_1"}
-    ]
+      {"role": "user", "parts": [{"type": "text", "text": "Hello Pippa!"}], "id": "msg_1"}
+    ],
+    "guide": "base-identity"
   }'
 ```
 
@@ -93,6 +96,7 @@ The `userId` is automatically extracted from the JWT `sub` claim.
 |-------|------|----------|-------------|
 | `id` | string | Yes | Conversation/thread ID |
 | `messages` | UIMessage[] | Yes | Array of messages with `role`, `parts`, `id` |
+| `guide` | string | No | System prompt name (e.g., "base-identity") |
 | `trigger` | string | No | Action trigger type (e.g., "submit-message") |
 
 #### Response Format
@@ -145,8 +149,8 @@ curl http://localhost:3333/health/metrics
 |           v                                                 |
 |  +---------------+                                          |
 |  | 3. Agent      |   Claude (via Vercel AI SDK)            |
-|  |   Processing  |   Tools: findMeetings, recallMemory,    |
-|  |               |          saveNote, etc.                  |
+|  |   Processing  |   Tools: findMeetings, searchLiterature,|
+|  |               |          recallMemory, saveNote, etc.   |
 |  +-------+-------+                                          |
 |          |                                                  |
 |          +---------------------+                            |
@@ -171,7 +175,7 @@ curl http://localhost:3333/health/metrics
 ## Project Structure
 
 ```
-recoverysky-agent/
+pippa/
 ├── packages/
 │   ├── types/           # Shared TypeScript interfaces
 │   ├── observability/   # Logging, tracing, metrics (wonder-logger)
@@ -218,8 +222,56 @@ recoverysky-agent/
 - OpenAI embedding provider (text-embedding-3-small)
 - **Hybrid search** with dense vectors + BM25 sparse vectors
 - Semantic similarity search across conversation history
+- **Literature search** - semantic search through recovery literature collection
 - Automatic collection creation with HNSW indexing
 - Batch indexing for bulk operations
+
+## Literature Search
+
+Semantic search through recovery literature stored in PostgreSQL with embeddings in Qdrant:
+
+### Literature Tools
+
+| Tool | Description |
+|------|-------------|
+| `searchLiterature` | Semantic search for passages matching a query, filterable by fellowship |
+| `getLiteraturePassage` | Get a specific page from a piece of literature |
+| `listLiterature` | List all available literature, optionally filtered by fellowship |
+
+### Supported Fellowships
+- **AA** - Alcoholics Anonymous
+- **NA** - Narcotics Anonymous
+- **CMA** - Crystal Meth Anonymous
+- **RD** - Refuge Recovery / Recover Dharma
+
+### Database Schema
+Literature is stored in two tables:
+- `literature` - Metadata (title, fellowship, ISBN, edition, summary)
+- `literature_blocks` - Text passages with page/line references
+
+Embeddings are stored in a dedicated Qdrant collection (`literature`) with fellowship filtering support.
+
+## Context Compaction
+
+Automatic summarization of older messages to manage context window size:
+
+### How It Works
+1. After memory retrieval, checks if message count exceeds threshold (default: 30)
+2. Takes the oldest N messages (default: 15)
+3. Summarizes them via Claude Haiku into a single "[Earlier in this conversation]" paragraph
+4. Atomically replaces original messages with summary in Redis
+5. Runs fire-and-forget (non-blocking)
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPACTION_ENABLED` | `true` | Enable/disable context compaction |
+| `COMPACTION_THRESHOLD` | `30` | Message count to trigger compaction |
+| `COMPACTION_BATCH_SIZE` | `15` | Number of oldest messages to compact |
+| `COMPACTION_MODEL` | `claude-3-haiku-20240307` | LLM for summarization |
+| `COMPACTION_MAX_TOKENS` | `512` | Max tokens for summary |
+| `COMPACTION_TIMEOUT_MS` | `15000` | Timeout for LLM call |
 
 ## Dynamic System Prompts
 
@@ -263,6 +315,12 @@ The agent can query and update the knowledge graph during conversations:
 | `read` | recallMemory, searchEntities, getRelatedEntities |
 | `write` | read + saveNote, logObservation |
 | `full` | write + updateEntity, deleteEntity, createRelationship |
+
+### Literature Tools
+Always available when configured:
+- `searchLiterature` - Semantic search through recovery literature
+- `getLiteraturePassage` - Get specific page from a book
+- `listLiterature` - List available literature by fellowship
 
 ### Post-Agent Entity Extraction
 After responses, entities and relationships are extracted and stored:
@@ -383,6 +441,17 @@ EVALUATION_MODE=on_demand    # all, sample:N, on_demand
 # Meeting API
 MEETING_API_URL=http://localhost:4000
 MEETING_API_TOKEN=           # Optional: Bearer token for API auth
+
+# Context Compaction
+COMPACTION_ENABLED=true      # Enable/disable context compaction
+COMPACTION_THRESHOLD=30      # Message count to trigger compaction
+COMPACTION_BATCH_SIZE=15     # Number of oldest messages to compact per batch
+COMPACTION_MODEL=claude-3-haiku-20240307  # LLM for summarization
+COMPACTION_MAX_TOKENS=512    # Max tokens for summary response
+COMPACTION_TIMEOUT_MS=15000  # Timeout for LLM call (ms)
+
+# User Caching
+USER_CACHE_TTL_MINUTES=60    # TTL for user/profile cache in Redis
 ```
 
 ## Docker Services
@@ -532,11 +601,23 @@ pnpm typecheck
 - [x] MemoryContextBuilder for pre-agent injection
 - [x] Rich relationship properties (graph-native design)
 
-### Phase 9: Production Hardening (In Progress)
+### Phase 9: Production Hardening ✅
 - [x] Comprehensive unit test suite (470+ tests)
 - [x] JWT authentication (Zitadel)
 - [x] Observability (OpenTelemetry + Prometheus)
 - [x] Result-based error handling
+- [x] User profile fetching from Zitadel userinfo
+- [x] Redis caching for user/profile data
+
+### Phase 10: Literature & Context Management ✅
+- [x] Literature database schema (literature, literature_blocks)
+- [x] LiteratureRepository for block hydration
+- [x] Semantic literature search via Qdrant
+- [x] Literature tools (searchLiterature, getLiteraturePassage, listLiterature)
+- [x] Context compaction for long conversations
+- [x] Fire-and-forget summarization via Haiku
+
+### Phase 11: Future Enhancements
 - [ ] CI/CD pipeline
 - [ ] Load testing
 - [ ] API documentation (OpenAPI)
