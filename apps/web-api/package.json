@@ -24,6 +24,7 @@
     "fastify-plugin": "^5.0.1",
     "groq-sdk": "^0.8.0",
     "jose": "^5.9.6",
+    "nanoid": "^5.0.9",
     "zod": "^4.2.1"
   },
   "devDependencies": {

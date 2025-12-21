@@ -7,12 +7,12 @@ import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { getLogger } from "@recoverysky/observability";
+import { sql } from "@recoverysky/db";
 import authPlugin from "./plugins/auth.js";
 import { transcribeRoutes } from "./routes/transcribe.js";
 import { historyRoutes } from "./routes/history.js";
 import { websocketRoutes } from "./routes/websocket.js";
 import { db } from "./db/index.js";
-import { sql } from "drizzle-orm";
 import { MAX_AUDIO_SIZE_BYTES } from "@pippa/shared";
 import { env } from "./env.js";
 

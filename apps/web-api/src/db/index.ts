@@ -8,7 +8,7 @@ import { createDatabaseClient, TranscriptionRepository } from '@recoverysky/db'
 import { env } from '../env.js'
 
 // Create database client
-const db = createDatabaseClient(env.DATABASE_URL)
+export const db = createDatabaseClient({ connectionString: env.DATABASE_URL })
 
 // Create repository instance
 export const transcriptionRepository = new TranscriptionRepository(db)
