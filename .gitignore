@@ -1,3 +1,5 @@
+spiffe-bundle.pem
+
 # Dependencies
 node_modules/
 .pnpm-store/
