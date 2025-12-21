@@ -519,6 +519,165 @@ describe("EntityExtractor", () => {
     });
   });
 
+  describe("relationship name resolution", () => {
+    it("should resolve partial entity names in relationships", async () => {
+      // LLM returns "John Smith" as entity but "John" in relationship
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "John Smith",
+                  type: "person",
+                  importance: 0.8,
+                  context: "Sponsor",
+                },
+                {
+                  name: "work stress",
+                  type: "trigger",
+                  importance: 0.7,
+                  context: "Job related",
+                },
+              ],
+              relationships: [
+                {
+                  from: "John", // Partial name - should resolve to "john smith"
+                  to: "work stress",
+                  type: "HELPS_WITH",
+                  strength: 0.6,
+                },
+              ],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "John Smith helps with work stress"),
+        createMockMessage("assistant", "That's great support"),
+        1,
+        createTraceContext(),
+      );
+
+      // Relationship should be created with resolved names
+      expect(mockKnowledgeStore.createRelationship).toHaveBeenCalledWith(
+        "john smith", // Resolved from "John"
+        "work stress", // Exact match
+        "HELPS_WITH",
+        expect.any(Object),
+        expect.any(Object),
+      );
+    });
+
+    it("should skip relationships when entity cannot be resolved", async () => {
+      // LLM returns relationship with entity name that doesn't exist
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "John",
+                  type: "person",
+                  importance: 0.8,
+                  context: "Sponsor",
+                },
+              ],
+              relationships: [
+                {
+                  from: "John",
+                  to: "NonExistent Entity", // This entity was not extracted
+                  type: "KNOWS",
+                  strength: 0.5,
+                },
+              ],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "John knows someone"),
+        createMockMessage("assistant", "Okay"),
+        1,
+        createTraceContext(),
+      );
+
+      // Relationship should NOT be created because "NonExistent Entity" doesn't exist
+      expect(mockKnowledgeStore.createRelationship).not.toHaveBeenCalled();
+    });
+
+    it("should handle case-insensitive name matching", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "GOOGLE",
+                  type: "place",
+                  importance: 0.8,
+                  context: "Company",
+                },
+                {
+                  name: "Alice",
+                  type: "person",
+                  importance: 0.7,
+                  context: "Friend",
+                },
+              ],
+              relationships: [
+                {
+                  from: "alice", // lowercase
+                  to: "Google", // mixed case
+                  type: "WORKS_AT",
+                  strength: 0.9,
+                },
+              ],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "Alice works at Google"),
+        createMockMessage("assistant", "Nice"),
+        1,
+        createTraceContext(),
+      );
+
+      expect(mockKnowledgeStore.createRelationship).toHaveBeenCalledWith(
+        "alice",
+        "google",
+        "WORKS_AT",
+        expect.any(Object),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe("sample mode", () => {
     it("should extract based on sample rate", async () => {
       // Mock Math.random to return predictable values

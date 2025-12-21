@@ -458,17 +458,44 @@ export class EntityExtractor {
       (e) => e.importance >= this.config.minImportance
     )
 
-    // Filter relationships to only include those with filtered entities
-    const entityNames = new Set(filteredEntities.map((e) => e.name.toLowerCase()))
-    const filteredRelationships = result.relationships.filter(
-      (r) =>
-        entityNames.has(r.from.toLowerCase()) && entityNames.has(r.to.toLowerCase())
-    )
+    // Build name resolution map for relationship filtering
+    // This allows "John" in relationships to match "john smith" in entities
+    const nameResolutionMap = this.buildNameResolutionMap(filteredEntities)
+
+    // Filter relationships to only include those with resolvable entities
+    const filteredRelationships = result.relationships.filter((r) => {
+      const fromResolved = this.canResolveEntityName(r.from, nameResolutionMap)
+      const toResolved = this.canResolveEntityName(r.to, nameResolutionMap)
+      return fromResolved && toResolved
+    })
 
     return {
       entities: filteredEntities,
       relationships: filteredRelationships,
     }
+  }
+
+  /**
+   * Check if an entity name can be resolved to a stored entity.
+   * Used for relationship filtering before persistence.
+   */
+  private canResolveEntityName(name: string, resolutionMap: Map<string, string>): boolean {
+    const normalized = name.toLowerCase().trim()
+
+    // Try exact match first
+    if (resolutionMap.has(normalized)) {
+      return true
+    }
+
+    // Try matching individual words from the input
+    const words = normalized.split(/\s+/)
+    for (const word of words) {
+      if (resolutionMap.has(word)) {
+        return true
+      }
+    }
+
+    return false
   }
 
   /**
@@ -481,6 +508,10 @@ export class EntityExtractor {
   ): Promise<void> {
     const logger = getLogger().child({ requestId: ctx.requestId })
     const now = Date.now()
+
+    // Build name resolution map: LLM name variations → stored name
+    // This handles cases where LLM uses "John" in relationships but "John Smith" in entities
+    const nameResolutionMap = this.buildNameResolutionMap(result.entities)
 
     // Store entities
     for (const entity of result.entities) {
@@ -505,9 +536,27 @@ export class EntityExtractor {
 
     // Store relationships with rich properties
     for (const rel of result.relationships) {
+      // Resolve relationship entity names to actual stored entity names
+      const resolvedFrom = this.resolveEntityName(rel.from, nameResolutionMap, logger)
+      const resolvedTo = this.resolveEntityName(rel.to, nameResolutionMap, logger)
+
+      if (!resolvedFrom || !resolvedTo) {
+        logger.warn(
+          {
+            from: rel.from,
+            to: rel.to,
+            resolvedFrom,
+            resolvedTo,
+            availableEntities: Array.from(nameResolutionMap.values()),
+          },
+          'Skipping relationship: could not resolve entity names to stored entities'
+        )
+        continue
+      }
+
       const relResult = await this.knowledgeStore.createRelationship(
-        rel.from,
-        rel.to,
+        resolvedFrom,
+        resolvedTo,
         rel.type,
         {
           strength: rel.strength,
@@ -526,6 +575,72 @@ export class EntityExtractor {
         logger.warn({ error: relResult.error, relationship: rel }, 'Failed to store relationship')
       }
     }
+  }
+
+  /**
+   * Build a map for resolving entity name variations to stored names.
+   * Maps both the full name and individual words to the stored (lowercase) name.
+   *
+   * Example: Entity "John Smith" creates mappings:
+   * - "john smith" → "john smith"
+   * - "john" → "john smith"
+   * - "smith" → "john smith"
+   */
+  private buildNameResolutionMap(entities: ExtractedEntity[]): Map<string, string> {
+    const map = new Map<string, string>()
+
+    for (const entity of entities) {
+      const storedName = entity.name.toLowerCase()
+
+      // Map full name
+      map.set(storedName, storedName)
+
+      // Map individual words (for partial matches like "John" → "john smith")
+      const words = storedName.split(/\s+/)
+      if (words.length > 1) {
+        for (const word of words) {
+          // Only add word mapping if not already taken by a more specific entity
+          if (!map.has(word)) {
+            map.set(word, storedName)
+          }
+        }
+      }
+    }
+
+    return map
+  }
+
+  /**
+   * Resolve a relationship entity reference to an actual stored entity name.
+   * Tries exact match first, then word-based matching.
+   */
+  private resolveEntityName(
+    name: string,
+    resolutionMap: Map<string, string>,
+    logger: ReturnType<typeof getLogger>
+  ): string | null {
+    const normalized = name.toLowerCase().trim()
+
+    // Try exact match first
+    if (resolutionMap.has(normalized)) {
+      return resolutionMap.get(normalized)!
+    }
+
+    // Try matching individual words from the input
+    const words = normalized.split(/\s+/)
+    for (const word of words) {
+      if (resolutionMap.has(word)) {
+        const resolved = resolutionMap.get(word)!
+        logger.debug(
+          { original: name, resolved, matchedWord: word },
+          'Resolved entity name via word match'
+        )
+        return resolved
+      }
+    }
+
+    // No match found
+    return null
   }
 
   /**
