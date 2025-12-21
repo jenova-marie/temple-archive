@@ -52,3 +52,9 @@ export {
   type LiteratureBlock,
   type NewLiteratureBlock,
 } from './literature.js'
+
+export {
+  transcriptions,
+  type Transcription,
+  type NewTranscription,
+} from './transcriptions.js'
