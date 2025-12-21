@@ -15,6 +15,7 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type { IKnowledgeStore, Entity, TraceContext } from '@recoverysky/types'
 import { getLogger, withSpan } from '@recoverysky/observability'
+import type { IMemoryContextProvider } from '../retrieval/MemoryContextProvider.js'
 
 /**
  * Memory context mode
@@ -87,7 +88,7 @@ const STOP_WORDS = new Set([
   'feel', 'feeling', 'want', 'need', 'going', 'know', 'like', 'get', 'got',
 ])
 
-export class MemoryContextBuilder {
+export class MemoryContextBuilder implements IMemoryContextProvider {
   private readonly config: MemoryContextBuilderConfig
 
   constructor(

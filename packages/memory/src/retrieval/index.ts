@@ -11,3 +11,11 @@ export {
   type ScoredEntity,
   type RetrievalResult,
 } from './MemoryRetrievalService.js'
+
+export {
+  L3MemoryContextProvider,
+  loadL3ContextConfig,
+  DEFAULT_L3_CONTEXT_CONFIG,
+  type IMemoryContextProvider,
+  type L3MemoryContextProviderConfig,
+} from './MemoryContextProvider.js'

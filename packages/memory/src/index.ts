@@ -172,6 +172,12 @@ export {
   type RankingWeights,
   type ScoredEntity,
   type RetrievalResult,
+  // L3 Context Provider (drop-in replacement for MemoryContextBuilder)
+  L3MemoryContextProvider,
+  loadL3ContextConfig,
+  DEFAULT_L3_CONTEXT_CONFIG,
+  type IMemoryContextProvider,
+  type L3MemoryContextProviderConfig,
 } from './retrieval/index.js'
 
 // Migrations

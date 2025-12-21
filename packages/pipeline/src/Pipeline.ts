@@ -33,7 +33,7 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator, type EntityExtractor, type MemoryContextBuilder, type IBootstrapOrchestrator, type IContextCompactor } from '@recoverysky/memory'
+import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
 import { recoveryTools, meetingTools, getMemoryTools, literatureTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
 
@@ -64,8 +64,8 @@ export interface PipelineDependencies {
   embedding?: IEmbeddingProvider
   /** Entity extractor for knowledge graph (optional) */
   entityExtractor?: EntityExtractor
-  /** Memory context builder for pre-agent memory injection (optional) */
-  memoryContextBuilder?: MemoryContextBuilder
+  /** Memory context provider for pre-agent memory injection (optional) */
+  memoryContextBuilder?: IMemoryContextProvider
   /** Memory tool access level (default: 'off') */
   memoryToolAccess?: MemoryToolAccessLevel
   /** Bootstrap orchestrator for conversation memory priming (optional) */
@@ -339,12 +339,14 @@ export class Pipeline {
           },
         }
 
-        // STAGE 6: Persist messages
-        await this.persistMessages(userMessage, assistantMessage, ctx)
-
+        // Record total duration BEFORE persistence (measures user-facing latency)
         const totalDuration = Date.now() - startTime
-
         pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
+
+        // STAGE 6: Persist messages (fire-and-forget - non-blocking)
+        this.persistMessages(userMessage, assistantMessage, ctx).catch((err) => {
+          logger.error({ err, conversationId: input.conversationId }, 'Message persistence failed')
+        })
 
         logger.info(
           {
@@ -695,12 +697,14 @@ export class Pipeline {
         },
       }
 
-      // STAGE 6: Persist messages
-      await this.persistMessages(userMessage, assistantMessage, ctx)
-
+      // Record total duration BEFORE persistence (measures user-facing latency)
       const totalDuration = Date.now() - startTime
-
       pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
+
+      // STAGE 6: Persist messages (fire-and-forget - non-blocking)
+      this.persistMessages(userMessage, assistantMessage, ctx).catch((err) => {
+        logger.error({ err, conversationId: input.conversationId }, 'Message persistence failed')
+      })
 
       logger.info(
         {
@@ -1082,76 +1086,92 @@ export class Pipeline {
     const stageStart = Date.now()
     const logger = getLogger().child({ requestId: ctx.requestId })
 
-    // Generate embeddings if provider available
-    let userEmbedding: number[] | null = null
-    let assistantEmbedding: number[] | null = null
+    try {
+      // Generate embeddings if provider available
+      let userEmbedding: number[] | null = null
+      let assistantEmbedding: number[] | null = null
 
-    if (this.deps.embedding) {
-      const [userEmb, assistantEmb] = await Promise.all([
-        this.deps.embedding.embed(userMessage.content, ctx, { label: 'user' }),
-        this.deps.embedding.embed(assistantMessage.content, ctx, { label: 'assistant' }),
+      if (this.deps.embedding) {
+        const [userEmb, assistantEmb] = await Promise.all([
+          this.deps.embedding.embed(userMessage.content, ctx, { label: 'user' }),
+          this.deps.embedding.embed(assistantMessage.content, ctx, { label: 'assistant' }),
+        ])
+
+        userEmbedding = userEmb.ok ? userEmb.value : null
+        assistantEmbedding = assistantEmb.ok ? assistantEmb.value : null
+      }
+
+      // Store both messages
+      await Promise.all([
+        this.deps.memory.storeMessage(userMessage, userEmbedding, ctx),
+        this.deps.memory.storeMessage(assistantMessage, assistantEmbedding, ctx),
       ])
 
-      userEmbedding = userEmb.ok ? userEmb.value : null
-      assistantEmbedding = assistantEmb.ok ? assistantEmb.value : null
+      // Update session state
+      await this.deps.memory.updateSessionState(
+        ctx.input.conversationId,
+        {
+          lastActivity: Date.now(),
+          crisisLevel: ctx.crisisCheck?.level ?? 1,
+        },
+        ctx
+      )
+
+      // Entity extraction (fire and forget - don't block response)
+      if (this.deps.entityExtractor) {
+        this.deps.entityExtractor
+          .extract(userMessage, assistantMessage, ctx.crisisCheck?.level ?? 1, ctx)
+          .then((result) => {
+            if (result.ok && (result.value.entities.length > 0 || result.value.relationships.length > 0)) {
+              logger.info(
+                {
+                  entities: result.value.entities.length,
+                  relationships: result.value.relationships.length,
+                },
+                'Entities extracted and stored'
+              )
+            }
+          })
+          .catch((err) => {
+            logger.warn({ err }, 'Entity extraction failed')
+          })
+      }
+
+      // Memory bootstrap (fire and forget - don't block response)
+      // Extracts memories from exchange and handles bootstrap window logic
+      if (this.deps.bootstrapOrchestrator) {
+        this.deps.bootstrapOrchestrator
+          .processExchange(
+            {
+              userMessage: userMessage.content,
+              assistantResponse: assistantMessage.content,
+            },
+            ctx.input.conversationId,
+            ctx.input.userId,
+            ctx
+          )
+          .catch((err) => {
+            logger.warn({ err }, 'Bootstrap processing failed')
+          })
+      }
+
+      // Success metrics
+      ctx.metrics.stageDurations.persist = Date.now() - stageStart
+      pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, {
+        stage: 'persist',
+        status: 'success',
+      })
+    } catch (error) {
+      logger.error({ error, conversationId: ctx.input.conversationId }, 'Failed to persist messages')
+      // Metrics still tracked on error (partial completion)
+      ctx.metrics.stageDurations.persist = Date.now() - stageStart
+      pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, {
+        stage: 'persist',
+        status: 'error',
+      })
+      // Re-throw so caller's .catch() can log (fire-and-forget handles it)
+      throw error
     }
-
-    // Store both messages
-    await Promise.all([
-      this.deps.memory.storeMessage(userMessage, userEmbedding, ctx),
-      this.deps.memory.storeMessage(assistantMessage, assistantEmbedding, ctx),
-    ])
-
-    // Update session state
-    await this.deps.memory.updateSessionState(
-      ctx.input.conversationId,
-      {
-        lastActivity: Date.now(),
-        crisisLevel: ctx.crisisCheck?.level ?? 1,
-      },
-      ctx
-    )
-
-    // Entity extraction (fire and forget - don't block response)
-    if (this.deps.entityExtractor) {
-      this.deps.entityExtractor
-        .extract(userMessage, assistantMessage, ctx.crisisCheck?.level ?? 1, ctx)
-        .then((result) => {
-          if (result.ok && (result.value.entities.length > 0 || result.value.relationships.length > 0)) {
-            logger.info(
-              {
-                entities: result.value.entities.length,
-                relationships: result.value.relationships.length,
-              },
-              'Entities extracted and stored'
-            )
-          }
-        })
-        .catch((err) => {
-          logger.warn({ err }, 'Entity extraction failed')
-        })
-    }
-
-    // Memory bootstrap (fire and forget - don't block response)
-    // Extracts memories from exchange and handles bootstrap window logic
-    if (this.deps.bootstrapOrchestrator) {
-      this.deps.bootstrapOrchestrator
-        .processExchange(
-          {
-            userMessage: userMessage.content,
-            assistantResponse: assistantMessage.content,
-          },
-          ctx.input.conversationId,
-          ctx.input.userId,
-          ctx
-        )
-        .catch((err) => {
-          logger.warn({ err }, 'Bootstrap processing failed')
-        })
-    }
-
-    ctx.metrics.stageDurations.persist = Date.now() - stageStart
-    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, { stage: 'persist' })
   }
 
   /**
