@@ -164,3 +164,20 @@ export {
   type ContextStrategy,
   type DeepMemoryServiceConfig,
 } from './deepmemory/index.js'
+
+// Memory Retrieval (unified multi-channel search)
+export {
+  MemoryRetrievalService,
+  type RetrievalOptions,
+  type RankingWeights,
+  type ScoredEntity,
+  type RetrievalResult,
+} from './retrieval/index.js'
+
+// Migrations
+export {
+  migrateToL3Memory,
+  isMigrationNeeded,
+  getMigrationStatus,
+  type MigrationResult,
+} from './migrations/index.js'
