@@ -45,6 +45,9 @@ import {
   StubContextCompactor,
   loadCompactionConfig,
   type IContextCompactor,
+  // L3 Memory embedding components
+  MiniLMEmbeddingProvider,
+  EmbeddingBatchJob,
 } from '@recoverysky/memory'
 import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, setLiteratureRepository, setLiteratureQdrantStore, setLiteratureEmbeddingProvider, setLiteratureToolsConfig, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
@@ -70,6 +73,8 @@ export interface Container {
   config: PipelineConfig
   /** Initialize async services (Qdrant collection, etc). Call after creation. */
   init: () => Promise<void>
+  /** Graceful shutdown - stops background jobs, closes connections. */
+  shutdown: () => Promise<void>
   /** List all active system prompts (for guide selection UI) */
   listSystemPrompts: () => Promise<Array<{ id: string; name: string; description: string | null }>>
   /**
@@ -301,10 +306,51 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.warn('OPENAI_API_KEY not set - semantic search disabled')
   }
 
+  // L3 Memory Embedding Batch Job
+  // Generates dual-store embeddings (L3: 384-dim MiniLM, L4: 1536-dim OpenAI)
+  // Controlled by EMBEDDING_BATCH_ENABLED env var (default: true when all stores available)
+  let embeddingBatchJob: EmbeddingBatchJob | undefined
+  let miniLMProvider: MiniLMEmbeddingProvider | undefined
+  const embeddingBatchEnabled = process.env.EMBEDDING_BATCH_ENABLED !== 'false'
+  const neo4jL3Store = knowledgeStore instanceof Neo4jKnowledgeStore ? knowledgeStore : null
+
+  if (embeddingBatchEnabled && !useStubs && neo4jL3Store && qdrantVectorStore && embedding) {
+    miniLMProvider = new MiniLMEmbeddingProvider()
+
+    const batchIntervalMs = parseInt(process.env.EMBEDDING_BATCH_INTERVAL_MS || '30000', 10)
+    const batchSize = parseInt(process.env.EMBEDDING_BATCH_SIZE || '100', 10)
+
+    embeddingBatchJob = new EmbeddingBatchJob(
+      neo4jL3Store,
+      qdrantVectorStore,
+      miniLMProvider,
+      embedding as OpenAIEmbeddingProvider,
+      {
+        intervalMs: batchIntervalMs,
+        batchSize,
+        runImmediately: false, // Start after init()
+      }
+    )
+
+    logger.info({
+      intervalMs: batchIntervalMs,
+      batchSize,
+    }, 'Embedding batch job configured (will start after init)')
+  } else if (!embeddingBatchEnabled) {
+    logger.info('Embedding batch job disabled (EMBEDDING_BATCH_ENABLED=false)')
+  } else if (useStubs) {
+    logger.info('Embedding batch job disabled (USE_STUBS=true)')
+  } else {
+    logger.info('Embedding batch job disabled (requires Neo4j, Qdrant, and OpenAI)')
+  }
+
   // Create entity extractor for knowledge graph
   // Controlled by ENTITY_EXTRACTION_MODE env var (default: 'all')
   let entityExtractor: EntityExtractor | undefined
   const extractionMode = (process.env.ENTITY_EXTRACTION_MODE as ExtractionMode) || 'all'
+  // Use L3 Memory extraction when Neo4j is available
+  const useL3Extraction = process.env.USE_L3_EXTRACTION !== 'false' && neo4jL3Store !== null
+
   if (extractionMode !== 'none' && !useStubs && process.env.ANTHROPIC_API_KEY) {
     const anthropicForExtraction = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -313,13 +359,19 @@ export function createContainer(options: ContainerConfig = {}): Container {
       ? process.env.ENTITY_EXTRACTION_TYPES.split(',').map((t) => t.trim())
       : ['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication']
 
-    entityExtractor = new EntityExtractor(anthropicForExtraction, knowledgeStore, {
-      mode: extractionMode,
-      model: process.env.ENTITY_EXTRACTION_MODEL || 'claude-3-haiku-20240307',
-      enabledTypes: enabledTypes as Array<'person' | 'place' | 'event' | 'emotion' | 'trigger' | 'coping_strategy' | 'milestone' | 'medication'>,
-      minImportance: parseFloat(process.env.ENTITY_MIN_IMPORTANCE || '0.3'),
-      inferRelationships: process.env.ENTITY_INFER_RELATIONSHIPS !== 'false',
-    })
+    entityExtractor = new EntityExtractor(
+      anthropicForExtraction,
+      knowledgeStore,
+      {
+        mode: extractionMode,
+        model: process.env.ENTITY_EXTRACTION_MODEL || 'claude-3-haiku-20240307',
+        enabledTypes: enabledTypes as Array<'person' | 'place' | 'event' | 'emotion' | 'trigger' | 'coping_strategy' | 'milestone' | 'medication'>,
+        minImportance: parseFloat(process.env.ENTITY_MIN_IMPORTANCE || '0.3'),
+        inferRelationships: process.env.ENTITY_INFER_RELATIONSHIPS !== 'false',
+      },
+      // L3 Memory options - enable rich extraction when Neo4j is available
+      useL3Extraction ? { l3Store: neo4jL3Store, useL3Extraction: true } : undefined
+    )
 
     logger.info({
       mode: extractionMode,
@@ -327,6 +379,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
       types: enabledTypes.length,
       minImportance: process.env.ENTITY_MIN_IMPORTANCE || '0.3',
       inferRelationships: process.env.ENTITY_INFER_RELATIONSHIPS !== 'false',
+      useL3Extraction,
     }, 'Entity extraction enabled')
   } else if (extractionMode === 'none') {
     logger.info('Entity extraction disabled (mode=none)')
@@ -624,7 +677,33 @@ export function createContainer(options: ContainerConfig = {}): Container {
     }
 
     await Promise.all(initTasks)
+
+    // Initialize MiniLM provider and start embedding batch job
+    if (miniLMProvider && embeddingBatchJob) {
+      logger.info('Initializing MiniLM embedding model...')
+      const initResult = await miniLMProvider.init()
+      if (initResult.ok) {
+        logger.info('MiniLM model initialized, starting embedding batch job')
+        embeddingBatchJob.start()
+      } else {
+        logger.error({ error: initResult.error }, 'Failed to initialize MiniLM model - batch job will not start')
+      }
+    }
+
     logger.info('Container initialization complete')
+  }
+
+  // Shutdown function for graceful termination
+  const shutdown = async (): Promise<void> => {
+    logger.info('Container shutdown initiated')
+
+    // Stop embedding batch job
+    if (embeddingBatchJob && embeddingBatchJob.isRunning()) {
+      logger.info('Stopping embedding batch job...')
+      embeddingBatchJob.stop()
+    }
+
+    logger.info('Container shutdown complete')
   }
 
   // List all active system prompts for guide selection
@@ -674,6 +753,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     pipeline,
     config: pipelineConfig,
     init,
+    shutdown,
     listSystemPrompts,
     loadUserData,
   }
