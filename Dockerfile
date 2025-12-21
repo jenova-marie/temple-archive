@@ -12,7 +12,7 @@
 # =============================================================================
 # Stage 1: Base with pnpm
 # =============================================================================
-FROM node:22-alpine AS base
+FROM node:22-bookworm AS base
 
 RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
@@ -42,6 +42,7 @@ COPY packages/cli/package.json ./packages/cli/
 COPY packages/config/package.json ./packages/config/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
+COPY apps/web-api/package.json ./apps/web-api/
 COPY apps/web/package.json ./apps/web/
 
 # Install dependencies with cache mount and npmrc secret for private registry
@@ -78,13 +79,13 @@ RUN pnpm --filter @pippa/shared build && \
 # =============================================================================
 # Stage 5: Agent Production
 # =============================================================================
-FROM node:22-alpine AS agent
+FROM node:22-bookworm AS agent
 
 RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
 # Add non-root user
-RUN addgroup -g 1001 -S pippa && \
-    adduser -S pippa -u 1001 -G pippa
+RUN groupadd -g 1001 pippa && \
+    useradd -u 1001 -g pippa -s /sbin/nologin -M pippa
 
 WORKDIR /app
 
@@ -139,13 +140,60 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
-
 CMD ["node", "apps/api/dist/index.js"]
 
 # =============================================================================
-# Stage 6: Web Production (nginx)
+# Stage 6: Web API Production
+# =============================================================================
+FROM node:22-bookworm AS web-api
+
+RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
+
+# Add non-root user
+RUN groupadd -g 1001 pippa && \
+    useradd -u 1001 -g pippa -s /sbin/nologin -M pippa
+
+WORKDIR /app
+
+# Copy package files for pnpm workspace
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+
+# Copy all package.json files
+COPY --from=builder /app/packages/types/package.json ./packages/types/
+COPY --from=builder /app/packages/observability/package.json ./packages/observability/
+COPY --from=builder /app/packages/db/package.json ./packages/db/
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder /app/apps/web-api/package.json ./apps/web-api/
+
+# Copy npmrc for production install
+COPY --from=deps /app/.npmrc ./
+
+# Install production dependencies with cache mount
+RUN --mount=type=cache,target=/root/.pnpm-store \
+    pnpm install --prod --frozen-lockfile && \
+    rm -f .npmrc
+
+# Copy built artifacts
+COPY --from=builder /app/packages/types/dist ./packages/types/dist
+COPY --from=builder /app/packages/observability/dist ./packages/observability/dist
+COPY --from=builder /app/packages/db/dist ./packages/db/dist
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder /app/apps/web-api/dist ./apps/web-api/dist
+
+# Set ownership
+RUN chown -R pippa:pippa /app
+
+USER pippa
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+EXPOSE 3001
+
+CMD ["node", "apps/web-api/dist/index.js"]
+
+# =============================================================================
+# Stage 7: Web Production (nginx)
 # =============================================================================
 FROM nginx:alpine AS web
 
@@ -163,8 +211,5 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /var/run/nginx.pid
 
 EXPOSE 80
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

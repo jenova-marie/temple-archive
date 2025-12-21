@@ -11,8 +11,8 @@ export const env = createEnv({
     // Database
     DATABASE_URL: z.string().url(),
 
-    // Groq API (speech-to-text)
-    GROQ_API_KEY: z.string().min(1),
+    // Groq API (speech-to-text) - optional
+    GROQ_API_KEY: z.string().optional().default(''),
 
     // Server
     PORT: z
