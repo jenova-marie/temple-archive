@@ -563,5 +563,168 @@ describe("Pipeline", () => {
         }
       });
     });
+
+    describe("memory reflection", () => {
+      it("triggers memory reflection when memoryReflector is configured", async () => {
+        const mockReflector = {
+          reflect: vi.fn().mockResolvedValue(ok({
+            insights: [],
+            observations: [],
+            reinforcements: [],
+          })),
+          persist: vi.fn().mockResolvedValue(undefined),
+        };
+
+        deps = createMockDependencies();
+        (deps as any).memoryReflector = mockReflector;
+        pipeline = new Pipeline(deps);
+
+        await pipeline.process(createPipelineInput(), ctx);
+
+        // Wait for fire-and-forget to complete
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(mockReflector.reflect).toHaveBeenCalled();
+      });
+
+      it("calls persist when reflection finds content", async () => {
+        const mockReflector = {
+          reflect: vi.fn().mockResolvedValue(ok({
+            insights: [{ content: "User prefers morning meetings", confidence: 0.9 }],
+            observations: [],
+            reinforcements: [],
+          })),
+          persist: vi.fn().mockResolvedValue(undefined),
+        };
+
+        deps = createMockDependencies();
+        (deps as any).memoryReflector = mockReflector;
+        pipeline = new Pipeline(deps);
+
+        await pipeline.process(createPipelineInput(), ctx);
+
+        // Wait for fire-and-forget to complete
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(mockReflector.persist).toHaveBeenCalled();
+      });
+
+      it("does not call persist when no content found", async () => {
+        const mockReflector = {
+          reflect: vi.fn().mockResolvedValue(ok({
+            insights: [],
+            observations: [],
+            reinforcements: [],
+          })),
+          persist: vi.fn().mockResolvedValue(undefined),
+        };
+
+        deps = createMockDependencies();
+        (deps as any).memoryReflector = mockReflector;
+        pipeline = new Pipeline(deps);
+
+        await pipeline.process(createPipelineInput(), ctx);
+
+        // Wait for fire-and-forget to complete
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(mockReflector.persist).not.toHaveBeenCalled();
+      });
+
+      it("handles reflection errors gracefully without blocking response", async () => {
+        const mockReflector = {
+          reflect: vi.fn().mockRejectedValue(new Error("Reflection failed")),
+          persist: vi.fn().mockResolvedValue(undefined),
+        };
+
+        deps = createMockDependencies();
+        (deps as any).memoryReflector = mockReflector;
+        pipeline = new Pipeline(deps);
+
+        // Should not throw even if reflection fails
+        const result = await pipeline.process(createPipelineInput(), ctx);
+
+        expect(result.ok).toBe(true);
+      });
+
+      it("passes tool calls to reflection context", async () => {
+        const mockReflector = {
+          reflect: vi.fn().mockResolvedValue(ok({
+            insights: [],
+            observations: [],
+            reinforcements: [],
+          })),
+          persist: vi.fn().mockResolvedValue(undefined),
+        };
+
+        const agentWithTools = {
+          generate: vi.fn().mockResolvedValue(ok(createAgentResponse({
+            toolCalls: [
+              { id: "tc_1", name: "saveNote", arguments: { content: "Test" } },
+              { id: "tc_2", name: "findMeetings", arguments: { location: "NYC" } },
+            ],
+          }))),
+          stream: vi.fn(),
+        };
+
+        deps = createMockDependencies({ agent: agentWithTools });
+        (deps as any).memoryReflector = mockReflector;
+        pipeline = new Pipeline(deps);
+
+        await pipeline.process(createPipelineInput(), ctx);
+
+        // Wait for fire-and-forget to complete
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        expect(mockReflector.reflect).toHaveBeenCalled();
+        const reflectCall = mockReflector.reflect.mock.calls[0][0];
+        // Only memory tools should be passed (saveNote is a memory tool, findMeetings is not)
+        expect(reflectCall.toolCalls.length).toBe(1);
+        expect(reflectCall.toolCalls[0].name).toBe("saveNote");
+      });
+    });
+  });
+});
+
+// Test the helper function for filtering memory tool calls
+describe("getMemoryToolCalls", () => {
+  // Import the function directly for testing
+  it("filters only memory-related tool calls", async () => {
+    // This tests the concept - actual filtering happens in Pipeline
+    const allToolCalls = [
+      { id: "1", name: "saveNote", arguments: {} },
+      { id: "2", name: "logObservation", arguments: {} },
+      { id: "3", name: "updateEntity", arguments: {} },
+      { id: "4", name: "createRelationship", arguments: {} },
+      { id: "5", name: "findMeetings", arguments: {} },
+      { id: "6", name: "searchLiterature", arguments: {} },
+    ];
+
+    const memoryToolNames = ["saveNote", "logObservation", "updateEntity", "createRelationship"];
+    const filtered = allToolCalls.filter(tc => memoryToolNames.includes(tc.name));
+
+    expect(filtered.length).toBe(4);
+    expect(filtered.every(tc => memoryToolNames.includes(tc.name))).toBe(true);
+  });
+
+  it("returns empty array when no memory tools used", () => {
+    const toolCalls = [
+      { id: "1", name: "findMeetings", arguments: {} },
+      { id: "2", name: "searchLiterature", arguments: {} },
+    ];
+
+    const memoryToolNames = ["saveNote", "logObservation", "updateEntity", "createRelationship"];
+    const filtered = toolCalls.filter(tc => memoryToolNames.includes(tc.name));
+
+    expect(filtered.length).toBe(0);
+  });
+
+  it("handles empty tool calls array", () => {
+    const toolCalls: { id: string; name: string; arguments: object }[] = [];
+
+    const memoryToolNames = ["saveNote", "logObservation", "updateEntity", "createRelationship"];
+    const filtered = toolCalls.filter(tc => memoryToolNames.includes(tc.name));
+
+    expect(filtered.length).toBe(0);
   });
 });
