@@ -53,6 +53,8 @@ import {
   L3MemoryContextProvider,
   DeepMemoryService,
   loadL3ContextConfig,
+  // Memory Reflector
+  MemoryReflector,
 } from '@recoverysky/memory'
 import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, setLiteratureRepository, setLiteratureQdrantStore, setLiteratureEmbeddingProvider, setLiteratureToolsConfig, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
@@ -614,6 +616,37 @@ export function createContainer(options: ContainerConfig = {}): Container {
     }
   }
 
+  // Memory Reflector for automatic insight extraction
+  // Controlled by MEMORY_REFLECTOR_ENABLED env var (default: true when Neo4j + Anthropic available)
+  let memoryReflector: MemoryReflector | undefined
+  const reflectorEnabled = process.env.MEMORY_REFLECTOR_ENABLED !== 'false'
+
+  if (reflectorEnabled && !useStubs && neo4jL3Store && process.env.ANTHROPIC_API_KEY) {
+    const anthropicForReflector = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+    memoryReflector = new MemoryReflector(anthropicForReflector, neo4jL3Store, {
+      insightLimit: Number(process.env.MEMORY_REFLECTOR_INSIGHT_LIMIT) || 10,
+      entityLimit: Number(process.env.MEMORY_REFLECTOR_ENTITY_LIMIT) || 5,
+      minConfidence: Number(process.env.MEMORY_REFLECTOR_MIN_CONFIDENCE) || 0.5,
+    })
+
+    logger.info({
+      insightLimit: Number(process.env.MEMORY_REFLECTOR_INSIGHT_LIMIT) || 10,
+      entityLimit: Number(process.env.MEMORY_REFLECTOR_ENTITY_LIMIT) || 5,
+      minConfidence: Number(process.env.MEMORY_REFLECTOR_MIN_CONFIDENCE) || 0.5,
+    }, 'Memory Reflector enabled')
+  } else {
+    if (!reflectorEnabled) {
+      logger.info('Memory Reflector disabled (MEMORY_REFLECTOR_ENABLED=false)')
+    } else if (useStubs) {
+      logger.info('Memory Reflector disabled (USE_STUBS=true)')
+    } else if (!neo4jL3Store) {
+      logger.info('Memory Reflector disabled (no Neo4j L3 store)')
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      logger.info('Memory Reflector disabled (no ANTHROPIC_API_KEY)')
+    }
+  }
+
   // Base identity will be fetched during init()
   let baseIdentity: string | undefined
 
@@ -670,6 +703,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     memoryToolAccess,
     bootstrapOrchestrator,
     contextCompactor,
+    memoryReflector,
     // baseIdentity is set after init() fetches it from the database
     get baseIdentity() { return baseIdentity },
     // getSystemPrompt allows looking up custom system prompts by name

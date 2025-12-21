@@ -245,6 +245,18 @@ const compactionSchema = z.object({
   timeoutMs: val?.timeoutMs ?? 15000,
 }))
 
+const memoryReflectorSchema = z.object({
+  enabled: booleanString.optional(),
+  insightLimit: z.coerce.number().optional(),
+  entityLimit: z.coerce.number().optional(),
+  minConfidence: z.coerce.number().optional(),
+}).optional().transform((val) => ({
+  enabled: val?.enabled ?? true,
+  insightLimit: val?.insightLimit ?? 10,
+  entityLimit: val?.entityLimit ?? 5,
+  minConfidence: val?.minConfidence ?? 0.5,
+}))
+
 const memorySchema = z.object({
   contextMode: z.coerce.number().min(0).max(3).optional(),
   toolAccess: z.enum(["off", "read", "write", "full"]).optional(),
@@ -254,6 +266,7 @@ const memorySchema = z.object({
   embeddingBatch: embeddingBatchSchema,
   bootstrap: bootstrapSchema,
   compaction: compactionSchema,
+  reflector: memoryReflectorSchema,
 }).optional().transform((val) => ({
   contextMode: val?.contextMode ?? 1,
   toolAccess: val?.toolAccess ?? "read",
@@ -297,6 +310,12 @@ const memorySchema = z.object({
     model: "claude-3-haiku-20240307",
     maxTokens: 512,
     timeoutMs: 15000,
+  },
+  reflector: val?.reflector ?? {
+    enabled: true,
+    insightLimit: 10,
+    entityLimit: 5,
+    minConfidence: 0.5,
   },
 }))
 

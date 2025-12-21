@@ -26,6 +26,7 @@ import type {
   IEmbeddingProvider,
   CrisisCheckResult,
   ToolDefinition,
+  ToolCall,
   AgentResponse,
   PipelineDiagnostics,
   SafetyValidationResult,
@@ -33,9 +34,23 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, getDefaultPipelineConfig } from '@recoverysky/types'
 import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
-import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor } from '@recoverysky/memory'
+import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext } from '@recoverysky/memory'
 import { buildSystemPrompt } from '@recoverysky/agent'
 import { recoveryTools, meetingTools, getMemoryTools, literatureTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@recoverysky/tools'
+
+/**
+ * Memory tool names for filtering tool calls during post-processing.
+ * These tools explicitly save memories, so Memory Reflector should avoid duplicating.
+ */
+const MEMORY_TOOL_NAMES = ['saveNote', 'logObservation', 'updateEntity', 'createRelationship']
+
+/**
+ * Filter tool calls to only include memory-related tools.
+ * Used by Memory Reflector to know what was explicitly saved.
+ */
+export function getMemoryToolCalls(toolCalls: ToolCall[]): ToolCall[] {
+  return toolCalls.filter(tc => MEMORY_TOOL_NAMES.includes(tc.name))
+}
 
 export interface PipelineError {
   kind: 'CrisisError' | 'MemoryError' | 'AgentError' | 'SafetyError' | 'ValidationError' | 'TimeoutError' | 'UnexpectedError'
@@ -78,6 +93,8 @@ export interface PipelineDependencies {
   getDefaultSystemPrompt?: () => Promise<{ id: string; name: string; content: string } | null>
   /** Context compactor for summarizing older messages (optional) */
   contextCompactor?: IContextCompactor
+  /** Memory reflector for automatic insight extraction (optional) */
+  memoryReflector?: MemoryReflector
 }
 
 /**
@@ -344,7 +361,7 @@ export class Pipeline {
         pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
 
         // STAGE 6: Persist messages (fire-and-forget - non-blocking)
-        this.persistMessages(userMessage, assistantMessage, ctx).catch((err) => {
+        this.persistMessages(userMessage, assistantMessage, agentResult.value.toolCalls, ctx).catch((err) => {
           logger.error({ err, conversationId: input.conversationId }, 'Message persistence failed')
         })
 
@@ -702,7 +719,7 @@ export class Pipeline {
       pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
 
       // STAGE 6: Persist messages (fire-and-forget - non-blocking)
-      this.persistMessages(userMessage, assistantMessage, ctx).catch((err) => {
+      this.persistMessages(userMessage, assistantMessage, agentResponse.toolCalls, ctx).catch((err) => {
         logger.error({ err, conversationId: input.conversationId }, 'Message persistence failed')
       })
 
@@ -1081,10 +1098,24 @@ export class Pipeline {
   private async persistMessages(
     userMessage: Message,
     assistantMessage: Message,
+    toolCalls: ToolCall[],
     ctx: PipelineContext
   ): Promise<void> {
     const stageStart = Date.now()
     const logger = getLogger().child({ requestId: ctx.requestId })
+
+    // Log tool call info for debugging
+    const memoryToolCalls = getMemoryToolCalls(toolCalls)
+    if (toolCalls.length > 0) {
+      logger.debug(
+        {
+          totalToolCalls: toolCalls.length,
+          memoryToolCalls: memoryToolCalls.length,
+          memoryToolNames: memoryToolCalls.map(tc => tc.name),
+        },
+        'Tool calls available for post-processing'
+      )
+    }
 
     try {
       // Generate embeddings if provider available
@@ -1155,6 +1186,13 @@ export class Pipeline {
           })
       }
 
+      // Memory reflection (fire and forget - automatic insight extraction)
+      if (this.deps.memoryReflector) {
+        this.runMemoryReflection(userMessage, assistantMessage, toolCalls, ctx).catch((err) => {
+          logger.warn({ err }, 'Memory reflection failed')
+        })
+      }
+
       // Success metrics
       ctx.metrics.stageDurations.persist = Date.now() - stageStart
       pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, {
@@ -1171,6 +1209,136 @@ export class Pipeline {
       })
       // Re-throw so caller's .catch() can log (fire-and-forget handles it)
       throw error
+    }
+  }
+
+  /**
+   * Run memory reflection to extract insights from the exchange.
+   * Fire-and-forget, does not block the response.
+   */
+  private async runMemoryReflection(
+    userMessage: Message,
+    assistantMessage: Message,
+    toolCalls: ToolCall[],
+    ctx: PipelineContext
+  ): Promise<void> {
+    const startTime = Date.now()
+    const logger = getLogger().child({
+      component: 'Pipeline',
+      operation: 'memoryReflection',
+      conversationId: ctx.input.conversationId,
+      userId: ctx.input.userId,
+      messageId: userMessage.id,
+      requestId: ctx.requestId,
+    })
+
+    if (!this.deps.memoryReflector) {
+      logger.debug('Memory reflector not available, skipping')
+      return
+    }
+
+    try {
+      // Get memory tool calls to avoid duplicating what agent already saved
+      const memoryToolCalls = getMemoryToolCalls(toolCalls)
+
+      logger.info(
+        {
+          totalToolCalls: toolCalls.length,
+          memoryToolCalls: memoryToolCalls.length,
+          memoryTools: memoryToolCalls.map((tc) => tc.name),
+          userMsgLength: userMessage.content.length,
+          assistantMsgLength: assistantMessage.content.length,
+        },
+        'Starting memory reflection for exchange'
+      )
+
+      // TODO: Get recent insights and mentioned entities from knowledge store
+      // For now, we'll use empty arrays - the reflector will still work
+      // but won't have context to avoid duplicates
+      const recentInsights: import('@recoverysky/types').L3Observation[] = []
+      const mentionedEntities: import('@recoverysky/types').L3Entity[] = []
+
+      logger.debug(
+        {
+          recentInsightsCount: recentInsights.length,
+          mentionedEntitiesCount: mentionedEntities.length,
+        },
+        'Built reflection context'
+      )
+
+      // Build reflection context
+      const reflectionContext: ReflectionContext = {
+        userMessage,
+        assistantMessage,
+        toolCalls: memoryToolCalls,
+        recentInsights,
+        mentionedEntities,
+      }
+
+      // Reflect and persist
+      const result = await this.deps.memoryReflector.reflect(reflectionContext, ctx)
+
+      if (result.ok) {
+        const { insights, observations, reinforcements } = result.value
+        const hasContent = insights.length > 0 || observations.length > 0 || reinforcements.length > 0
+
+        // Only persist if there's something to save
+        if (hasContent) {
+          logger.debug(
+            {
+              insights: insights.length,
+              observations: observations.length,
+              reinforcements: reinforcements.length,
+            },
+            'Reflection found content, persisting'
+          )
+
+          await this.deps.memoryReflector.persist(
+            result.value,
+            ctx.input.userId,
+            userMessage.id,
+            ctx.input.conversationId,
+            ctx
+          )
+
+          const durationMs = Date.now() - startTime
+          logger.info(
+            {
+              insights: insights.length,
+              observations: observations.length,
+              reinforcements: reinforcements.length,
+              durationMs,
+            },
+            'Memory reflection complete with content'
+          )
+        } else {
+          const durationMs = Date.now() - startTime
+          logger.debug({ durationMs }, 'No memories to persist from reflection')
+        }
+      } else {
+        const durationMs = Date.now() - startTime
+        logger.warn(
+          {
+            error: result.error.message,
+            errorKind: result.error.kind,
+            durationMs,
+          },
+          'Memory reflection returned error result'
+        )
+      }
+    } catch (error) {
+      const durationMs = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      logger.error(
+        {
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+          durationMs,
+        },
+        'Memory reflection failed unexpectedly'
+      )
+      // Don't re-throw - this is fire-and-forget
     }
   }
 
@@ -1335,12 +1503,15 @@ export class Pipeline {
    *
    * Runs safety validation, evaluation, and persists messages.
    * This should be called after the stream completes, and doesn't need to block the response.
+   *
+   * @param toolCalls - Tool calls made during the exchange (for Memory Reflector)
    */
   async postProcess(
     input: PipelineInput,
     responseText: string,
     preflightResult: PreflightResult,
-    traceCtx: TraceContext
+    traceCtx: TraceContext,
+    toolCalls: ToolCall[] = []
   ): Promise<void> {
     return withSpan('Pipeline.postProcess', async () => {
       const logger = getLogger().child({
@@ -1442,7 +1613,7 @@ export class Pipeline {
           },
         }
 
-        await this.persistMessages(userMessage, assistantMessage, ctx)
+        await this.persistMessages(userMessage, assistantMessage, toolCalls, ctx)
 
         logger.info(
           {

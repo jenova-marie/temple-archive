@@ -746,8 +746,13 @@ export interface SourceEntry {
   messageId: string
   /** Conversation ID where extraction occurred */
   conversationId: string
-  /** Type of extraction event */
-  action: 'created' | 'updated' | 'extracted'
+  /** Type of extraction event:
+   * - created: Entity first discovered
+   * - updated: Entity information changed
+   * - extracted: Entity mentioned (no changes)
+   * - reinforced: Existing observation confirmed again (boosts confidence)
+   */
+  action: 'created' | 'updated' | 'extracted' | 'reinforced'
   /** Timestamp of extraction */
   timestamp: number
 }
@@ -859,7 +864,7 @@ export interface EnrichedL3Entity extends L3EntityWithObservations {
  */
 export interface ConversationContext {
   /** Type of extraction event */
-  action: 'created' | 'updated' | 'extracted'
+  action: 'created' | 'updated' | 'extracted' | 'reinforced'
   /** When this occurred */
   timestamp: number
   /** Messages around the source message */

@@ -187,3 +187,14 @@ export {
   getMigrationStatus,
   type MigrationResult,
 } from './migrations/index.js'
+
+// Memory Reflection (automatic insight extraction)
+export {
+  MemoryReflector,
+  type ReflectionContext,
+  type ReflectionResult,
+  type InsightExtraction,
+  type ObservationExtraction,
+  type ReinforcementExtraction,
+  type MemoryReflectorConfig,
+} from './reflection/index.js'

@@ -123,6 +123,12 @@ const ENV_VAR_MAPPING: Record<string, string> = {
   COMPACTION_MODEL: "memory.compaction.model",
   COMPACTION_MAX_TOKENS: "memory.compaction.maxTokens",
   COMPACTION_TIMEOUT_MS: "memory.compaction.timeoutMs",
+
+  // Memory Reflector
+  MEMORY_REFLECTOR_ENABLED: "memory.reflector.enabled",
+  MEMORY_REFLECTOR_INSIGHT_LIMIT: "memory.reflector.insightLimit",
+  MEMORY_REFLECTOR_ENTITY_LIMIT: "memory.reflector.entityLimit",
+  MEMORY_REFLECTOR_MIN_CONFIDENCE: "memory.reflector.minConfidence",
 }
 
 /**
