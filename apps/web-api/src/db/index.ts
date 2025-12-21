@@ -1,8 +1,17 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import { env } from '../env.js';
-import * as schema from './schema.js';
+/**
+ * Database client and repositories for web-api
+ *
+ * Uses shared @recoverysky/db package for schema and repositories.
+ */
 
-const client = postgres(env.DATABASE_URL);
+import { createDatabaseClient, TranscriptionRepository } from '@recoverysky/db'
+import { env } from '../env.js'
 
-export const db = drizzle(client, { schema });
+// Create database client
+const db = createDatabaseClient(env.DATABASE_URL)
+
+// Create repository instance
+export const transcriptionRepository = new TranscriptionRepository(db)
+
+// Re-export types for convenience
+export type { Transcription, NewTranscription } from '@recoverysky/db'
