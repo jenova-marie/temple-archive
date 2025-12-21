@@ -18,12 +18,13 @@ export const oidcConfig: AuthProviderProps = {
   redirect_uri: redirectUri,
   post_logout_redirect_uri: window.location.origin,
   scope,
+  response_type: 'code',
   // Handle redirect after successful signin
   onSigninCallback: () => {
     const returnUrl = sessionStorage.getItem('auth_return_url') || '/'
     sessionStorage.removeItem('auth_return_url')
     window.location.replace(returnUrl)
   },
-  // Public client settings (no client secret, uses PKCE)
-  client_authentication: 'client_secret_post',
+  // Public client with PKCE - omit client_authentication and client_secret
+  // Library auto-detects and sends client_id in token request
 }

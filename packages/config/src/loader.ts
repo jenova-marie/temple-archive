@@ -21,6 +21,7 @@ const ENV_VAR_MAPPING: Record<string, string> = {
   // App
   NODE_ENV: "app.nodeEnv",
   PORT: "app.port",
+  AGENT_API_PORT: "app.port",
   LOG_LEVEL: "app.logLevel",
   USE_STUBS: "app.useStubs",
 

@@ -13,10 +13,42 @@ function AuthStateSyncer({ children }: { children: ReactNode }) {
   }, [auth.isLoading, setLoading])
 
   useEffect(() => {
-    setUser(auth.user ?? null)
-    if (auth.user?.profile) {
-      console.log('[Auth] User profile claims:', auth.user.profile)
+    if (!auth.user) {
+      setUser(null)
+      return
     }
+
+    // Fetch userinfo from Zitadel to get profile claims (name, email, etc)
+    const fetchUserinfo = async () => {
+      try {
+        const authority = oidcConfig.authority
+        const userinfoUrl = `${authority?.replace(/\/$/, '')}/oidc/v1/userinfo`
+
+        const response = await fetch(userinfoUrl, {
+          headers: {
+            Authorization: `Bearer ${auth.user.access_token}`,
+          },
+        })
+
+        if (response.ok) {
+          const userinfo = await response.json()
+          // Merge userinfo claims into the profile
+          auth.user.profile = {
+            ...auth.user.profile,
+            ...userinfo,
+          }
+          console.log('[Auth] Userinfo fetched and merged:', auth.user.profile)
+        } else {
+          console.warn('[Auth] Userinfo fetch failed:', response.status)
+        }
+      } catch (error) {
+        console.error('[Auth] Failed to fetch userinfo:', error)
+      } finally {
+        setUser(auth.user)
+      }
+    }
+
+    fetchUserinfo()
   }, [auth.user, setUser])
 
   return <>{children}</>
