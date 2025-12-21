@@ -43,9 +43,14 @@ import type {
   StoreError,
   TraceContext,
   Result,
+  L3Entity,
+  L3Observation,
+  SourceEntry,
+  CanonicalType,
 } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
 import { getLogger, withSpan } from '@recoverysky/observability'
+import { nanoid } from 'nanoid'
 
 export interface Neo4jKnowledgeStoreConfig {
   /**
@@ -149,14 +154,40 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
   /**
    * Schema statements for Entity nodes (knowledge graph)
+   * Includes legacy schema + L3 Memory Cadillac schema
    */
   private static readonly SCHEMA_STATEMENTS = [
+    // Legacy Entity schema (backwards compatible)
     'CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (e:Entity) REQUIRE e.entityId IS UNIQUE',
     'CREATE INDEX entity_name IF NOT EXISTS FOR (e:Entity) ON (e.name)',
     'CREATE INDEX entity_type IF NOT EXISTS FOR (e:Entity) ON (e.type)',
     'CREATE INDEX entity_user IF NOT EXISTS FOR (e:Entity) ON (e.userId)',
     'CREATE INDEX entity_last_mentioned IF NOT EXISTS FOR (e:Entity) ON (e.lastMentioned)',
     'CREATE INDEX entity_user_type IF NOT EXISTS FOR (e:Entity) ON (e.userId, e.type)',
+
+    // L3 Memory Cadillac schema - Entity enhancements
+    'CREATE INDEX entity_canonical_type IF NOT EXISTS FOR (e:Entity) ON (e.canonicalType)',
+    'CREATE INDEX entity_display_name IF NOT EXISTS FOR (e:Entity) ON (e.displayName)',
+    'CREATE INDEX entity_last_seen IF NOT EXISTS FOR (e:Entity) ON (e.lastSeen)',
+
+    // L3 Memory - Observation nodes
+    'CREATE CONSTRAINT observation_id IF NOT EXISTS FOR (o:Observation) REQUIRE o.id IS UNIQUE',
+    'CREATE INDEX observation_created IF NOT EXISTS FOR (o:Observation) ON (o.createdAt)',
+    'CREATE INDEX observation_conversation IF NOT EXISTS FOR (o:Observation) ON (o.conversationId)',
+
+    // L3 Memory - RELATES_TO relationship indexes
+    'CREATE INDEX relates_to_type IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.type)',
+    'CREATE INDEX relates_to_strength IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.strength)',
+  ]
+
+  /**
+   * Schema statements that require APOC or special handling.
+   * These are run separately and may fail on non-APOC installations.
+   */
+  private static readonly ADVANCED_SCHEMA_STATEMENTS = [
+    // Fulltext indexes for content search
+    'CREATE FULLTEXT INDEX observation_content IF NOT EXISTS FOR (o:Observation) ON EACH [o.content]',
+    'CREATE FULLTEXT INDEX entity_metadata IF NOT EXISTS FOR (e:Entity) ON EACH [e.metadata]',
   ]
 
   /**
@@ -253,6 +284,19 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           const errorMessage = error instanceof Error ? error.message : String(error)
           if (!errorMessage.includes('already exists')) {
             logger.warn({ error, statement: statement.slice(0, 50) }, 'Schema statement failed')
+          }
+        }
+      }
+
+      // Try advanced schema statements (may fail without APOC/proper Neo4j version)
+      for (const statement of Neo4jKnowledgeStore.ADVANCED_SCHEMA_STATEMENTS) {
+        try {
+          await session.run(statement)
+        } catch (error) {
+          // These are optional - log at debug level
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          if (!errorMessage.includes('already exists')) {
+            logger.debug({ statement: statement.slice(0, 50) }, 'Advanced schema statement skipped')
           }
         }
       }
@@ -697,5 +741,676 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
       return (value as { toNumber: () => number }).toNumber()
     }
     return Number(value)
+  }
+
+  // ============================================================================
+  // L3 Memory Cadillac Methods
+  // ============================================================================
+
+  /**
+   * Create or update an L3 entity with full Cadillac schema support.
+   * Fields like firstSeen, lastSeen, mentionCount, sourceHistory are auto-managed.
+   */
+  async upsertL3Entity(
+    entity: {
+      id?: string
+      name: string
+      displayName?: string
+      aliases?: string[]
+      canonicalType: CanonicalType
+      labels?: string[]
+      importance?: number
+      summary?: string
+      sourceHistory?: SourceEntry[]
+      metadata?: Record<string, unknown>
+    },
+    ctx: TraceContext
+  ): Promise<Result<L3Entity, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.upsertL3Entity', async () => {
+      const logger = getLogger().child({
+        entityName: entity.name,
+        canonicalType: entity.canonicalType,
+        requestId: ctx.requestId,
+      })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        const entityId = entity.id ?? nanoid()
+        const now = Date.now()
+
+        await session.run(
+          `
+          MERGE (e:Entity {name: $name})
+          ON CREATE SET
+            e.id = $id,
+            e.entityId = $id,
+            e.displayName = $displayName,
+            e.aliases = $aliases,
+            e.canonicalType = $canonicalType,
+            e.type = $canonicalType,
+            e.labels = $labels,
+            e.importance = $importance,
+            e.firstSeen = $now,
+            e.firstMentioned = $now,
+            e.lastSeen = $now,
+            e.lastMentioned = $now,
+            e.mentionCount = 1,
+            e.summary = $summary,
+            e.sourceHistory = $sourceHistory,
+            e.metadata = $metadata,
+            e.userId = $userId
+          ON MATCH SET
+            e.lastSeen = $now,
+            e.lastMentioned = $now,
+            e.mentionCount = coalesce(e.mentionCount, 0) + 1,
+            e.importance = CASE WHEN $importance > coalesce(e.importance, 0) THEN $importance ELSE e.importance END,
+            e.labels = CASE WHEN size($labels) > 0 THEN $labels ELSE e.labels END,
+            e.summary = CASE WHEN $summary IS NOT NULL THEN $summary ELSE e.summary END
+          RETURN e
+          `,
+          {
+            id: entityId,
+            name: entity.name,
+            displayName: entity.displayName,
+            aliases: entity.aliases,
+            canonicalType: entity.canonicalType,
+            labels: entity.labels,
+            importance: entity.importance,
+            now,
+            summary: entity.summary ?? null,
+            sourceHistory: JSON.stringify(entity.sourceHistory),
+            metadata: JSON.stringify(entity.metadata),
+            userId: ctx.userId ?? null,
+          }
+        )
+
+        const result: L3Entity = {
+          id: entityId,
+          name: entity.name,
+          displayName: entity.displayName ?? entity.name,
+          aliases: entity.aliases ?? [],
+          canonicalType: entity.canonicalType,
+          labels: entity.labels ?? [],
+          importance: entity.importance ?? 0.5,
+          firstSeen: now,
+          lastSeen: now,
+          mentionCount: 1,
+          summary: entity.summary,
+          sourceHistory: entity.sourceHistory ?? [],
+          metadata: entity.metadata ?? {},
+        }
+
+        logger.debug({ entityId, name: entity.name }, 'L3 Entity upserted')
+        return ok(result)
+      } catch (error) {
+        logger.error({ error }, 'Failed to upsert L3 entity')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to upsert L3 entity',
+          context: { name: entity.name },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Create an observation for an entity.
+   * The createdAt field is auto-generated if not provided.
+   */
+  async createObservation(
+    entityName: string,
+    observation: {
+      content: string
+      conversationId: string
+      messageId: string
+      confidence: number
+      createdAt?: number
+      supersedes?: string
+    },
+    ctx: TraceContext
+  ): Promise<Result<L3Observation, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.createObservation', async () => {
+      const logger = getLogger().child({
+        entityName,
+        requestId: ctx.requestId,
+      })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        const observationId = nanoid()
+
+        await session.run(
+          `
+          MATCH (e:Entity {name: $entityName})
+          CREATE (o:Observation {
+            id: $id,
+            content: $content,
+            createdAt: $createdAt,
+            conversationId: $conversationId,
+            messageId: $messageId,
+            confidence: $confidence,
+            supersedes: $supersedes
+          })
+          CREATE (e)-[:HAS_OBSERVATION]->(o)
+          RETURN o
+          `,
+          {
+            entityName: entityName.toLowerCase(),
+            id: observationId,
+            content: observation.content,
+            createdAt: observation.createdAt ?? Date.now(),
+            conversationId: observation.conversationId,
+            messageId: observation.messageId,
+            confidence: observation.confidence,
+            supersedes: observation.supersedes ?? null,
+          }
+        )
+
+        const result: L3Observation = {
+          id: observationId,
+          content: observation.content,
+          createdAt: observation.createdAt ?? Date.now(),
+          conversationId: observation.conversationId,
+          messageId: observation.messageId,
+          confidence: observation.confidence,
+          supersedes: observation.supersedes,
+        }
+
+        logger.debug({ observationId, entityName }, 'Observation created')
+        return ok(result)
+      } catch (error) {
+        logger.error({ error }, 'Failed to create observation')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to create observation',
+          context: { entityName },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Get observations for an entity.
+   */
+  async getEntityObservations(
+    entityName: string,
+    options: { limit?: number; since?: number },
+    ctx: TraceContext
+  ): Promise<Result<L3Observation[], StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.getEntityObservations', async () => {
+      const logger = getLogger().child({
+        entityName,
+        requestId: ctx.requestId,
+      })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        const limit = options.limit ?? 50
+        const sinceFilter = options.since ? 'AND o.createdAt >= $since' : ''
+
+        const result = await session.run(
+          `
+          MATCH (e:Entity {name: $entityName})-[:HAS_OBSERVATION]->(o:Observation)
+          ${sinceFilter}
+          RETURN o
+          ORDER BY o.createdAt DESC
+          LIMIT $limit
+          `,
+          {
+            entityName: entityName.toLowerCase(),
+            limit,
+            since: options.since ?? 0,
+          }
+        )
+
+        const observations: L3Observation[] = result.records.map((record) => {
+          const node = record.get('o')
+          const props = node.properties
+          return {
+            id: props.id,
+            content: props.content,
+            createdAt: this.toNumber(props.createdAt),
+            conversationId: props.conversationId,
+            messageId: props.messageId,
+            confidence: props.confidence,
+            supersedes: props.supersedes ?? undefined,
+          }
+        })
+
+        logger.debug({ count: observations.length }, 'Observations retrieved')
+        return ok(observations)
+      } catch (error) {
+        logger.error({ error }, 'Failed to get observations')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to get observations',
+          context: { entityName },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Create a RELATES_TO relationship with semantic type property.
+   */
+  async createL3Relationship(
+    from: string,
+    to: string,
+    type: string,
+    properties: {
+      strength?: number
+      context?: string
+      conversationId?: string
+      messageId?: string
+      source?: 'agent' | 'user' | 'system'
+      /** When relationship was observed/established */
+      when?: string
+      /** How the relationship manifests */
+      method?: string
+      /** Frequency of relationship occurrence */
+      frequency?: string
+      /** Additional notes */
+      notes?: string
+    },
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.createL3Relationship', async () => {
+      const logger = getLogger().child({
+        from,
+        to,
+        type,
+        requestId: ctx.requestId,
+      })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        await session.run(
+          `
+          MATCH (fromEntity:Entity {name: $from})
+          MATCH (toEntity:Entity {name: $to})
+          MERGE (fromEntity)-[r:RELATES_TO {type: $type}]->(toEntity)
+          ON CREATE SET
+            r.strength = $strength,
+            r.context = $context,
+            r.conversationId = $conversationId,
+            r.messageId = $messageId,
+            r.source = $source,
+            r.when = $when,
+            r.method = $method,
+            r.frequency = $frequency,
+            r.notes = $notes,
+            r.createdAt = timestamp()
+          ON MATCH SET
+            r.strength = CASE WHEN $strength > r.strength THEN $strength ELSE r.strength END,
+            r.updatedAt = timestamp()
+          `,
+          {
+            from: from.toLowerCase(),
+            to: to.toLowerCase(),
+            type: type.toLowerCase(),
+            strength: properties.strength ?? 0.5,
+            context: properties.context ?? null,
+            conversationId: properties.conversationId ?? null,
+            messageId: properties.messageId ?? null,
+            source: properties.source ?? 'agent',
+            when: properties.when ?? null,
+            method: properties.method ?? null,
+            frequency: properties.frequency ?? null,
+            notes: properties.notes ?? null,
+          }
+        )
+
+        logger.debug({ from, to, type }, 'L3 Relationship created')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to create L3 relationship')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to create L3 relationship',
+          context: { from, to, type },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Get entities and observations that need embeddings.
+   * Used by the EmbeddingBatchJob.
+   */
+  async getUnembeddedItems(
+    limit: number,
+    ctx: TraceContext
+  ): Promise<Result<Array<{ id: string; type: 'entity' | 'observation'; text: string }>, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.getUnembeddedItems', async () => {
+      const logger = getLogger().child({ requestId: ctx.requestId })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        // Get entities without embeddings
+        const entityResult = await session.run(
+          `
+          MATCH (e:Entity)
+          WHERE e.embedding IS NULL
+          RETURN e.id as id, e.name as name, e.displayName as displayName,
+                 e.labels as labels, e.summary as summary
+          ORDER BY e.lastSeen DESC
+          LIMIT $limit
+          `,
+          { limit: Math.floor(limit / 2) }
+        )
+
+        // Get observations without embeddings
+        const obsResult = await session.run(
+          `
+          MATCH (o:Observation)
+          WHERE o.embedding IS NULL
+          RETURN o.id as id, o.content as content
+          ORDER BY o.createdAt DESC
+          LIMIT $limit
+          `,
+          { limit: Math.floor(limit / 2) }
+        )
+
+        const items: Array<{ id: string; type: 'entity' | 'observation'; text: string }> = []
+
+        // Process entities
+        for (const record of entityResult.records) {
+          const id = record.get('id')
+          const name = record.get('name') ?? ''
+          const displayName = record.get('displayName') ?? name
+          const labels = record.get('labels') ?? []
+          const summary = record.get('summary') ?? ''
+
+          // Compose text for embedding
+          const text = [displayName, ...labels, summary].filter(Boolean).join(' ')
+          if (id && text) {
+            items.push({ id, type: 'entity', text })
+          }
+        }
+
+        // Process observations
+        for (const record of obsResult.records) {
+          const id = record.get('id')
+          const content = record.get('content')
+          if (id && content) {
+            items.push({ id, type: 'observation', text: content })
+          }
+        }
+
+        logger.debug({ count: items.length }, 'Found unembedded items')
+        return ok(items)
+      } catch (error) {
+        logger.error({ error }, 'Failed to get unembedded items')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to get unembedded items',
+          context: {},
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Batch update embeddings for entities and observations.
+   * Used by the EmbeddingBatchJob.
+   */
+  async batchUpdateEmbeddings(
+    items: Array<{ id: string; type: 'entity' | 'observation'; embedding: number[] }>,
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.batchUpdateEmbeddings', async () => {
+      const logger = getLogger().child({ requestId: ctx.requestId })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        // Update entities
+        const entities = items.filter((i) => i.type === 'entity')
+        if (entities.length > 0) {
+          for (const entity of entities) {
+            await session.run(
+              `
+              MATCH (e:Entity {id: $id})
+              SET e.embedding = $embedding
+              `,
+              { id: entity.id, embedding: entity.embedding }
+            )
+          }
+        }
+
+        // Update observations
+        const observations = items.filter((i) => i.type === 'observation')
+        if (observations.length > 0) {
+          for (const obs of observations) {
+            await session.run(
+              `
+              MATCH (o:Observation {id: $id})
+              SET o.embedding = $embedding
+              `,
+              { id: obs.id, embedding: obs.embedding }
+            )
+          }
+        }
+
+        logger.debug({ count: items.length }, 'Embeddings updated')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to batch update embeddings')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to batch update embeddings',
+          context: {},
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Append to an entity's sourceHistory.
+   * Uses APOC if available, falls back to full replacement.
+   */
+  async appendSourceHistory(
+    entityName: string,
+    entry: SourceEntry,
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.appendSourceHistory', async () => {
+      const logger = getLogger().child({
+        entityName,
+        action: entry.action,
+        requestId: ctx.requestId,
+      })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        // Try APOC first for proper array append
+        try {
+          await session.run(
+            `
+            MATCH (e:Entity {name: $name})
+            SET e.sourceHistory = apoc.coll.union(
+              coalesce(apoc.convert.fromJsonList(e.sourceHistory), []),
+              [$entry]
+            )
+            `,
+            {
+              name: entityName.toLowerCase(),
+              entry: JSON.stringify(entry),
+            }
+          )
+        } catch {
+          // Fallback: read, parse, append, write
+          const result = await session.run(
+            `
+            MATCH (e:Entity {name: $name})
+            RETURN e.sourceHistory as history
+            `,
+            { name: entityName.toLowerCase() }
+          )
+
+          const record = result.records[0]
+          const historyStr = record?.get('history') ?? '[]'
+          let history: SourceEntry[] = []
+          try {
+            history = JSON.parse(historyStr)
+          } catch {
+            history = []
+          }
+
+          history.push(entry)
+
+          await session.run(
+            `
+            MATCH (e:Entity {name: $name})
+            SET e.sourceHistory = $history
+            `,
+            {
+              name: entityName.toLowerCase(),
+              history: JSON.stringify(history),
+            }
+          )
+        }
+
+        logger.debug('SourceHistory appended')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to append sourceHistory')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to append sourceHistory',
+          context: { entityName },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Get an L3 entity by name.
+   */
+  async getL3Entity(
+    name: string,
+    ctx: TraceContext
+  ): Promise<Result<L3Entity | null, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.getL3Entity', async () => {
+      const logger = getLogger().child({ name, requestId: ctx.requestId })
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        const result = await session.run(
+          `
+          MATCH (e:Entity {name: $name})
+          RETURN e
+          `,
+          { name: name.toLowerCase() }
+        )
+
+        if (result.records.length === 0) {
+          return ok(null)
+        }
+
+        const node = result.records[0].get('e')
+        const props = node.properties
+
+        const entity: L3Entity = {
+          id: props.id ?? props.entityId,
+          name: props.name,
+          displayName: props.displayName ?? props.name,
+          aliases: props.aliases ?? [],
+          canonicalType: (props.canonicalType ?? props.type ?? 'concept') as CanonicalType,
+          labels: props.labels ?? [],
+          embedding: props.embedding ?? undefined,
+          importance: props.importance ?? 0.5,
+          firstSeen: this.toNumber(props.firstSeen ?? props.firstMentioned),
+          lastSeen: this.toNumber(props.lastSeen ?? props.lastMentioned),
+          mentionCount: this.toNumber(props.mentionCount ?? 1),
+          summary: props.summary ?? undefined,
+          sourceHistory: this.parseSourceHistory(props.sourceHistory),
+          metadata: this.parseMetadata(props.metadata),
+        }
+
+        logger.debug({ entityId: entity.id }, 'L3 Entity retrieved')
+        return ok(entity)
+      } catch (error) {
+        logger.error({ error }, 'Failed to get L3 entity')
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to get L3 entity',
+          context: { name },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
+  }
+
+  /**
+   * Parse sourceHistory from stored format.
+   */
+  private parseSourceHistory(value: unknown): SourceEntry[] {
+    if (!value) return []
+    if (Array.isArray(value)) return value as SourceEntry[]
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value)
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+
+  /**
+   * Parse metadata from stored format.
+   */
+  private parseMetadata(value: unknown): Record<string, unknown> {
+    if (!value) return {}
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      return value as Record<string, unknown>
+    }
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value)
+      } catch {
+        return {}
+      }
+    }
+    return {}
   }
 }
