@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/config" },
     { "path": "packages/types" },
     { "path": "packages/observability" },
     { "path": "packages/db" },

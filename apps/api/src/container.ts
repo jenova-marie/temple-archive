@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, IKnowledgeStore, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@recoverysky/types'
+import type { PipelineConfig, IAgentProvider, ISessionStore, IContextStore, IEmbeddingProvider, IVectorStore, IKnowledgeStore, ICrisisDetector, ICrisisHandler, ICrisisEvaluator, ISafetyValidator, IEvaluator } from '@recoverysky/types'
 import { getDefaultPipelineConfig } from '@recoverysky/types'
 import {
   MemoryOrchestrator,
@@ -48,10 +48,15 @@ import {
   // L3 Memory embedding components
   MiniLMEmbeddingProvider,
   EmbeddingBatchJob,
+  // L3 Memory retrieval
+  MemoryRetrievalService,
+  L3MemoryContextProvider,
+  DeepMemoryService,
+  loadL3ContextConfig,
 } from '@recoverysky/memory'
 import { setMemoryToolProviders, setBootstrapOrchestrator, setSystemPromptRefreshFn, setClearConversationFn, setLiteratureRepository, setLiteratureQdrantStore, setLiteratureEmbeddingProvider, setLiteratureToolsConfig, type MemoryToolAccessLevel } from '@recoverysky/tools'
 import { createDatabaseClient, PostgresSessionStore, UserCacheStore } from '@recoverysky/db'
-import { KeywordCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
+import { KeywordCrisisDetector, NoOpCrisisDetector, StubCrisisHandler, DeepCrisisEvaluator, WebhookCrisisHandler } from '@recoverysky/crisis'
 import { StubSafetyValidator, SafetyValidator } from '@recoverysky/safety'
 import { MockAgentProvider, VercelAIAgentProvider } from '@recoverysky/agent'
 import { StubEvaluator, LLMEvaluator, type EvaluationMode } from '@recoverysky/evaluation'
@@ -211,10 +216,20 @@ export function createContainer(options: ContainerConfig = {}): Container {
   )
 
   // Create crisis detection components
-  const crisisDetector = new KeywordCrisisDetector({
-    emergencyThreshold: pipelineConfig.crisis.criticalThreshold as 9,
-    resourceThreshold: pipelineConfig.crisis.highThreshold as 7,
-  })
+  // Controlled by ENABLE_CRISIS_DETECTION env var (default: true)
+  let crisisDetector: ICrisisDetector
+  const crisisDetectionEnabled = process.env.ENABLE_CRISIS_DETECTION !== 'false'
+
+  if (!crisisDetectionEnabled) {
+    logger.info('Crisis detection disabled (ENABLE_CRISIS_DETECTION=false)')
+    crisisDetector = new NoOpCrisisDetector()
+  } else {
+    logger.info('Using KeywordCrisisDetector for fast crisis pattern matching')
+    crisisDetector = new KeywordCrisisDetector({
+      emergencyThreshold: pipelineConfig.crisis.criticalThreshold as 9,
+      resourceThreshold: pipelineConfig.crisis.highThreshold as 7,
+    })
+  }
 
   // Crisis Handler - webhook when CRISIS_WEBHOOK_URL is set, otherwise stub
   let crisisHandler: ICrisisHandler
@@ -230,11 +245,18 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // Crisis Evaluator (LLM-based deep analysis) - optional
+  // Controlled by ENABLE_DEEP_CRISIS_EVAL env var (default: true)
   let crisisEvaluator: ICrisisEvaluator | undefined
-  if (!useStubs && process.env.ANTHROPIC_API_KEY) {
+  const deepCrisisEnabled = process.env.ENABLE_DEEP_CRISIS_EVAL !== 'false'
+
+  if (!deepCrisisEnabled) {
+    logger.info('Deep crisis evaluation disabled (ENABLE_DEEP_CRISIS_EVAL=false)')
+  } else if (!useStubs && process.env.ANTHROPIC_API_KEY) {
     logger.info('Using DeepCrisisEvaluator for LLM-based crisis detection')
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     crisisEvaluator = new DeepCrisisEvaluator(anthropic)
+  } else if (!useStubs) {
+    logger.info('Deep crisis evaluation disabled (no ANTHROPIC_API_KEY)')
   }
 
   // Create agent - real or mock based on USE_STUBS
@@ -390,11 +412,45 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // Memory Context Builder for pre-agent memory injection
-  // Controlled by MEMORY_CONTEXT_MODE env var (default: 1 = template)
-  let memoryContextBuilder: MemoryContextBuilder | undefined
+  // USE_L3_RETRIEVAL=true uses new L3 Memory retrieval system
+  // Otherwise falls back to legacy MEMORY_CONTEXT_MODE (default: 1 = template)
+  let memoryContextBuilder: MemoryContextBuilder | L3MemoryContextProvider | undefined
+  const useL3Retrieval = process.env.USE_L3_RETRIEVAL === 'true'
   const memoryContextMode = parseInt(process.env.MEMORY_CONTEXT_MODE || '1', 10) as MemoryContextMode
 
-  if (memoryContextMode > 0 && !useStubs) {
+  if (useL3Retrieval && !useStubs && neo4jL3Store) {
+    // L3 Memory Retrieval - new Cadillac system
+    const l3Config = loadL3ContextConfig()
+
+    // Create DeepMemoryService if enabled and we have a session store with getMessagesAroundId
+    let deepMemoryService: DeepMemoryService | null = null
+    if (l3Config.includeConversationContext && sessionStore && 'getMessagesAroundId' in sessionStore) {
+      const messageWindow = parseInt(process.env.DEEP_MEMORY_WINDOW || '5', 10)
+      deepMemoryService = new DeepMemoryService(sessionStore as any, { messageWindow })
+      logger.info({ messageWindow, strategy: l3Config.contextStrategy }, 'Deep Memory enabled')
+    }
+
+    // Create retrieval service
+    const retrievalService = new MemoryRetrievalService(
+      neo4jL3Store,
+      miniLMProvider ?? null,
+      deepMemoryService
+    )
+
+    // Create L3 context provider
+    memoryContextBuilder = new L3MemoryContextProvider(retrievalService, l3Config)
+
+    logger.info({
+      includeObservations: l3Config.includeObservations,
+      includeConversationContext: l3Config.includeConversationContext,
+      contextStrategy: l3Config.contextStrategy,
+      limit: l3Config.limit,
+      maxTokens: l3Config.maxTokens,
+      hasDeepMemory: !!deepMemoryService,
+      hasMiniLM: !!miniLMProvider,
+    }, 'L3 Memory retrieval enabled')
+  } else if (memoryContextMode > 0 && !useStubs) {
+    // Legacy MemoryContextBuilder
     // Haiku mode (2) and hybrid mode (3) require Anthropic API key
     const anthropicForContext = (memoryContextMode >= 2 && process.env.ANTHROPIC_API_KEY)
       ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -412,7 +468,9 @@ export function createContainer(options: ContainerConfig = {}): Container {
       mode: memoryContextMode,
       modeName: ['off', 'template', 'haiku', 'hybrid'][memoryContextMode] || 'unknown',
       hasLLM: !!anthropicForContext,
-    }, 'Memory context builder enabled')
+    }, 'Legacy memory context builder enabled')
+  } else if (useL3Retrieval && !neo4jL3Store) {
+    logger.warn('USE_L3_RETRIEVAL=true but Neo4j not available, disabling memory context')
   } else if (memoryContextMode === 0) {
     logger.info('Memory context builder disabled (mode=0)')
   } else if (useStubs) {

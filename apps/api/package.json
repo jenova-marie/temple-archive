@@ -18,6 +18,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@opentelemetry/core": "^2.2.0",
     "@recoverysky/agent": "workspace:*",
+    "@recoverysky/config": "workspace:*",
     "@recoverysky/crisis": "workspace:*",
     "@recoverysky/db": "workspace:*",
     "@recoverysky/evaluation": "workspace:*",

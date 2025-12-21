@@ -1,29 +1,14 @@
 /**
- * RecoverySky Agent API
+ * Pippa Agent API
  *
- * Express server for the RecoverySky AI chatbot agent
+ * Express server for the Pippa AI companion agent
  */
 
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { config as dotenvConfig } from "dotenv";
+import { loadConfig, type Config } from "@recoverysky/config";
 
-// Find monorepo root and load .env from there
-function findMonorepoRoot(): string | null {
-  let dir = resolve(process.cwd());
-  while (dir !== dirname(dir)) {
-    if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
-      return dir;
-    }
-    dir = dirname(dir);
-  }
-  return null;
-}
-
-const monorepoRoot = findMonorepoRoot();
-if (monorepoRoot) {
-  dotenvConfig({ path: join(monorepoRoot, ".env") });
-}
+// Load configuration (YAML + env vars)
+// This must happen before other imports that might read process.env
+export const config: Config = loadConfig({ allowMissingConfig: true });
 
 import express from "express";
 import cors from "cors";
@@ -48,7 +33,7 @@ const logger = getLogger();
 
 // Create container with dependencies
 const container = createContainer({
-  useStubs: process.env.USE_STUBS === "true",
+  useStubs: config.app.useStubs,
 });
 
 // Initialize async services (Qdrant collection, etc)
@@ -114,56 +99,51 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-const port = parseInt(process.env.PORT || "3333", 10);
+const port = config.app.port;
 
 const server = app.listen(port, () => {
   // Log running configuration (sensitive values redacted)
-  const config = {
+  const startupInfo = {
     // Application
-    NODE_ENV: process.env.NODE_ENV || "development",
-    PORT: port,
-    LOG_LEVEL: process.env.LOG_LEVEL || "info",
-    USE_STUBS: process.env.USE_STUBS === "true",
+    NODE_ENV: config.app.nodeEnv,
+    PORT: config.app.port,
+    LOG_LEVEL: config.app.logLevel,
+    USE_STUBS: config.app.useStubs,
 
     // AI Providers (redacted)
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? "[SET]" : "[NOT SET]",
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "[SET]" : "[NOT SET]",
+    ANTHROPIC_API_KEY: config.ai.anthropic.apiKey ? "[SET]" : "[NOT SET]",
+    OPENAI_API_KEY: config.ai.openai.apiKey ? "[SET]" : "[NOT SET]",
 
     // L1: Redis
-    REDIS_URL: process.env.REDIS_URL || "[NOT SET]",
+    REDIS_URL: config.redis.url,
 
     // L2: PostgreSQL (redact password)
-    DATABASE_URL: process.env.DATABASE_URL
-      ? process.env.DATABASE_URL.replace(/:([^:@]+)@/, ":***@")
-      : "[NOT SET]",
+    DATABASE_URL: config.postgresql.url.replace(/:([^:@]+)@/, ":***@"),
 
     // L3: Neo4j (redact password)
-    NEO4J_URI: process.env.NEO4J_URI || "[NOT SET]",
-    NEO4J_USER: process.env.NEO4J_USER || "[NOT SET]",
-    NEO4J_PASSWORD: process.env.NEO4J_PASSWORD ? "[SET]" : "[NOT SET]",
+    NEO4J_URI: config.neo4j.uri || "[NOT SET]",
+    NEO4J_USER: config.neo4j.user,
+    NEO4J_PASSWORD: config.neo4j.password ? "[SET]" : "[NOT SET]",
 
     // L4: Qdrant
-    QDRANT_URL: process.env.QDRANT_URL || "[NOT SET]",
+    QDRANT_URL: config.qdrant.url,
 
     // Observability
-    OTEL_EXPORTER_OTLP_ENDPOINT:
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "[NOT SET]",
-    OTEL_SERVICE_NAME: process.env.OTEL_SERVICE_NAME || "recoverysky-agent",
+    OTEL_EXPORTER_OTLP_ENDPOINT: config.observability.otlpEndpoint || "[NOT SET]",
+    OTEL_SERVICE_NAME: config.observability.serviceName,
 
     // Crisis Response
-    CRISIS_ALERT_WEBHOOK_URL: process.env.CRISIS_ALERT_WEBHOOK_URL
-      ? "[SET]"
-      : "[NOT SET]",
-    CRISIS_THRESHOLD_HIGH: process.env.CRISIS_THRESHOLD_HIGH || "7",
-    CRISIS_THRESHOLD_CRITICAL: process.env.CRISIS_THRESHOLD_CRITICAL || "9",
+    CRISIS_WEBHOOK_URL: config.crisis.webhookUrl ? "[SET]" : "[NOT SET]",
+    CRISIS_THRESHOLD_HIGH: config.crisis.thresholdHigh,
+    CRISIS_THRESHOLD_CRITICAL: config.crisis.thresholdCritical,
 
     // Authentication (Zitadel)
-    ZITADEL_ISSUER: process.env.ZITADEL_ISSUER || "[NOT SET]",
-    ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE || process.env.ZITADEL_CLIENT_ID || "[NOT SET]",
+    ZITADEL_ISSUER: config.auth.zitadel.issuer || "[NOT SET]",
+    ZITADEL_AUDIENCE: config.auth.zitadel.audience || "[NOT SET]",
     AUTH_ENABLED: auth ? "true" : "false",
   };
 
-  logger.info(config, "RecoverySky Agent API started");
+  logger.info(startupInfo, "Pippa Agent API started");
 });
 
 // Graceful shutdown
