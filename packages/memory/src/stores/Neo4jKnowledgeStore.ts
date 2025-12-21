@@ -37,6 +37,7 @@
  */
 
 import type { Driver, Session } from 'neo4j-driver'
+import neo4j from 'neo4j-driver'
 import type {
   IKnowledgeStore,
   Entity,
@@ -49,7 +50,7 @@ import type {
   CanonicalType,
 } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import { nanoid } from 'nanoid'
 
 export interface Neo4jKnowledgeStoreConfig {
@@ -596,7 +597,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
       try {
         const typeFilter = options.type ? 'AND e.type = $type' : ''
-        const limit = options.limit ?? 100
+        const limit = neo4j.int(options.limit ?? 100)
 
         const result = await session.run(
           `
@@ -767,11 +768,23 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
     ctx: TraceContext
   ): Promise<Result<L3Entity, StoreError>> {
     return withSpan('Neo4jKnowledgeStore.upsertL3Entity', async () => {
+      const startTime = Date.now()
       const logger = getLogger().child({
         entityName: entity.name,
         canonicalType: entity.canonicalType,
         requestId: ctx.requestId,
       })
+
+      logger.debug(
+        {
+          hasDisplayName: !!entity.displayName,
+          aliasCount: entity.aliases?.length ?? 0,
+          labelCount: entity.labels?.length ?? 0,
+          importance: entity.importance,
+          sourceHistoryCount: entity.sourceHistory?.length ?? 0,
+        },
+        'Upserting L3 entity'
+      )
 
       await this.ensureSchemaInitialized(ctx)
       const session = this.getSession(ctx)
@@ -813,19 +826,20 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           {
             id: entityId,
             name: entity.name,
-            displayName: entity.displayName,
-            aliases: entity.aliases,
+            displayName: entity.displayName ?? entity.name,
+            aliases: entity.aliases ?? [],
             canonicalType: entity.canonicalType,
-            labels: entity.labels,
-            importance: entity.importance,
+            labels: entity.labels ?? [],
+            importance: entity.importance ?? 0.5,
             now,
             summary: entity.summary ?? null,
-            sourceHistory: JSON.stringify(entity.sourceHistory),
-            metadata: JSON.stringify(entity.metadata),
+            sourceHistory: JSON.stringify(entity.sourceHistory ?? []),
+            metadata: JSON.stringify(entity.metadata ?? {}),
             userId: ctx.userId ?? null,
           }
         )
 
+        const durationMs = Date.now() - startTime
         const result: L3Entity = {
           id: entityId,
           name: entity.name,
@@ -842,10 +856,13 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           metadata: entity.metadata ?? {},
         }
 
-        logger.debug({ entityId, name: entity.name }, 'L3 Entity upserted')
+        logger.debug({ entityId, name: entity.name, durationMs }, 'L3 entity upserted')
+        pipelineMetrics.stageDuration.record(durationMs, { stage: 'l3_entity_upsert' })
         return ok(result)
       } catch (error) {
-        logger.error({ error }, 'Failed to upsert L3 entity')
+        const durationMs = Date.now() - startTime
+        logger.error({ error, durationMs }, 'Failed to upsert L3 entity')
+        pipelineMetrics.errors.add(1, { kind: 'l3_entity_upsert_error' })
         return err({
           kind: 'UnexpectedError',
           message: 'Failed to upsert L3 entity',
@@ -875,10 +892,20 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
     ctx: TraceContext
   ): Promise<Result<L3Observation, StoreError>> {
     return withSpan('Neo4jKnowledgeStore.createObservation', async () => {
+      const startTime = Date.now()
       const logger = getLogger().child({
         entityName,
         requestId: ctx.requestId,
       })
+
+      logger.debug(
+        {
+          contentLength: observation.content.length,
+          confidence: observation.confidence,
+          hasSupersedes: !!observation.supersedes,
+        },
+        'Creating observation'
+      )
 
       await this.ensureSchemaInitialized(ctx)
       const session = this.getSession(ctx)
@@ -913,6 +940,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           }
         )
 
+        const durationMs = Date.now() - startTime
         const result: L3Observation = {
           id: observationId,
           content: observation.content,
@@ -923,10 +951,13 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           supersedes: observation.supersedes,
         }
 
-        logger.debug({ observationId, entityName }, 'Observation created')
+        logger.debug({ observationId, entityName, durationMs }, 'Observation created')
+        pipelineMetrics.stageDuration.record(durationMs, { stage: 'l3_observation_create' })
         return ok(result)
       } catch (error) {
-        logger.error({ error }, 'Failed to create observation')
+        const durationMs = Date.now() - startTime
+        logger.error({ error, durationMs }, 'Failed to create observation')
+        pipelineMetrics.errors.add(1, { kind: 'l3_observation_create_error' })
         return err({
           kind: 'UnexpectedError',
           message: 'Failed to create observation',
@@ -957,7 +988,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
       const session = this.getSession(ctx)
 
       try {
-        const limit = options.limit ?? 50
+        const limit = neo4j.int(options.limit ?? 50)
         const sinceFilter = options.since ? 'AND o.createdAt >= $since' : ''
 
         const result = await session.run(
@@ -1102,13 +1133,18 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
     ctx: TraceContext
   ): Promise<Result<Array<{ id: string; type: 'entity' | 'observation'; text: string }>, StoreError>> {
     return withSpan('Neo4jKnowledgeStore.getUnembeddedItems', async () => {
+      const startTime = Date.now()
       const logger = getLogger().child({ requestId: ctx.requestId })
+
+      logger.debug({ limit }, 'Fetching unembedded items')
 
       await this.ensureSchemaInitialized(ctx)
       const session = this.getSession(ctx)
 
       try {
         // Get entities without embeddings
+        // Use neo4j.int() to ensure limit is passed as integer, not float
+        const entityLimit = neo4j.int(Math.floor(limit / 2))
         const entityResult = await session.run(
           `
           MATCH (e:Entity)
@@ -1118,10 +1154,11 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           ORDER BY e.lastSeen DESC
           LIMIT $limit
           `,
-          { limit: Math.floor(limit / 2) }
+          { limit: entityLimit }
         )
 
         // Get observations without embeddings
+        const obsLimit = neo4j.int(Math.floor(limit / 2))
         const obsResult = await session.run(
           `
           MATCH (o:Observation)
@@ -1130,7 +1167,7 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           ORDER BY o.createdAt DESC
           LIMIT $limit
           `,
-          { limit: Math.floor(limit / 2) }
+          { limit: obsLimit }
         )
 
         const items: Array<{ id: string; type: 'entity' | 'observation'; text: string }> = []
@@ -1159,10 +1196,20 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           }
         }
 
-        logger.debug({ count: items.length }, 'Found unembedded items')
+        const durationMs = Date.now() - startTime
+        const entityCount = items.filter((i) => i.type === 'entity').length
+        const obsCount = items.filter((i) => i.type === 'observation').length
+
+        logger.debug(
+          { count: items.length, entities: entityCount, observations: obsCount, durationMs },
+          'Unembedded items fetched'
+        )
+        pipelineMetrics.stageDuration.record(durationMs, { stage: 'l3_get_unembedded' })
         return ok(items)
       } catch (error) {
-        logger.error({ error }, 'Failed to get unembedded items')
+        const durationMs = Date.now() - startTime
+        logger.error({ error, durationMs }, 'Failed to get unembedded items')
+        pipelineMetrics.errors.add(1, { kind: 'l3_get_unembedded_error' })
         return err({
           kind: 'UnexpectedError',
           message: 'Failed to get unembedded items',
@@ -1184,14 +1231,22 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
     ctx: TraceContext
   ): Promise<Result<void, StoreError>> {
     return withSpan('Neo4jKnowledgeStore.batchUpdateEmbeddings', async () => {
+      const startTime = Date.now()
       const logger = getLogger().child({ requestId: ctx.requestId })
+
+      const entities = items.filter((i) => i.type === 'entity')
+      const observations = items.filter((i) => i.type === 'observation')
+
+      logger.debug(
+        { total: items.length, entities: entities.length, observations: observations.length },
+        'Updating embeddings in batch'
+      )
 
       await this.ensureSchemaInitialized(ctx)
       const session = this.getSession(ctx)
 
       try {
         // Update entities
-        const entities = items.filter((i) => i.type === 'entity')
         if (entities.length > 0) {
           for (const entity of entities) {
             await session.run(
@@ -1205,7 +1260,6 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
         }
 
         // Update observations
-        const observations = items.filter((i) => i.type === 'observation')
         if (observations.length > 0) {
           for (const obs of observations) {
             await session.run(
@@ -1218,10 +1272,17 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           }
         }
 
-        logger.debug({ count: items.length }, 'Embeddings updated')
+        const durationMs = Date.now() - startTime
+        logger.debug(
+          { count: items.length, entities: entities.length, observations: observations.length, durationMs },
+          'Embeddings batch update complete'
+        )
+        pipelineMetrics.stageDuration.record(durationMs, { stage: 'l3_batch_update_embeddings' })
         return ok(undefined)
       } catch (error) {
-        logger.error({ error }, 'Failed to batch update embeddings')
+        const durationMs = Date.now() - startTime
+        logger.error({ error, durationMs }, 'Failed to batch update embeddings')
+        pipelineMetrics.errors.add(1, { kind: 'l3_batch_update_embeddings_error' })
         return err({
           kind: 'UnexpectedError',
           message: 'Failed to batch update embeddings',
