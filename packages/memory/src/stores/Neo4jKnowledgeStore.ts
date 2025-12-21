@@ -212,8 +212,9 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
   /**
    * Create a database using the system database.
+   * Returns true if creation command succeeded, false if it failed.
    */
-  private async createDatabase(databaseName: string): Promise<void> {
+  private async createDatabase(databaseName: string): Promise<boolean> {
     const logger = getLogger().child({
       component: 'Neo4jKnowledgeStore',
       database: databaseName,
@@ -221,15 +222,24 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
 
     const systemSession = this.driver.session({ database: 'system' })
     try {
-      logger.info('Creating database')
+      logger.info('Creating database via system session')
       await systemSession.run('CREATE DATABASE $name IF NOT EXISTS', { name: databaseName })
       // Wait for database to be ready (Neo4j needs time to initialize new databases)
       await new Promise(resolve => setTimeout(resolve, 1000))
-      logger.info('Database created successfully')
+      logger.info('Database creation command succeeded')
+      return true
     } catch (error) {
-      // Log but continue - might fail due to permissions or already exists
+      // Log the actual error - this is important for debugging
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.warn({ error: errorMessage }, 'Database creation attempt completed')
+      const errorCode = (error as { code?: string }).code
+      logger.error(
+        { error: errorMessage, errorCode, databaseName },
+        'Database creation failed. This may indicate: ' +
+        '1) Neo4j Community Edition (single DB only), ' +
+        '2) Insufficient privileges (need CREATE DATABASE permission), ' +
+        '3) Neo4j version < 4.0 (no multi-database support)'
+      )
+      return false
     } finally {
       await systemSession.close()
     }
@@ -263,11 +273,41 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
     // Step 1: Check if database exists and create if needed (per-user mode only)
     if (this.config.databasePerUser && databaseName !== 'neo4j' && databaseName !== 'system') {
       logger.info('Per-user mode: checking if database exists')
-      const exists = await this.databaseExists(databaseName)
+      let exists = await this.databaseExists(databaseName)
       logger.info({ exists }, 'Database existence check result')
 
       if (!exists) {
-        await this.createDatabase(databaseName)
+        const created = await this.createDatabase(databaseName)
+
+        if (!created) {
+          // createDatabase already logged the error
+          throw new Error(
+            `Failed to create database '${databaseName}'. Per-user database mode requires ` +
+            `Neo4j Enterprise, Aura, or Dozer with multi-database support.`
+          )
+        }
+
+        // CRITICAL: Verify database was actually created
+        // Wait a bit more and re-check (Neo4j needs time to propagate)
+        await new Promise(resolve => setTimeout(resolve, 500))
+        exists = await this.databaseExists(databaseName)
+
+        if (!exists) {
+          // Database creation failed - this is a critical error in per-user mode
+          // Don't mark as initialized, don't proceed with schema
+          logger.error(
+            { databaseName },
+            'Database creation failed - database does not exist after creation attempt. ' +
+            'This may indicate: Neo4j Community Edition (single DB only), insufficient permissions, ' +
+            'or Dozer/Enterprise not configured. Per-user database mode requires multi-database support.'
+          )
+          throw new Error(
+            `Failed to create database '${databaseName}'. Per-user database mode requires ` +
+            `Neo4j Enterprise, Aura, or Dozer with multi-database support.`
+          )
+        }
+
+        logger.info({ databaseName }, 'Database verified to exist after creation')
       }
     }
 
@@ -284,6 +324,11 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
           // Ignore "already exists" errors - these are expected
           const errorMessage = error instanceof Error ? error.message : String(error)
           if (!errorMessage.includes('already exists')) {
+            // Check for database not found - this is critical
+            if (errorMessage.includes('DatabaseNotFound') || errorMessage.includes('Database does not exist')) {
+              logger.error({ error, databaseName }, 'Database not found during schema initialization')
+              throw new Error(`Database '${databaseName}' not found during schema initialization`)
+            }
             logger.warn({ error, statement: statement.slice(0, 50) }, 'Schema statement failed')
           }
         }
@@ -1473,5 +1518,248 @@ export class Neo4jKnowledgeStore implements IKnowledgeStore {
       }
     }
     return {}
+  }
+
+  // =========================================================================
+  // Self Entity Methods (for Memory Reflector user insights)
+  // =========================================================================
+
+  /**
+   * Ensure a "self" entity exists for the user.
+   * This is where user-level insights are stored as observations.
+   *
+   * @param userId - The user ID
+   * @param ctx - Trace context
+   * @returns The self entity
+   */
+  async ensureSelfEntity(
+    userId: string,
+    ctx: TraceContext
+  ): Promise<Result<L3Entity, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.ensureSelfEntity', async () => {
+      const startTime = Date.now()
+      const logger = getLogger().child({
+        component: 'Neo4jKnowledgeStore',
+        operation: 'ensureSelfEntity',
+        userId,
+        requestId: ctx.requestId,
+      })
+      const selfName = `${userId}_self`
+
+      logger.debug({ selfName }, 'Ensuring self entity exists for user insights')
+
+      // Use upsertL3Entity to create or update the self entity
+      const result = await this.upsertL3Entity(
+        {
+          name: selfName,
+          displayName: 'Self',
+          canonicalType: 'concept',
+          labels: ['user_insights', 'introspection'],
+          importance: 1.0,
+          metadata: { role: 'user_self_entity', userId },
+        },
+        ctx
+      )
+
+      const durationMs = Date.now() - startTime
+
+      if (result.ok) {
+        logger.info(
+          { selfName, entityId: result.value.id, durationMs },
+          'Self entity ensured'
+        )
+      } else {
+        logger.warn(
+          { selfName, error: result.error.message, errorKind: result.error.kind, durationMs },
+          'Failed to ensure self entity'
+        )
+      }
+
+      return result
+    })
+  }
+
+  /**
+   * Get recent insights for a user (observations on their self entity).
+   *
+   * @param userId - The user ID
+   * @param limit - Maximum number of insights to return
+   * @param ctx - Trace context
+   * @returns Recent insights as observations
+   */
+  async getUserInsights(
+    userId: string,
+    limit: number,
+    ctx: TraceContext
+  ): Promise<Result<L3Observation[], StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.getUserInsights', async () => {
+      const startTime = Date.now()
+      const logger = getLogger().child({
+        component: 'Neo4jKnowledgeStore',
+        operation: 'getUserInsights',
+        userId,
+        limit,
+        requestId: ctx.requestId,
+      })
+      const selfName = `${userId}_self`
+
+      logger.debug({ selfName }, 'Fetching user insights from self entity')
+
+      // Get observations attached to the self entity
+      const result = await this.getEntityObservations(selfName, { limit }, ctx)
+
+      const durationMs = Date.now() - startTime
+
+      if (result.ok) {
+        logger.info(
+          {
+            selfName,
+            insightCount: result.value.length,
+            requestedLimit: limit,
+            durationMs,
+          },
+          `Retrieved ${result.value.length} user insights`
+        )
+
+        if (result.value.length > 0) {
+          logger.debug(
+            {
+              insights: result.value.map((i) => ({
+                id: i.id,
+                contentPreview: i.content.slice(0, 50),
+                confidence: i.confidence,
+              })),
+            },
+            'User insight details'
+          )
+        }
+      } else {
+        logger.debug(
+          { selfName, error: result.error.message, errorKind: result.error.kind, durationMs },
+          'No insights found (self entity may not exist yet)'
+        )
+      }
+
+      return result
+    })
+  }
+
+  /**
+   * Reinforce an existing observation by boosting its confidence.
+   * Used when the Memory Reflector detects that an observation is confirmed again.
+   *
+   * @param observationId - The observation ID to reinforce
+   * @param messageId - The message ID that triggered reinforcement
+   * @param conversationId - The conversation ID
+   * @param confidenceBoost - Amount to boost confidence (default: 0.1, max result: 1.0)
+   * @param ctx - Trace context
+   */
+  async reinforceObservation(
+    observationId: string,
+    messageId: string,
+    conversationId: string,
+    confidenceBoost: number = 0.1,
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('Neo4jKnowledgeStore.reinforceObservation', async () => {
+      const startTime = Date.now()
+      const logger = getLogger().child({
+        component: 'Neo4jKnowledgeStore',
+        operation: 'reinforceObservation',
+        observationId,
+        messageId,
+        conversationId,
+        confidenceBoost,
+        requestId: ctx.requestId,
+      })
+
+      logger.debug('Reinforcing observation - boosting confidence and adding to sourceHistory')
+
+      await this.ensureSchemaInitialized(ctx)
+      const session = this.getSession(ctx)
+
+      try {
+        const now = Date.now()
+
+        // Update observation: boost confidence and add sourceHistory entry
+        const result = await session.run(
+          `
+          MATCH (o:Observation {id: $id})
+          SET o.confidence = CASE
+            WHEN o.confidence + $boost > 1.0 THEN 1.0
+            ELSE o.confidence + $boost
+          END,
+          o.lastReinforced = $now,
+          o.reinforcementCount = coalesce(o.reinforcementCount, 0) + 1
+          RETURN o.confidence as newConfidence, o.reinforcementCount as count
+          `,
+          {
+            id: observationId,
+            boost: confidenceBoost,
+            now,
+          }
+        )
+
+        if (result.records.length === 0) {
+          logger.warn('Observation not found for reinforcement')
+          return err({
+            kind: 'NotFoundError' as const,
+            message: `Observation ${observationId} not found`,
+            context: { observationId },
+          })
+        }
+
+        const newConfidence = result.records[0].get('newConfidence')
+        const count = result.records[0].get('count')
+
+        // Also update the parent entity's sourceHistory if we can find it
+        await session.run(
+          `
+          MATCH (e:Entity)-[:HAS_OBSERVATION]->(o:Observation {id: $obsId})
+          WITH e, coalesce(e.sourceHistory, '[]') as historyJson
+          WITH e, apoc.convert.fromJsonList(historyJson) as history
+          SET e.sourceHistory = apoc.convert.toJson(
+            history + [{
+              messageId: $messageId,
+              conversationId: $conversationId,
+              action: 'reinforced',
+              timestamp: $now
+            }]
+          ),
+          e.lastSeen = $now
+          `,
+          {
+            obsId: observationId,
+            messageId,
+            conversationId,
+            now,
+          }
+        ).catch(() => {
+          // APOC might not be available, try fallback
+          logger.debug('APOC not available for sourceHistory update, skipping')
+        })
+
+        const durationMs = Date.now() - startTime
+        logger.info(
+          { newConfidence, reinforcementCount: count, durationMs },
+          'Observation reinforced'
+        )
+        pipelineMetrics.stageDuration.record(durationMs, { stage: 'l3_reinforce_observation' })
+
+        return ok(undefined)
+      } catch (error) {
+        const durationMs = Date.now() - startTime
+        logger.error({ error, durationMs }, 'Failed to reinforce observation')
+        pipelineMetrics.errors.add(1, { kind: 'l3_reinforce_observation_error' })
+        return err({
+          kind: 'UnexpectedError',
+          message: 'Failed to reinforce observation',
+          context: { observationId },
+          cause: error,
+        })
+      } finally {
+        await session.close()
+      }
+    })
   }
 }
