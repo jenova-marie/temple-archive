@@ -91,6 +91,13 @@ export {
 // Embedding providers
 export { OpenAIEmbeddingProvider, type OpenAIEmbeddingConfig } from './providers/index.js'
 
+// L3 Memory embeddings (local MiniLM)
+export {
+  MiniLMEmbeddingProvider,
+  type MiniLMProviderConfig,
+  type EmbeddingError,
+} from './embeddings/index.js'
+
 // Re-export stubs for easy access
 export {
   InMemoryContextStore,
@@ -142,3 +149,10 @@ export {
   DEFAULT_COMPACTION_CONFIG,
   loadCompactionConfig,
 } from './compaction/index.js'
+
+// L3 Memory background jobs
+export {
+  EmbeddingBatchJob,
+  type EmbeddingBatchJobConfig,
+  type UnembeddedItem,
+} from './jobs/index.js'
