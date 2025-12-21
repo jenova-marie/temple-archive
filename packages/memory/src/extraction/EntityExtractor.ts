@@ -12,9 +12,12 @@ import type {
   Message,
   TraceContext,
   Result,
+  CanonicalType,
+  SourceEntry,
 } from '@recoverysky/types'
 import { ok, err } from '@recoverysky/types'
 import { getLogger, withSpan } from '@recoverysky/observability'
+import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
 
 /**
  * Extraction modes
@@ -58,6 +61,25 @@ export interface ExtractedEntity {
   type: EntityType
   importance: number
   context: string
+  /** Original casing of the name (L3 Memory) */
+  displayName?: string
+  /** Freeform labels (L3 Memory) */
+  labels?: string[]
+  /** Alternative names (L3 Memory) */
+  aliases?: string[]
+}
+
+/**
+ * Observation extracted from conversation (L3 Memory)
+ * Facts or insights about entities
+ */
+export interface ExtractedObservation {
+  /** Entity this observation is about */
+  entityName: string
+  /** The factual content */
+  content: string
+  /** Confidence 0-1 */
+  confidence: number
 }
 
 /**
@@ -89,6 +111,8 @@ export interface ExtractedRelationship {
 export interface ExtractionResult {
   entities: ExtractedEntity[]
   relationships: ExtractedRelationship[]
+  /** Observations about entities (L3 Memory) */
+  observations?: ExtractedObservation[]
 }
 
 /**
@@ -176,15 +200,122 @@ const TYPE_DESCRIPTIONS: Record<EntityType, string> = {
   medication: 'medication: Any medications mentioned (MAT, etc.)',
 }
 
+/**
+ * Map legacy entity types to L3 canonical types
+ */
+const CANONICAL_TYPE_MAPPING: Record<string, CanonicalType> = {
+  // Direct mappings
+  person: 'person',
+  place: 'place',
+  event: 'event',
+  // Map to concept
+  emotion: 'concept',
+  trigger: 'concept',
+  coping_strategy: 'concept',
+  milestone: 'event',
+  medication: 'thing',
+  // Additional common types
+  organization: 'organization',
+  company: 'organization',
+  team: 'organization',
+  concept: 'concept',
+  idea: 'concept',
+  thing: 'thing',
+  object: 'thing',
+  product: 'thing',
+}
+
+/**
+ * Convert any type string to a canonical type
+ */
+function toCanonicalType(type: string): CanonicalType {
+  const normalized = type.toLowerCase().replace(/[^a-z_]/g, '_')
+  return CANONICAL_TYPE_MAPPING[normalized] ?? 'concept'
+}
+
+/**
+ * L3 Memory extraction prompt - extracts richer entity data and observations
+ */
+const L3_EXTRACTION_PROMPT = `You are analyzing a conversation to extract knowledge for a personal AI companion's memory system.
+
+USER MESSAGE: {userMessage}
+ASSISTANT RESPONSE: {assistantResponse}
+
+Extract ENTITIES (people, places, things, concepts, events, organizations) and OBSERVATIONS (facts about entities).
+
+For each ENTITY, provide:
+- name: canonical lowercase name (e.g., "john smith")
+- displayName: original casing as mentioned (e.g., "John Smith")
+- type: one of [person, place, organization, concept, event, thing]
+- labels: freeform descriptive tags (e.g., ["friend", "engineer", "coffee lover"])
+- importance: 0.0-1.0 based on relevance and significance
+- context: brief context about why this entity matters
+- aliases: other names this entity goes by (optional)
+
+For each OBSERVATION (facts learned about entities):
+- entityName: which entity this fact is about (lowercase)
+- content: the factual observation (e.g., "Works at Google as a senior engineer")
+- confidence: 0.0-1.0 how certain is this fact
+
+{relationshipInstructions}
+
+Respond with ONLY a JSON object:
+{
+  "entities": [
+    {
+      "name": "john smith",
+      "displayName": "John Smith",
+      "type": "person",
+      "labels": ["friend", "colleague"],
+      "importance": 0.8,
+      "context": "Close friend mentioned frequently",
+      "aliases": ["johnny", "js"]
+    }
+  ],
+  "observations": [
+    {
+      "entityName": "john smith",
+      "content": "Works at Google as a senior engineer",
+      "confidence": 0.9
+    }
+  ],
+  "relationships": [
+    {
+      "from": "john smith",
+      "to": "google",
+      "type": "works_at",
+      "strength": 0.9,
+      "properties": {
+        "context": "employment relationship",
+        "when": "current"
+      }
+    }
+  ]
+}
+
+If nothing meaningful is found, return: { "entities": [], "observations": [], "relationships": [] }`
+
 export class EntityExtractor {
   private readonly config: EntityExtractorConfig
+  /** L3 store for Cadillac memory features (optional) */
+  private readonly l3Store: Neo4jKnowledgeStore | null = null
+  /** Whether to use L3 Memory extraction (richer prompt, observations) */
+  private readonly useL3Extraction: boolean
 
   constructor(
     private readonly client: Anthropic | null,
     private readonly knowledgeStore: IKnowledgeStore,
-    config?: Partial<EntityExtractorConfig>
+    config?: Partial<EntityExtractorConfig>,
+    options?: {
+      /** Enable L3 Memory features (observations, richer entities) */
+      l3Store?: Neo4jKnowledgeStore
+      /** Use L3 extraction prompt (default: true if l3Store provided) */
+      useL3Extraction?: boolean
+    }
   ) {
     this.config = { ...DEFAULT_EXTRACTOR_CONFIG, ...config }
+    this.l3Store = options?.l3Store ?? null
+    this.useL3Extraction = options?.useL3Extraction ?? (this.l3Store !== null)
   }
 
   /**
@@ -241,7 +372,7 @@ export class EntityExtractor {
       )
 
       // Persist to knowledge store (non-blocking errors)
-      await this.persist(filtered, userMessage.userId, ctx)
+      await this.persist(filtered, userMessage, ctx)
 
       return ok(filtered)
     })
@@ -277,23 +408,30 @@ export class EntityExtractor {
     ctx: TraceContext
   ): Promise<Result<ExtractionResult, ExtractionError>> {
     return withSpan('EntityExtractor.callLLM', async () => {
-      const logger = getLogger().child({ requestId: ctx.requestId })
+      const logger = getLogger().child({ requestId: ctx.requestId, l3Mode: this.useL3Extraction })
 
       try {
-        // Build prompt
-        const enabledTypesText = this.config.enabledTypes
-          .map((t) => `- ${TYPE_DESCRIPTIONS[t]}`)
-          .join('\n')
-
+        // Build prompt - use L3 prompt for richer extraction when enabled
         const relationshipInstructions = this.config.inferRelationships
           ? RELATIONSHIP_INSTRUCTIONS_ENABLED
           : 'Do not extract relationships, return an empty relationships array.'
 
-        const prompt = EXTRACTION_PROMPT
-          .replace('{userMessage}', userContent)
-          .replace('{assistantResponse}', assistantContent)
-          .replace('{enabledTypes}', enabledTypesText)
-          .replace('{relationshipInstructions}', relationshipInstructions)
+        let prompt: string
+        if (this.useL3Extraction) {
+          prompt = L3_EXTRACTION_PROMPT
+            .replace('{userMessage}', userContent)
+            .replace('{assistantResponse}', assistantContent)
+            .replace('{relationshipInstructions}', relationshipInstructions)
+        } else {
+          const enabledTypesText = this.config.enabledTypes
+            .map((t) => `- ${TYPE_DESCRIPTIONS[t]}`)
+            .join('\n')
+          prompt = EXTRACTION_PROMPT
+            .replace('{userMessage}', userContent)
+            .replace('{assistantResponse}', assistantContent)
+            .replace('{enabledTypes}', enabledTypesText)
+            .replace('{relationshipInstructions}', relationshipInstructions)
+        }
 
         const response = await this.client!.messages.create(
           {
@@ -334,9 +472,17 @@ export class EntityExtractor {
         const result = JSON.parse(jsonMatch[0]) as {
           entities?: Array<{
             name: string
+            displayName?: string
             type: string
+            labels?: string[]
             importance: number
             context: string
+            aliases?: string[]
+          }>
+          observations?: Array<{
+            entityName: string
+            content: string
+            confidence: number
           }>
           relationships?: Array<{
             from: string
@@ -367,18 +513,37 @@ export class EntityExtractor {
           )
         }
 
+        // For L3 extraction, accept any type. For legacy, filter by enabled types
         const entities: ExtractedEntity[] = rawEntities
           .filter((e) =>
             e.name != null &&
             typeof e.name === 'string' &&
             e.name.trim().length > 0 &&
-            this.config.enabledTypes.includes(e.type as EntityType)
+            (this.useL3Extraction || this.config.enabledTypes.includes(e.type as EntityType))
           )
           .map((e) => ({
-            name: e.name.trim(),
-            type: e.type as EntityType,
+            name: e.name.trim().toLowerCase(),
+            type: (this.useL3Extraction ? toCanonicalType(e.type) : e.type) as EntityType,
             importance: Math.max(0, Math.min(1, e.importance ?? 0.5)),
             context: e.context ?? '',
+            // L3 fields
+            displayName: e.displayName ?? e.name.trim(),
+            labels: e.labels ?? [],
+            aliases: e.aliases ?? [],
+          }))
+
+        // Parse observations (L3 only)
+        const observations: ExtractedObservation[] = (result.observations ?? [])
+          .filter((o) =>
+            o.entityName != null &&
+            typeof o.entityName === 'string' &&
+            o.content != null &&
+            typeof o.content === 'string'
+          )
+          .map((o) => ({
+            entityName: o.entityName.toLowerCase().trim(),
+            content: o.content.trim(),
+            confidence: Math.max(0, Math.min(1, o.confidence ?? 0.8)),
           }))
 
         // Validate and normalize relationships - filter out those with missing from/to/type
@@ -415,7 +580,10 @@ export class EntityExtractor {
               .map((r) => ({
                 from: r.from.trim(),
                 to: r.to.trim(),
-                type: r.type.toUpperCase().replace(/[^A-Z0-9_]/g, '_'), // Sanitize for Neo4j
+                // For L3, keep lowercase type. For legacy, uppercase with sanitization
+                type: this.useL3Extraction
+                  ? r.type.toLowerCase().replace(/[^a-z0-9_]/g, '_')
+                  : r.type.toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
                 strength: Math.max(0, Math.min(1, r.strength ?? 0.5)),
                 properties: r.properties ? {
                   context: r.properties.context,
@@ -427,7 +595,7 @@ export class EntityExtractor {
               }))
           : []
 
-        return ok({ entities, relationships })
+        return ok({ entities, relationships, observations: observations.length > 0 ? observations : undefined })
       } catch (error) {
         logger.error({ error }, 'LLM extraction failed')
 
@@ -469,9 +637,16 @@ export class EntityExtractor {
       return fromResolved && toResolved
     })
 
+    // Filter observations to only include those for entities we're keeping
+    const entityNames = new Set(filteredEntities.map((e) => e.name.toLowerCase()))
+    const filteredObservations = (result.observations ?? []).filter((o) =>
+      entityNames.has(o.entityName.toLowerCase())
+    )
+
     return {
       entities: filteredEntities,
       relationships: filteredRelationships,
+      observations: filteredObservations.length > 0 ? filteredObservations : undefined,
     }
   }
 
@@ -503,17 +678,24 @@ export class EntityExtractor {
    */
   private async persist(
     result: ExtractionResult,
-    userId: string,
+    userMessage: Message,
     ctx: TraceContext
   ): Promise<void> {
-    const logger = getLogger().child({ requestId: ctx.requestId })
+    const logger = getLogger().child({ requestId: ctx.requestId, l3Mode: !!this.l3Store })
     const now = Date.now()
+    const userId = userMessage.userId
 
     // Build name resolution map: LLM name variations → stored name
     // This handles cases where LLM uses "John" in relationships but "John Smith" in entities
     const nameResolutionMap = this.buildNameResolutionMap(result.entities)
 
-    // Store entities
+    // Use L3 store if available
+    if (this.l3Store) {
+      await this.persistL3(result, userMessage, nameResolutionMap, ctx)
+      return
+    }
+
+    // Legacy persistence path
     for (const entity of result.entities) {
       const entityRecord: Entity = {
         entityId: `${userId}_${entity.type}_${entity.name.toLowerCase().replace(/\s+/g, '_')}`,
@@ -573,6 +755,133 @@ export class EntityExtractor {
       )
       if (!relResult.ok) {
         logger.warn({ error: relResult.error, relationship: rel }, 'Failed to store relationship')
+      }
+    }
+  }
+
+  /**
+   * L3 Memory persistence - uses L3 store methods for richer entity storage
+   */
+  private async persistL3(
+    result: ExtractionResult,
+    userMessage: Message,
+    nameResolutionMap: Map<string, string>,
+    ctx: TraceContext
+  ): Promise<void> {
+    const logger = getLogger().child({ requestId: ctx.requestId })
+    const now = Date.now()
+    const conversationId = userMessage.conversationId
+    const messageId = userMessage.id
+
+    // Store entities using L3 methods
+    for (const entity of result.entities) {
+      // Check if entity exists to determine action type
+      const existingResult = await this.l3Store!.getL3Entity(entity.name.toLowerCase(), ctx)
+      const action: SourceEntry['action'] = existingResult.ok && existingResult.value
+        ? 'updated'
+        : 'created'
+
+      // Upsert L3 entity
+      const l3Result = await this.l3Store!.upsertL3Entity(
+        {
+          name: entity.name.toLowerCase(),
+          displayName: entity.displayName ?? entity.name,
+          aliases: entity.aliases ?? [],
+          canonicalType: toCanonicalType(entity.type),
+          labels: entity.labels ?? [],
+          importance: entity.importance,
+          metadata: {
+            context: entity.context,
+          },
+        },
+        ctx
+      )
+
+      if (!l3Result.ok) {
+        logger.warn({ error: l3Result.error, entity: entity.name }, 'Failed to store L3 entity')
+        continue
+      }
+
+      // Track source history for Deep Memory
+      const sourceEntry: SourceEntry = {
+        messageId,
+        conversationId,
+        action,
+        timestamp: now,
+      }
+
+      const historyResult = await this.l3Store!.appendSourceHistory(
+        entity.name.toLowerCase(),
+        sourceEntry,
+        ctx
+      )
+      if (!historyResult.ok) {
+        logger.warn(
+          { error: historyResult.error, entity: entity.name },
+          'Failed to append source history'
+        )
+      }
+    }
+
+    // Store observations as separate nodes
+    if (result.observations && result.observations.length > 0) {
+      for (const obs of result.observations) {
+        const obsResult = await this.l3Store!.createObservation(
+          obs.entityName.toLowerCase(),
+          {
+            content: obs.content,
+            conversationId,
+            messageId,
+            confidence: obs.confidence,
+          },
+          ctx
+        )
+        if (!obsResult.ok) {
+          logger.warn(
+            { error: obsResult.error, entityName: obs.entityName },
+            'Failed to create observation'
+          )
+        }
+      }
+    }
+
+    // Store relationships using L3 method
+    for (const rel of result.relationships) {
+      const resolvedFrom = this.resolveEntityName(rel.from, nameResolutionMap, logger)
+      const resolvedTo = this.resolveEntityName(rel.to, nameResolutionMap, logger)
+
+      if (!resolvedFrom || !resolvedTo) {
+        logger.warn(
+          {
+            from: rel.from,
+            to: rel.to,
+            resolvedFrom,
+            resolvedTo,
+            availableEntities: Array.from(nameResolutionMap.values()),
+          },
+          'Skipping L3 relationship: could not resolve entity names'
+        )
+        continue
+      }
+
+      const relResult = await this.l3Store!.createL3Relationship(
+        resolvedFrom,
+        resolvedTo,
+        rel.type,
+        {
+          strength: rel.strength,
+          context: rel.properties?.context,
+          when: rel.properties?.when,
+          method: rel.properties?.method,
+          frequency: rel.properties?.frequency,
+          notes: rel.properties?.notes,
+          conversationId,
+          messageId,
+        },
+        ctx
+      )
+      if (!relResult.ok) {
+        logger.warn({ error: relResult.error, relationship: rel }, 'Failed to store L3 relationship')
       }
     }
   }

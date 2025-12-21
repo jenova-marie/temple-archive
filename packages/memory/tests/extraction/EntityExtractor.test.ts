@@ -230,7 +230,8 @@ describe("EntityExtractor", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.entities).toHaveLength(2);
-        expect(result.value.entities[0].name).toBe("John");
+        // Entity names are normalized to lowercase
+        expect(result.value.entities[0].name).toBe("john");
         expect(result.value.relationships).toHaveLength(1);
       }
     });
@@ -276,9 +277,9 @@ describe("EntityExtractor", () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Only John should pass the threshold
+        // Only John should pass the threshold (names normalized to lowercase)
         expect(result.value.entities).toHaveLength(1);
-        expect(result.value.entities[0].name).toBe("John");
+        expect(result.value.entities[0].name).toBe("john");
       }
     });
 
@@ -724,6 +725,437 @@ describe("EntityExtractor", () => {
       } finally {
         Math.random = originalRandom;
       }
+    });
+  });
+
+  describe("L3 Memory persistence", () => {
+    let mockL3Store: {
+      getL3Entity: ReturnType<typeof vi.fn>;
+      upsertL3Entity: ReturnType<typeof vi.fn>;
+      appendSourceHistory: ReturnType<typeof vi.fn>;
+      createObservation: ReturnType<typeof vi.fn>;
+      createL3Relationship: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      mockL3Store = {
+        getL3Entity: vi.fn().mockResolvedValue(ok(null)),
+        upsertL3Entity: vi.fn().mockResolvedValue(
+          ok({
+            id: "entity-123",
+            name: "john smith",
+            displayName: "John Smith",
+            aliases: [],
+            canonicalType: "person",
+            labels: ["friend"],
+            importance: 0.8,
+            firstSeen: Date.now(),
+            lastSeen: Date.now(),
+            mentionCount: 1,
+            sourceHistory: [],
+            metadata: {},
+          }),
+        ),
+        appendSourceHistory: vi.fn().mockResolvedValue(ok(undefined)),
+        createObservation: vi.fn().mockResolvedValue(
+          ok({
+            id: "obs-123",
+            content: "Works at Google",
+            createdAt: Date.now(),
+            conversationId: "conv_123",
+            messageId: "msg_123",
+            confidence: 0.9,
+          }),
+        ),
+        createL3Relationship: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+    });
+
+    it("should use L3 store when provided", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "john smith",
+                  displayName: "John Smith",
+                  type: "person",
+                  labels: ["friend"],
+                  importance: 0.8,
+                  context: "Close friend",
+                },
+              ],
+              observations: [],
+              relationships: [],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "John Smith is my friend"),
+        createMockMessage("assistant", "Nice to hear about John"),
+        1,
+        createTraceContext(),
+      );
+
+      // Should use L3 store, not legacy store
+      expect(mockL3Store.upsertL3Entity).toHaveBeenCalled();
+      expect(mockKnowledgeStore.upsertEntity).not.toHaveBeenCalled();
+    });
+
+    it("should track source history with 'created' action for new entities", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "john",
+                  type: "person",
+                  importance: 0.8,
+                  context: "New friend",
+                },
+              ],
+              observations: [],
+              relationships: [],
+            }),
+          },
+        ],
+      });
+
+      // Entity doesn't exist
+      mockL3Store.getL3Entity.mockResolvedValue(ok(null));
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "I met John"),
+        createMockMessage("assistant", "Great"),
+        1,
+        createTraceContext(),
+      );
+
+      expect(mockL3Store.appendSourceHistory).toHaveBeenCalledWith(
+        "john",
+        expect.objectContaining({
+          action: "created",
+          conversationId: "conv_123",
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("should track source history with 'updated' action for existing entities", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "john",
+                  type: "person",
+                  importance: 0.8,
+                  context: "Existing friend",
+                },
+              ],
+              observations: [],
+              relationships: [],
+            }),
+          },
+        ],
+      });
+
+      // Entity exists
+      mockL3Store.getL3Entity.mockResolvedValue(
+        ok({
+          id: "existing-123",
+          name: "john",
+          canonicalType: "person",
+        }),
+      );
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "Saw John again"),
+        createMockMessage("assistant", "Nice"),
+        1,
+        createTraceContext(),
+      );
+
+      expect(mockL3Store.appendSourceHistory).toHaveBeenCalledWith(
+        "john",
+        expect.objectContaining({
+          action: "updated",
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("should create observations as separate nodes", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "john",
+                  type: "person",
+                  importance: 0.8,
+                  context: "Friend",
+                },
+              ],
+              observations: [
+                {
+                  entityName: "john",
+                  content: "Works at Google as an engineer",
+                  confidence: 0.9,
+                },
+                {
+                  entityName: "john",
+                  content: "Lives in San Francisco",
+                  confidence: 0.85,
+                },
+              ],
+              relationships: [],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "John works at Google in SF"),
+        createMockMessage("assistant", "Interesting"),
+        1,
+        createTraceContext(),
+      );
+
+      expect(mockL3Store.createObservation).toHaveBeenCalledTimes(2);
+      expect(mockL3Store.createObservation).toHaveBeenCalledWith(
+        "john",
+        expect.objectContaining({
+          content: "Works at Google as an engineer",
+          confidence: 0.9,
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("should use createL3Relationship for L3 mode", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "john",
+                  type: "person",
+                  importance: 0.8,
+                  context: "Friend",
+                },
+                {
+                  name: "google",
+                  type: "organization",
+                  importance: 0.7,
+                  context: "Company",
+                },
+              ],
+              observations: [],
+              relationships: [
+                {
+                  from: "john",
+                  to: "google",
+                  type: "works_at",
+                  strength: 0.9,
+                  properties: {
+                    context: "employment",
+                    when: "current",
+                  },
+                },
+              ],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "John works at Google"),
+        createMockMessage("assistant", "Cool"),
+        1,
+        createTraceContext(),
+      );
+
+      expect(mockL3Store.createL3Relationship).toHaveBeenCalledWith(
+        "john",
+        "google",
+        "works_at",
+        expect.objectContaining({
+          strength: 0.9,
+          context: "employment",
+          when: "current",
+        }),
+        expect.any(Object),
+      );
+      expect(mockKnowledgeStore.createRelationship).not.toHaveBeenCalled();
+    });
+
+    it("should filter observations for filtered-out entities", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "john",
+                  type: "person",
+                  importance: 0.8, // Above threshold
+                  context: "Important",
+                },
+                {
+                  name: "weather",
+                  type: "concept",
+                  importance: 0.1, // Below threshold
+                  context: "Not important",
+                },
+              ],
+              observations: [
+                {
+                  entityName: "john",
+                  content: "Likes coffee",
+                  confidence: 0.9,
+                },
+                {
+                  entityName: "weather",
+                  content: "Was sunny",
+                  confidence: 0.9,
+                },
+              ],
+              relationships: [],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all", minImportance: 0.3 },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "John likes coffee on sunny days"),
+        createMockMessage("assistant", "Nice"),
+        1,
+        createTraceContext(),
+      );
+
+      // Only observation for "john" should be created
+      expect(mockL3Store.createObservation).toHaveBeenCalledTimes(1);
+      expect(mockL3Store.createObservation).toHaveBeenCalledWith(
+        "john",
+        expect.objectContaining({
+          content: "Likes coffee",
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it("should map legacy types to canonical types", async () => {
+      mockClient.messages.create.mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              entities: [
+                {
+                  name: "anxiety",
+                  type: "emotion", // Legacy type
+                  importance: 0.8,
+                  context: "Feeling anxious",
+                },
+                {
+                  name: "breathing",
+                  type: "coping_strategy", // Legacy type
+                  importance: 0.7,
+                  context: "Deep breathing",
+                },
+              ],
+              observations: [],
+              relationships: [],
+            }),
+          },
+        ],
+      });
+
+      const extractor = new EntityExtractor(
+        mockClient as unknown as Anthropic,
+        mockKnowledgeStore,
+        { mode: "all" },
+        { l3Store: mockL3Store as any },
+      );
+
+      await extractor.extract(
+        createMockMessage("user", "I feel anxious but breathing helps"),
+        createMockMessage("assistant", "Good strategy"),
+        1,
+        createTraceContext(),
+      );
+
+      // Should map to canonical types
+      expect(mockL3Store.upsertL3Entity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "anxiety",
+          canonicalType: "concept", // emotion -> concept
+        }),
+        expect.any(Object),
+      );
+      expect(mockL3Store.upsertL3Entity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "breathing",
+          canonicalType: "concept", // coping_strategy -> concept
+        }),
+        expect.any(Object),
+      );
     });
   });
 });
