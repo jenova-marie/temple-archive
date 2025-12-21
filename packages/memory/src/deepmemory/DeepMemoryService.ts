@@ -6,7 +6,7 @@
  * providing the agent with richer context about what was discussed.
  */
 
-import { getLogger, withSpan } from '@recoverysky/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@recoverysky/observability'
 import type {
   L3EntityWithObservations,
   EnrichedL3Entity,
@@ -26,8 +26,9 @@ export interface IDeepMemorySessionStore {
   getMessagesAroundId(
     conversationId: string,
     messageId: string,
-    window: number,
-    ctx: TraceContext
+    windowBefore: number,
+    ctx: TraceContext,
+    windowAfter?: number
   ): Promise<Result<Message[], StoreError>>
 }
 
@@ -40,8 +41,10 @@ export type ContextStrategy = 'latest' | 'created_and_latest' | 'all'
  * Configuration for Deep Memory Service
  */
 export interface DeepMemoryServiceConfig {
-  /** Number of messages before and after target to retrieve (default: 5) */
+  /** Number of messages before target to retrieve (default: 5) */
   messageWindow?: number
+  /** Ratio for messages after target (default: 0.5, so 5 before = 2 after) */
+  messageWindowAfterRatio?: number
   /** Maximum number of sourceHistory entries to process per entity (default: 10) */
   maxEntriesPerEntity?: number
 }
@@ -50,18 +53,22 @@ export interface DeepMemoryServiceConfig {
  * Deep Memory Service
  *
  * Enriches entities with conversation context from L2 (PostgreSQL).
- * Uses sourceHistory to find original messages and retrieves ±N messages
- * around each extraction event.
+ * Uses sourceHistory to find original messages and retrieves messages
+ * around each extraction event (more before than after, since context
+ * leading up to extraction is more valuable).
  */
 export class DeepMemoryService {
-  private readonly messageWindow: number
+  private readonly messageWindowBefore: number
+  private readonly messageWindowAfter: number
   private readonly maxEntriesPerEntity: number
 
   constructor(
     private readonly sessionStore: IDeepMemorySessionStore,
     config?: DeepMemoryServiceConfig
   ) {
-    this.messageWindow = config?.messageWindow ?? 5
+    this.messageWindowBefore = config?.messageWindow ?? 5
+    const afterRatio = config?.messageWindowAfterRatio ?? 0.5
+    this.messageWindowAfter = Math.floor(this.messageWindowBefore * afterRatio)
     this.maxEntriesPerEntity = config?.maxEntriesPerEntity ?? 10
   }
 
@@ -79,24 +86,39 @@ export class DeepMemoryService {
     ctx: TraceContext
   ): Promise<EnrichedL3Entity[]> {
     return withSpan('DeepMemoryService.enrichWithContext', async () => {
+      const startTime = Date.now()
       const logger = getLogger().child({
         entityCount: entities.length,
         strategy,
+        messageWindowBefore: this.messageWindowBefore,
+        messageWindowAfter: this.messageWindowAfter,
         requestId: ctx.requestId,
       })
 
+      if (entities.length === 0) {
+        logger.debug('No entities to enrich')
+        return []
+      }
+
+      logger.debug('Starting Deep Memory enrichment')
+
       const enriched: EnrichedL3Entity[] = []
+      let totalSourceEntries = 0
+      let successfulFetches = 0
+      let failedFetches = 0
 
       for (const entity of entities) {
         const sourceEntries = this.selectEntries(entity.sourceHistory ?? [], strategy)
+        totalSourceEntries += sourceEntries.length
         const contexts: ConversationContext[] = []
 
         for (const entry of sourceEntries) {
           const messagesResult = await this.sessionStore.getMessagesAroundId(
             entry.conversationId,
             entry.messageId,
-            this.messageWindow,
-            ctx
+            this.messageWindowBefore,
+            ctx,
+            this.messageWindowAfter
           )
 
           if (messagesResult.ok && messagesResult.value.length > 0) {
@@ -105,6 +127,13 @@ export class DeepMemoryService {
               timestamp: entry.timestamp,
               messages: messagesResult.value,
             })
+            successfulFetches++
+          } else if (!messagesResult.ok) {
+            failedFetches++
+            logger.debug(
+              { entityName: entity.name, messageId: entry.messageId, error: messagesResult.error },
+              'Failed to fetch context for sourceHistory entry'
+            )
           }
         }
 
@@ -114,13 +143,31 @@ export class DeepMemoryService {
         })
       }
 
-      logger.debug(
+      const durationMs = Date.now() - startTime
+      const totalContexts = enriched.reduce((sum, e) => sum + e.conversationContexts.length, 0)
+      const totalMessages = enriched.reduce(
+        (sum, e) => sum + e.conversationContexts.reduce((s, c) => s + c.messages.length, 0),
+        0
+      )
+
+      logger.info(
         {
           entitiesEnriched: enriched.length,
-          totalContexts: enriched.reduce((sum, e) => sum + e.conversationContexts.length, 0),
+          totalSourceEntries,
+          totalContexts,
+          totalMessages,
+          successfulFetches,
+          failedFetches,
+          durationMs,
         },
-        'Entities enriched with Deep Memory context'
+        'Deep Memory enrichment complete'
       )
+
+      // Record metrics
+      pipelineMetrics.stageDuration.record(durationMs, { stage: 'deep_memory_enrich' })
+      if (failedFetches > 0) {
+        pipelineMetrics.errors.add(failedFetches, { kind: 'deep_memory_fetch_error' })
+      }
 
       return enriched
     })
@@ -180,7 +227,8 @@ export class DeepMemoryService {
    */
   getConfig(): Required<DeepMemoryServiceConfig> {
     return {
-      messageWindow: this.messageWindow,
+      messageWindow: this.messageWindowBefore,
+      messageWindowAfterRatio: this.messageWindowAfter / this.messageWindowBefore,
       maxEntriesPerEntity: this.maxEntriesPerEntity,
     }
   }

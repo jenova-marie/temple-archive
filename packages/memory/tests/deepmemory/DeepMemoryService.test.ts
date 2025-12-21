@@ -18,6 +18,12 @@ vi.mock('@recoverysky/observability', () => ({
     }),
   }),
   withSpan: vi.fn().mockImplementation((_name, fn) => fn()),
+  pipelineMetrics: {
+    stageDuration: { record: vi.fn() },
+    errors: { add: vi.fn() },
+    memoryCacheHits: { add: vi.fn() },
+    memoryCacheMisses: { add: vi.fn() },
+  },
 }))
 
 function createTraceContext(): TraceContext {
@@ -181,8 +187,9 @@ describe('DeepMemoryService', () => {
       expect(mockSessionStore.getMessagesAroundId).toHaveBeenCalledWith(
         'conv-123',
         'msg-3',
-        5,
-        expect.any(Object)
+        5, // windowBefore
+        expect.any(Object),
+        2  // windowAfter (5 * 0.5 = 2)
       )
     })
   })
@@ -270,8 +277,9 @@ describe('DeepMemoryService', () => {
       expect(mockSessionStore.getMessagesAroundId).toHaveBeenCalledWith(
         'conv-123',
         'msg-1',
-        10, // Custom window
-        expect.any(Object)
+        10, // Custom windowBefore
+        expect.any(Object),
+        5   // windowAfter (10 * 0.5 = 5)
       )
     })
 

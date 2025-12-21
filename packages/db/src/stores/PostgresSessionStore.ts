@@ -417,23 +417,30 @@ export class PostgresSessionStore implements ISessionStore {
 
   /**
    * Get messages around a specific message ID for Deep Memory context retrieval.
-   * Returns ±N messages around the target message.
+   * Returns messages around the target message with asymmetric windows.
+   * Context before the extraction point is typically more valuable than after.
    *
    * @param conversationId - The conversation to search in
    * @param messageId - The target message ID
-   * @param window - Number of messages before and after (default: 5)
+   * @param windowBefore - Number of messages before target (default: 5)
+   * @param windowAfter - Number of messages after target (default: half of before)
    */
   async getMessagesAroundId(
     conversationId: string,
     messageId: string,
-    window: number = 5,
-    ctx: TraceContext
+    windowBefore: number = 5,
+    ctx: TraceContext,
+    windowAfter?: number
   ): Promise<Result<Message[], StoreError>> {
+    // Default after window to half of before (rounded down)
+    const actualWindowAfter = windowAfter ?? Math.floor(windowBefore * 0.5)
+
     return withSpan('PostgresSessionStore.getMessagesAroundId', async () => {
       const logger = getLogger().child({
         conversationId,
         messageId,
-        window,
+        windowBefore,
+        windowAfter: actualWindowAfter,
         requestId: ctx.requestId,
       })
 
@@ -463,9 +470,9 @@ export class PostgresSessionStore implements ISessionStore {
             )
           )
           .orderBy(desc(messages.createdAt))
-          .limit(window + 1) // +1 to include target
+          .limit(windowBefore + 1) // +1 to include target
 
-        // 3. Get N messages after
+        // 3. Get fewer messages after (context before extraction is more valuable)
         const afterRows = await this.db
           .select()
           .from(messages)
@@ -476,7 +483,7 @@ export class PostgresSessionStore implements ISessionStore {
             )
           )
           .orderBy(asc(messages.createdAt))
-          .limit(window)
+          .limit(actualWindowAfter)
 
         // Combine: before (reversed to chronological) + after
         const allMessages = [
