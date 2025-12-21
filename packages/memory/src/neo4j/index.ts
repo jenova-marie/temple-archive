@@ -16,3 +16,10 @@ export {
   clearData,
   SCHEMA_STATEMENTS,
 } from './schema.js'
+
+export { SessionFactory } from './SessionFactory.js'
+
+export {
+  DatabaseManager,
+  type DatabaseInfo,
+} from './DatabaseManager.js'
