@@ -29,6 +29,13 @@
       "when": 1766236800000,
       "tag": "0003_pippa_prompt",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1766330408470,
+      "tag": "0004_smart_justice",
+      "breakpoints": true
     }
   ]
 }

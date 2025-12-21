@@ -19,6 +19,8 @@ import {
   boolean,
   uniqueIndex,
   uuid,
+  real,
+  varchar,
 } from 'drizzle-orm/pg-core'
 import { vector } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
@@ -240,5 +242,31 @@ export const literatureBlocks = pgTable(
       foreignColumns: [literature.id],
     }).onDelete('cascade'),
     index('idx_literature_blocks_literature_id').on(table.literatureId),
+  ]
+)
+
+// ============================================================================
+// Transcriptions
+// ============================================================================
+
+export const transcriptions = pgTable(
+  'transcriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    text: text('text').notNull(),
+    duration: real('duration'),
+    source: varchar('source', { length: 20 }).notNull().$type<'microphone' | 'file'>(),
+    filename: varchar('filename', { length: 255 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'transcriptions_user_id_fk',
+      columns: [table.userId],
+      foreignColumns: [users.userId],
+    }).onDelete('cascade'),
+    index('transcriptions_user_id_idx').on(table.userId),
+    index('transcriptions_created_at_idx').on(table.createdAt),
   ]
 )
