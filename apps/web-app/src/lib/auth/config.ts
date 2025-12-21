@@ -1,8 +1,5 @@
 import type { AuthProviderProps } from 'react-oidc-context'
 
-// Check if auth is disabled
-export const isAuthEnabled = import.meta.env.VITE_DISABLE_AUTH !== 'true'
-
 // Get auth config variables
 const authority = import.meta.env.VITE_ZITADEL_AUTHORITY
 const clientId = import.meta.env.VITE_ZITADEL_CLIENT_ID
@@ -15,19 +12,10 @@ const scope = projectId
   ? `${baseScopes} urn:zitadel:iam:org:project:id:${projectId}:aud`
   : baseScopes
 
-// Debug: Log the auth configuration
-console.log('[Auth Config] Auth enabled:', isAuthEnabled)
-if (isAuthEnabled) {
-  console.log('[Auth Config] Authority:', authority || '(not set)')
-  console.log('[Auth Config] Client ID:', clientId || '(not set)')
-  console.log('[Auth Config] Project ID:', projectId || '(not set)')
-  console.log('[Auth Config] Scope:', scope)
-}
-
 export const oidcConfig: AuthProviderProps = {
-  authority: authority || 'https://dummy.local',
-  client_id: clientId || 'dummy',
-  redirect_uri: redirectUri || window.location.origin,
+  authority: authority,
+  client_id: clientId,
+  redirect_uri: redirectUri,
   post_logout_redirect_uri: window.location.origin,
   scope,
   // Handle redirect after successful signin

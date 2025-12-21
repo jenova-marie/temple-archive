@@ -23,8 +23,9 @@ export default defineConfig({
     include: ["@ricky0123/vad-react", "react", "react-dom"],
   },
   server: {
+    port: 5173,
     proxy: {
-      "/api": "http://localhost:4000", // recoverysky-api
+      "/api": "http://localhost:3333", // agent-api
     },
   },
 });
