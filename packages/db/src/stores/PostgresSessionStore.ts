@@ -17,7 +17,7 @@ import type {
 } from '@recoverysky/types'
 import { ok, err, type Result } from '@recoverysky/types'
 import { getLogger, withSpan } from '@recoverysky/observability'
-import { eq, desc, sql } from 'drizzle-orm'
+import { eq, desc, asc, and, lte, gt, sql } from 'drizzle-orm'
 import type { DatabaseClient } from '../client.js'
 import {
   messages,
@@ -409,6 +409,92 @@ export class PostgresSessionStore implements ISessionStore {
           kind: 'ConnectionError',
           message: 'Failed to store session summary',
           context: { conversationId: summary.conversationId },
+          cause: error,
+        })
+      }
+    })
+  }
+
+  /**
+   * Get messages around a specific message ID for Deep Memory context retrieval.
+   * Returns ±N messages around the target message.
+   *
+   * @param conversationId - The conversation to search in
+   * @param messageId - The target message ID
+   * @param window - Number of messages before and after (default: 5)
+   */
+  async getMessagesAroundId(
+    conversationId: string,
+    messageId: string,
+    window: number = 5,
+    ctx: TraceContext
+  ): Promise<Result<Message[], StoreError>> {
+    return withSpan('PostgresSessionStore.getMessagesAroundId', async () => {
+      const logger = getLogger().child({
+        conversationId,
+        messageId,
+        window,
+        requestId: ctx.requestId,
+      })
+
+      try {
+        // 1. Get target message to find its timestamp
+        const targetRows = await this.db
+          .select()
+          .from(messages)
+          .where(eq(messages.messageId, messageId))
+          .limit(1)
+
+        if (targetRows.length === 0) {
+          logger.debug('Target message not found')
+          return ok([])
+        }
+
+        const targetTimestamp = targetRows[0].createdAt
+
+        // 2. Get N messages before (including target)
+        const beforeRows = await this.db
+          .select()
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, conversationId),
+              lte(messages.createdAt, targetTimestamp)
+            )
+          )
+          .orderBy(desc(messages.createdAt))
+          .limit(window + 1) // +1 to include target
+
+        // 3. Get N messages after
+        const afterRows = await this.db
+          .select()
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, conversationId),
+              gt(messages.createdAt, targetTimestamp)
+            )
+          )
+          .orderBy(asc(messages.createdAt))
+          .limit(window)
+
+        // Combine: before (reversed to chronological) + after
+        const allMessages = [
+          ...beforeRows.reverse().map((row) => this.rowToMessage(row)),
+          ...afterRows.map((row) => this.rowToMessage(row)),
+        ]
+
+        logger.debug(
+          { count: allMessages.length, before: beforeRows.length, after: afterRows.length },
+          'Retrieved messages around target for Deep Memory'
+        )
+        return ok(allMessages)
+      } catch (error) {
+        logger.error({ error }, 'Failed to get messages around ID')
+        return err({
+          kind: 'ConnectionError',
+          message: 'Failed to get messages around ID',
+          context: { conversationId, messageId },
           cause: error,
         })
       }
