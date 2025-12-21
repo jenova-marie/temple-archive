@@ -1,0 +1,189 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Fellowship brand colors */
+  --color-fellowship-aa: var(--fellowship-aa);
+  --color-fellowship-na: var(--fellowship-na);
+  --color-fellowship-cma: var(--fellowship-cma);
+  --color-fellowship-rd: var(--fellowship-rd);
+}
+
+/*
+ * Dynamic color palette
+ * --primary-hue is set via JavaScript from themeStore (default: 195 = teal)
+ * All primary-related colors derive from this single hue value
+ */
+:root {
+  --primary-hue: 195; /* Default teal, overridden by JS */
+  --radius: 0.75rem;
+
+  /* Core palette - Light mode */
+  --background: oklch(0.985 0.002 250);
+  --foreground: oklch(0.20 0.02 260);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.20 0.02 260);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.20 0.02 260);
+
+  /* Primary - Dynamic hue */
+  --primary: oklch(0.55 0.15 var(--primary-hue));
+  --primary-foreground: oklch(0.98 0 0);
+
+  /* Secondary - Soft gray with slight warmth */
+  --secondary: oklch(0.96 0.005 250);
+  --secondary-foreground: oklch(0.35 0.02 260);
+
+  /* Muted - For subtle backgrounds and text */
+  --muted: oklch(0.96 0.005 250);
+  --muted-foreground: oklch(0.50 0.01 260);
+
+  /* Accent - Complementary to primary (offset hue) */
+  --accent: oklch(0.75 0.12 calc(var(--primary-hue) + 60));
+  --accent-foreground: oklch(0.20 0.02 260);
+
+  --destructive: oklch(0.60 0.20 25);
+
+  --border: oklch(0.92 0.005 250);
+  --input: oklch(0.96 0.005 250);
+  --ring: oklch(0.55 0.15 var(--primary-hue));
+
+  /* Chart colors - Primary and variations */
+  --chart-1: oklch(0.55 0.15 var(--primary-hue));
+  --chart-2: oklch(0.60 0.14 calc(var(--primary-hue) + 40));
+  --chart-3: oklch(0.65 0.14 calc(var(--primary-hue) + 80));
+  --chart-4: oklch(0.60 0.16 calc(var(--primary-hue) + 120));
+  --chart-5: oklch(0.55 0.14 calc(var(--primary-hue) + 160));
+
+  /* Sidebar */
+  --sidebar: oklch(0.98 0.002 250);
+  --sidebar-foreground: oklch(0.20 0.02 260);
+  --sidebar-primary: oklch(0.55 0.15 var(--primary-hue));
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.96 0.005 250);
+  --sidebar-accent-foreground: oklch(0.35 0.02 260);
+  --sidebar-border: oklch(0.92 0.005 250);
+  --sidebar-ring: oklch(0.55 0.15 var(--primary-hue));
+
+  /* Fellowship colors - Light mode (fixed, not dynamic) */
+  --fellowship-aa: oklch(0.55 0.12 240);
+  --fellowship-na: oklch(0.55 0.12 155);
+  --fellowship-cma: oklch(0.55 0.12 300);
+  --fellowship-rd: oklch(0.60 0.14 50);
+}
+
+.dark {
+  /* Core palette - Dark mode */
+  --background: oklch(0.14 0.015 260);
+  --foreground: oklch(0.93 0.005 250);
+
+  --card: oklch(0.18 0.015 260);
+  --card-foreground: oklch(0.93 0.005 250);
+
+  --popover: oklch(0.18 0.015 260);
+  --popover-foreground: oklch(0.93 0.005 250);
+
+  /* Primary - Brighter for dark mode, dynamic hue */
+  --primary: oklch(0.70 0.14 var(--primary-hue));
+  --primary-foreground: oklch(0.14 0.015 260);
+
+  /* Secondary */
+  --secondary: oklch(0.22 0.015 260);
+  --secondary-foreground: oklch(0.90 0.005 250);
+
+  /* Muted */
+  --muted: oklch(0.22 0.015 260);
+  --muted-foreground: oklch(0.65 0.01 250);
+
+  /* Accent - Complementary to primary */
+  --accent: oklch(0.78 0.12 calc(var(--primary-hue) + 60));
+  --accent-foreground: oklch(0.14 0.015 260);
+
+  --destructive: oklch(0.65 0.20 25);
+
+  --border: oklch(0.28 0.015 260);
+  --input: oklch(0.22 0.015 260);
+  --ring: oklch(0.70 0.14 var(--primary-hue));
+
+  /* Chart colors - Brighter for dark mode */
+  --chart-1: oklch(0.70 0.14 var(--primary-hue));
+  --chart-2: oklch(0.72 0.13 calc(var(--primary-hue) + 40));
+  --chart-3: oklch(0.74 0.13 calc(var(--primary-hue) + 80));
+  --chart-4: oklch(0.70 0.15 calc(var(--primary-hue) + 120));
+  --chart-5: oklch(0.68 0.13 calc(var(--primary-hue) + 160));
+
+  /* Sidebar */
+  --sidebar: oklch(0.16 0.015 260);
+  --sidebar-foreground: oklch(0.93 0.005 250);
+  --sidebar-primary: oklch(0.70 0.14 var(--primary-hue));
+  --sidebar-primary-foreground: oklch(0.14 0.015 260);
+  --sidebar-accent: oklch(0.22 0.015 260);
+  --sidebar-accent-foreground: oklch(0.90 0.005 250);
+  --sidebar-border: oklch(0.28 0.015 260);
+  --sidebar-ring: oklch(0.70 0.14 var(--primary-hue));
+
+  /* Fellowship colors - Dark mode (fixed, not dynamic) */
+  --fellowship-aa: oklch(0.68 0.12 240);
+  --fellowship-na: oklch(0.68 0.12 155);
+  --fellowship-cma: oklch(0.68 0.12 300);
+  --fellowship-rd: oklch(0.72 0.14 50);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Custom utilities for cards */
+@layer utilities {
+  .card-elevated {
+    @apply bg-card shadow-sm ring-1 ring-border/50;
+  }
+  .card-elevated:hover {
+    @apply shadow-md ring-border;
+  }
+}
