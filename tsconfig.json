@@ -13,6 +13,9 @@
     { "path": "packages/agent" },
     { "path": "packages/evaluation" },
     { "path": "packages/pipeline" },
-    { "path": "apps/api" }
+    { "path": "packages/cli" },
+    { "path": "apps/agent-api" },
+    { "path": "apps/web-api" },
+    { "path": "apps/web-app" }
   ]
 }

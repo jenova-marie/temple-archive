@@ -202,7 +202,7 @@ curl -X POST http://localhost:3333/api/v1/chat \
     "messages": [
       {"role": "user", "parts": [{"type": "text", "text": "Hello Pippa!"}], "id": "msg_1"}
     ],
-    "guide": "base-identity"
+    "guide": "pippa"
   }'
 ```
 
@@ -222,13 +222,13 @@ Controlled by `MEMORY_TOOL_ACCESS` env var:
 System prompts are fetched fresh from the `system_prompts` table on each chat request:
 
 - **Custom guide**: Pass `guide` parameter with prompt name → fetches that prompt
-- **Default**: No guide specified → fetches active `base-identity` prompt
+- **Default**: No guide specified → fetches active `pippa` prompt
 - **Fallback**: Database unavailable → uses hardcoded default
 
 ```typescript
 import { SystemPromptRepository } from '@pippa/db'
 const repo = new SystemPromptRepository(db)
-const result = await repo.findActive('base-identity')
+const result = await repo.findActive('pippa')
 ```
 
 ## Adding a New Package

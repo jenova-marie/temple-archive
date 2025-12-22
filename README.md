@@ -84,7 +84,7 @@ curl -X POST http://localhost:3333/api/v1/chat \
     "messages": [
       {"role": "user", "parts": [{"type": "text", "text": "Hello Pippa!"}], "id": "msg_1"}
     ],
-    "guide": "base-identity"
+    "guide": "pippa"
   }'
 ```
 
@@ -96,7 +96,7 @@ The `userId` is automatically extracted from the JWT `sub` claim.
 |-------|------|----------|-------------|
 | `id` | string | Yes | Conversation/thread ID |
 | `messages` | UIMessage[] | Yes | Array of messages with `role`, `parts`, `id` |
-| `guide` | string | No | System prompt name (e.g., "base-identity") |
+| `guide` | string | No | System prompt name (e.g., "pippa") |
 | `trigger` | string | No | Action trigger type (e.g., "submit-message") |
 
 #### Response Format
@@ -282,7 +282,7 @@ The agent's base identity can be loaded from the database instead of being hardc
 INSERT INTO system_prompts (id, name, content, active, created, updated)
 VALUES (
   'prompt_001',
-  'base-identity',
+  'pippa',
   'You are Sky, a compassionate recovery companion...',
   true,
   NOW(),
@@ -290,7 +290,7 @@ VALUES (
 );
 ```
 
-On startup, the container fetches the active `base-identity` prompt from the `system_prompts` table (via `@recoverysky-org/common`). If not found, falls back to the hardcoded default.
+On startup, the container fetches the active `pippa` prompt from the `system_prompts` table (via `@recoverysky-org/common`). If not found, falls back to the hardcoded default.
 
 ## Active Memory System
 

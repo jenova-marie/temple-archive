@@ -3,6 +3,8 @@ import { AuthProvider as OidcAuthProvider, useAuth as useOidcAuth } from 'react-
 import { oidcConfig } from './config'
 import { useAuthStore } from '@/stores/authStore'
 
+const ZITADEL_AUTHORITY = import.meta.env.VITE_ZITADEL_AUTHORITY
+
 function AuthStateSyncer({ children }: { children: ReactNode }) {
   const auth = useOidcAuth()
   const setUser = useAuthStore((s) => s.setUser)
@@ -18,33 +20,35 @@ function AuthStateSyncer({ children }: { children: ReactNode }) {
       return
     }
 
+    // Capture user to avoid potential null in async closure
+    const user = auth.user
+
     // Fetch userinfo from Zitadel to get profile claims (name, email, etc)
     const fetchUserinfo = async () => {
       try {
-        const authority = oidcConfig.authority
-        const userinfoUrl = `${authority?.replace(/\/$/, '')}/oidc/v1/userinfo`
+        const userinfoUrl = `${ZITADEL_AUTHORITY?.replace(/\/$/, '') || 'https://auth.rso'}/oidc/v1/userinfo`
 
         const response = await fetch(userinfoUrl, {
           headers: {
-            Authorization: `Bearer ${auth.user.access_token}`,
+            Authorization: `Bearer ${user.access_token}`,
           },
         })
 
         if (response.ok) {
           const userinfo = await response.json()
           // Merge userinfo claims into the profile
-          auth.user.profile = {
-            ...auth.user.profile,
+          user.profile = {
+            ...user.profile,
             ...userinfo,
           }
-          console.log('[Auth] Userinfo fetched and merged:', auth.user.profile)
+          console.log('[Auth] Userinfo fetched and merged:', user.profile)
         } else {
           console.warn('[Auth] Userinfo fetch failed:', response.status)
         }
       } catch (error) {
         console.error('[Auth] Failed to fetch userinfo:', error)
       } finally {
-        setUser(auth.user)
+        setUser(user)
       }
     }
 
