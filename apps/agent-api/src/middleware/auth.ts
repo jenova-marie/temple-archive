@@ -376,7 +376,11 @@ export function getAuthMiddleware(): ReturnType<
 
   // Check for auth bypass (local development)
   if (process.env.DISABLE_AUTH === "true") {
-    getLogger().warn("Authentication DISABLED (DISABLE_AUTH=true) - using dev user");
+    const logger = getLogger().child({ component: "auth" });
+    logger.warn(
+      { DISABLE_AUTH: process.env.DISABLE_AUTH },
+      "⚠️  Authentication DISABLED - Using development bypass (should NOT be used in production)"
+    );
     authMiddlewareInstance = createBypassAuthMiddleware();
     return authMiddlewareInstance;
   }
@@ -386,8 +390,15 @@ export function getAuthMiddleware(): ReturnType<
     process.env.ZITADEL_AUDIENCE || process.env.ZITADEL_CLIENT_ID;
 
   if (!issuer || !audience) {
-    getLogger().warn(
-      "Zitadel auth not configured (ZITADEL_ISSUER or ZITADEL_AUDIENCE missing)",
+    const logger = getLogger().child({ component: "auth" });
+    logger.error(
+      {
+        ZITADEL_ISSUER_SET: !!issuer,
+        ZITADEL_AUDIENCE_SET: !!audience,
+        ZITADEL_CLIENT_ID_SET: !!process.env.ZITADEL_CLIENT_ID,
+        NODE_ENV: process.env.NODE_ENV,
+      },
+      "❌ Zitadel authentication not configured - missing ZITADEL_ISSUER and/or ZITADEL_AUDIENCE. Set these environment variables or use DISABLE_AUTH=true for local development"
     );
     return null;
   }

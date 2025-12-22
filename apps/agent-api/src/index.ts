@@ -86,12 +86,31 @@ if (auth) {
   app.use("/api/v1/guides", auth.required, createGuidesRouter(container));
   logger.info("Zitadel JWT authentication enabled for /api/v1/chat and /api/v1/guides");
 } else {
+  // Check if we're in production without auth
+  const isProduction = process.env.NODE_ENV === "production";
+  const message = "No authentication configured - API is running UNPROTECTED";
+
+  if (isProduction) {
+    logger.error(
+      {
+        ZITADEL_ISSUER: process.env.ZITADEL_ISSUER ? "[SET]" : "[NOT SET]",
+        ZITADEL_AUDIENCE:
+          process.env.ZITADEL_AUDIENCE || process.env.ZITADEL_CLIENT_ID
+            ? "[SET]"
+            : "[NOT SET]",
+        DISABLE_AUTH: process.env.DISABLE_AUTH,
+      },
+      `${message} - SET ZITADEL_ISSUER and ZITADEL_AUDIENCE or DISABLE_AUTH=true`
+    );
+  } else {
+    logger.warn(message);
+  }
+
   app.use("/api/v1/chat", createChatRouter({
     pipeline: container.pipeline,
     loadUserData: container.loadUserData,
   }));
   app.use("/api/v1/guides", createGuidesRouter(container));
-  logger.warn("No authentication configured - API is unprotected");
 }
 
 // Error handling
