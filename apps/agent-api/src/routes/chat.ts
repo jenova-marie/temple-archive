@@ -140,7 +140,15 @@ export function createChatRouter({
 
     try {
       // Auth middleware ensures req.user is present
-      const userId = req.user!.id;
+      if (!req.user) {
+        res.status(401).json({
+          error: "Unauthorized",
+          message: "Authentication required - user not found in request",
+        });
+        return;
+      }
+
+      const userId = req.user.id;
 
       // Load user and profile data once for the entire request lifecycle
       const userData = await loadUserData(
@@ -372,12 +380,21 @@ export function createChatRouter({
           }
         });
     } catch (error) {
-      logger.error({ error }, "Unexpected error in chat endpoint");
+      // Properly extract error details for logging
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack =
+        error instanceof Error ? error.stack : undefined;
+
+      logger.error(
+        { errorMessage, errorStack, errorType: error?.constructor?.name },
+        "Unexpected error in chat endpoint"
+      );
 
       if (!res.headersSent) {
         res.status(500).json({
           error: "Internal Server Error",
-          message: "An unexpected error occurred",
+          message: errorMessage || "An unexpected error occurred",
         });
       }
     }

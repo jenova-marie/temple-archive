@@ -40,7 +40,14 @@ export function errorHandler(
   })
 
   if (err instanceof HttpError) {
-    logger.warn({ error: err }, 'HTTP error')
+    logger.warn(
+      {
+        statusCode: err.statusCode,
+        code: err.code,
+        message: err.message,
+      },
+      'HTTP error'
+    )
 
     res.status(err.statusCode).json({
       error: err.code || 'Error',
@@ -49,8 +56,16 @@ export function errorHandler(
     return
   }
 
-  // Log unexpected errors
-  logger.error({ error: err }, 'Unexpected error')
+  // Log unexpected errors with full context
+  logger.error(
+    {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+      cause: (err as any).cause,
+    },
+    'Unexpected error'
+  )
 
   // Don't expose internal errors in production
   const message = process.env.NODE_ENV === 'production'

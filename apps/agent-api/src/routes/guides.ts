@@ -29,10 +29,18 @@ export function createGuidesRouter(container: Container): Router {
         guides,
       })
     } catch (error) {
-      logger.error({ error }, 'Failed to list guides')
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
+      const errorStack =
+        error instanceof Error ? error.stack : undefined
+
+      logger.error(
+        { errorMessage, errorStack, errorType: error?.constructor?.name },
+        'Failed to list guides'
+      )
       res.status(500).json({
         error: 'Internal Server Error',
-        message: 'Failed to list guides',
+        message: errorMessage || 'Failed to list guides',
       })
     }
   })
