@@ -1,11 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { GUIDES, DEFAULT_GUIDE_ID } from '@pippa/shared'
 import type { Guide } from '@pippa/shared'
 
-// Re-export for convenience
-export { GUIDES, DEFAULT_GUIDE_ID }
-export type { Guide }
+const GUIDES: Guide[] = [
+  {
+    id: 'pippa',
+    name: 'Pippa',
+    description: 'Your personal AI companion',
+  },
+]
 
 interface ChatStore {
   selectedGuideId: string
@@ -23,3 +26,6 @@ export const useChatStore = create<ChatStore>()(
     }
   )
 )
+
+export { GUIDES }
+export type { Guide }
