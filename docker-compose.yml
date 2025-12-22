@@ -28,7 +28,7 @@ services:
 
       # Application
       - AGENT_API_PORT=${AGENT_API_PORT}
-      - NODE_ENV=development
+      - NODE_ENV=production
       - PORT=${AGENT_API_PORT}
       - LOG_LEVEL=debug
       - USE_STUBS=false
@@ -39,6 +39,10 @@ services:
 
       # Authentication (disable for local dev)
       - DISABLE_AUTH
+      - ZITADEL_ISSUER=https://auth.rso
+      - ZITADEL_AUDIENCE=352079658088464386
+      - ZITADEL_PROJECT_ID=352079615960809474
+      - ZITADEL_CLIENT_ID=352079658088464386
 
       # Memory config
       - MEMORY_CONTEXT_MODE
@@ -103,7 +107,7 @@ services:
       - "${WEB_API_PORT}:${WEB_API_PORT}"
     environment:
       - WEB_API_PORT=${WEB_API_PORT}
-      - NODE_ENV=development
+      - NODE_ENV=production
       - LOG_LEVEL=debug
       - PORT=${WEB_API_PORT}
 

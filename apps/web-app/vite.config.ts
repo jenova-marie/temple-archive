@@ -28,7 +28,7 @@ export default defineConfig({
     include: ["@ricky0123/vad-react", "react", "react-dom"],
   },
   server: {
-    port: 5173,
+    port: parseInt(agentApiPort, 10),
     proxy: {
       "/api": `http://localhost:${agentApiPort}`,
     },
