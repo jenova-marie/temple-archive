@@ -1,31 +1,31 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import type { Guide } from '@pippa/shared'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { Guide } from "@pippa/shared";
 
 const GUIDES: Guide[] = [
   {
-    id: 'pippa',
-    name: 'Pippa',
-    description: 'Your personal AI companion',
+    id: "pippa",
+    name: "Pippa",
+    description: "Your personal AI companion",
   },
-]
+];
 
 interface ChatStore {
-  selectedGuideId: string
-  setGuide: (guideId: string) => void
+  selectedGuideId: string;
+  setGuide: (guideId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>()(
   persist(
     (set) => ({
-      selectedGuideId: DEFAULT_GUIDE_ID,
+      selectedGuideId: "pippa",
       setGuide: (guideId) => set({ selectedGuideId: guideId }),
     }),
     {
-      name: 'chat-store',
-    }
-  )
-)
+      name: "chat-store",
+    },
+  ),
+);
 
-export { GUIDES }
-export type { Guide }
+export { GUIDES };
+export type { Guide };

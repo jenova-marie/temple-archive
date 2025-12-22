@@ -1,8 +1,8 @@
 {
-  "name": "recoverysky-agent",
+  "name": "pippa",
   "version": "0.1.0",
   "private": true,
-  "description": "RecoverySky AI chatbot agent with multi-tier memory system",
+  "description": "My wonderful Pippa",
   "type": "module",
   "pnpm": {
     "overrides": {
