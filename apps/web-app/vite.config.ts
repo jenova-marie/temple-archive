@@ -4,10 +4,9 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
-const agentApiPort = process.env.AGENT_API_PORT || process.env.PORT || "61664";
-if (!agentApiPort) {
-  throw new Error("AGENT_API_PORT or PORT environment variable must be set");
-}
+// Port configuration
+const webAppPort = process.env.WEB_APP_PORT || "5173";
+const agentApiPort = process.env.AGENT_API_PORT || "61664";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -28,9 +27,12 @@ export default defineConfig({
     include: ["@ricky0123/vad-react", "react", "react-dom"],
   },
   server: {
-    port: parseInt(agentApiPort, 10),
+    port: parseInt(webAppPort, 10),
     proxy: {
-      "/api": `http://localhost:${agentApiPort}`,
+      "/api": {
+        target: `http://localhost:${agentApiPort}`,
+        changeOrigin: true,
+      },
     },
   },
 });
