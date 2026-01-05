@@ -78,7 +78,6 @@ function displayMetrics(metrics: ChatMetrics): void {
 
     // Write operations
     const { writes } = prev
-    console.log(chalk.gray(`  L1 cached:     ${writes.l1.messageCount} msgs`))
     console.log(chalk.gray(`  L2 persisted:  ${writes.l2.messageCount} msgs`))
 
     if (writes.l3.entitiesAdded > 0 || writes.l3.entitiesUpdated > 0) {
@@ -87,17 +86,6 @@ function displayMetrics(metrics: ChatMetrics): void {
 
     if (writes.l4.embeddingsStored > 0) {
       console.log(chalk.gray(`  L4 embeddings: ${writes.l4.embeddingsStored}`))
-    }
-
-    // Safety & evaluation
-    const safetyStatus = prev.safety.passed
-      ? chalk.green('✓ passed')
-      : chalk.red(`✗ ${prev.safety.violationCount} violations`)
-    console.log(chalk.gray(`  Safety:        ${safetyStatus}`))
-
-    if (prev.evaluation.score !== null) {
-      const scoreColor = prev.evaluation.score >= 0.7 ? chalk.green : prev.evaluation.score >= 0.4 ? chalk.yellow : chalk.red
-      console.log(chalk.gray(`  Eval score:    ${scoreColor(prev.evaluation.score.toFixed(2))}`))
     }
   }
 }

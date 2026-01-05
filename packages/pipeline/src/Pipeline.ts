@@ -9,6 +9,9 @@
  * 5. Response + persist
  */
 
+import { readFileSync, existsSync } from 'fs'
+import { join, dirname } from 'path'
+
 import type {
   PipelineConfig,
   PipelineContext,
@@ -36,7 +39,7 @@ import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext } from '@pippa/memory'
 import { buildSystemPrompt } from '@pippa/agent'
-import { getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
+import { agentTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
 
 /**
  * Memory tool names for filtering tool calls during post-processing.
@@ -95,6 +98,12 @@ export interface PipelineDependencies {
   contextCompactor?: IContextCompactor
   /** Memory reflector for automatic insight extraction (optional) */
   memoryReflector?: MemoryReflector
+  /** Whether L4 (Qdrant) vector store is enabled */
+  l4Enabled?: boolean
+  /** Enable query embeddings during preflight for semantic search */
+  preflightEmbeddingsEnabled?: boolean
+  /** Enable message embeddings during postflight for L4 storage */
+  postflightEmbeddingsEnabled?: boolean
 }
 
 /**
@@ -196,15 +205,112 @@ export interface PreflightResult {
 export class Pipeline {
   private readonly deps: PipelineDependencies
   private readonly pipelineConfig: PipelineConfig
+  private envFilePath: string | null = null
 
   constructor(deps: PipelineDependencies, config?: Partial<PipelineConfig>) {
     this.deps = deps
     this.pipelineConfig = { ...getDefaultPipelineConfig(), ...config }
+    // Find .env file path at construction time
+    this.envFilePath = this.findEnvFile()
   }
 
   /** Get the pipeline configuration */
   get config(): PipelineConfig {
     return this.pipelineConfig
+  }
+
+  /**
+   * Find the root .env file by walking up from cwd until we find the monorepo root.
+   * Monorepo root is identified by pnpm-workspace.yaml (pnpm) or package.json with workspaces (npm/yarn).
+   */
+  private findEnvFile(): string | null {
+    let dir = process.cwd()
+
+    for (let i = 0; i < 10; i++) {
+      const envPath = join(dir, '.env')
+      const pnpmWorkspacePath = join(dir, 'pnpm-workspace.yaml')
+      const pkgPath = join(dir, 'package.json')
+
+      // Check for pnpm monorepo (pnpm-workspace.yaml)
+      if (existsSync(pnpmWorkspacePath) && existsSync(envPath)) {
+        return envPath
+      }
+
+      // Check for npm/yarn monorepo (package.json with workspaces)
+      if (existsSync(pkgPath)) {
+        try {
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+          if (pkg.workspaces && existsSync(envPath)) {
+            return envPath
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+
+    // No monorepo root found - don't use fallback (avoids picking up wrong .env)
+    return null
+  }
+
+  /**
+   * Reload .env file into process.env for hot-reload
+   * Called at the start of each request when HOT_CONFIG=true
+   */
+  private reloadEnvFile(): void {
+    if (!this.envFilePath) {
+      return
+    }
+
+    try {
+      const content = readFileSync(this.envFilePath, 'utf8')
+      let reloadedCount = 0
+
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+
+        const eqIndex = trimmed.indexOf('=')
+        if (eqIndex === -1) continue
+
+        const key = trimmed.slice(0, eqIndex).trim()
+        let value = trimmed.slice(eqIndex + 1).trim()
+
+        // Remove quotes if present
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1)
+        }
+
+        // Update process.env directly
+        if (process.env[key] !== value) {
+          process.env[key] = value
+          reloadedCount++
+        }
+      }
+
+      if (reloadedCount > 0) {
+        getLogger().info({ reloadedCount, envFile: this.envFilePath }, 'Hot-reloaded .env file')
+      }
+    } catch (err) {
+      getLogger().warn({ err, envFile: this.envFilePath }, 'Failed to hot-reload .env file')
+    }
+  }
+
+  /**
+   * Maybe reload .env if HOT_CONFIG is enabled
+   * Call this at the start of preflight/process
+   */
+  maybeHotReload(): void {
+    const hotConfig = process.env.HOT_CONFIG
+    if (hotConfig === 'true') {
+      getLogger().debug({ envFilePath: this.envFilePath }, 'HOT_CONFIG enabled, reloading .env')
+      this.reloadEnvFile()
+    }
   }
 
   /**
@@ -451,7 +557,6 @@ export class Pipeline {
           totalDuration,
           ctx,
           crisisResult.value,
-          
           agentResult.value,
           safetyResult.ok ? safetyResult.value : undefined,
           evaluationResult.ok ? evaluationResult.value : undefined
@@ -468,7 +573,6 @@ export class Pipeline {
               input: agentResult.value.usage.inputTokens,
               output: agentResult.value.usage.outputTokens,
             },
-            
           },
           safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
           crisisLevel: effectiveCrisisLevel,
@@ -607,7 +711,7 @@ export class Pipeline {
       if (memoryResult.ok) {
         ctx.metrics.cacheHits = memoryResult.value.cacheHits
         ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
-        
+        ctx.metrics.memoryTier = 'L2_POSTGRESQL'
       }
 
       // Fire-and-forget context compaction (runs in parallel with agent processing)
@@ -808,7 +912,6 @@ export class Pipeline {
         totalDuration,
         ctx,
         crisisResult.value,
-        
         agentResponse,
         safetyResult.ok ? safetyResult.value : undefined,
         evaluationResult.ok ? evaluationResult.value : undefined
@@ -828,7 +931,6 @@ export class Pipeline {
               input: agentResponse.usage.inputTokens,
               output: agentResponse.usage.outputTokens,
             },
-            
           },
           safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
           crisisLevel: effectiveCrisisLevel,
@@ -870,9 +972,9 @@ export class Pipeline {
   ): Promise<Result<{ context: PipelineContext['memory']; cacheHits: number; cacheMisses: number }, { kind: string; message: string }>> {
     const stageStart = Date.now()
 
-    // Generate embedding for semantic search (if provider available)
+    // Generate embedding for semantic search (only if preflight embeddings enabled)
     let queryEmbedding: number[] | null = null
-    if (this.deps.embedding) {
+    if (process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding) {
       const embeddingResult = await this.deps.embedding.embed(input.message, ctx, { label: 'query' })
       if (embeddingResult.ok) {
         queryEmbedding = embeddingResult.value
@@ -996,7 +1098,6 @@ export class Pipeline {
     } else {
       // Add agent tools (logMood, etc.)
       // Note: AI SDK v5 tools use inputSchema instead of parameters
-      const { agentTools } = require('@pippa/tools')
       const agentToolEntries = Object.entries(agentTools)
       getLogger().debug({ count: agentToolEntries.length, names: agentToolEntries.map(([n]) => n) }, 'Adding agent tools')
       for (const [name, tool] of agentToolEntries) {
@@ -1069,7 +1170,6 @@ export class Pipeline {
     totalDuration: number,
     ctx: PipelineContext,
     crisisCheck: CrisisCheckResult,
-    
     agentResponse: AgentResponse,
     safetyResult?: SafetyValidationResult,
     evaluationResult?: EvaluationResult
@@ -1096,7 +1196,6 @@ export class Pipeline {
         processingTimeMs: crisisCheck.processingTimeMs,
       },
       memory: {
-        
         cacheHits: ctx.metrics.cacheHits,
         cacheMisses: ctx.metrics.cacheMisses,
         messagesRetrieved: ctx.memory?.messages.length || 0,
@@ -1160,11 +1259,11 @@ export class Pipeline {
     }
 
     try {
-      // Generate embeddings if provider available
+      // Generate embeddings for L4 storage (only if postflight embeddings enabled)
       let userEmbedding: number[] | null = null
       let assistantEmbedding: number[] | null = null
 
-      if (this.deps.embedding) {
+      if (process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding) {
         const [userEmb, assistantEmb] = await Promise.all([
           this.deps.embedding.embed(userMessage.content, ctx, { label: 'user' }),
           this.deps.embedding.embed(assistantMessage.content, ctx, { label: 'assistant' }),
@@ -1394,6 +1493,9 @@ export class Pipeline {
     input: PipelineInput,
     traceCtx: TraceContext
   ): Promise<Result<PreflightResult, PipelineError>> {
+    // Hot-reload .env if enabled (development only)
+    this.maybeHotReload()
+
     return withSpan('Pipeline.preflight', async () => {
       const logger = getLogger().child({
         conversationId: input.conversationId,
@@ -1528,7 +1630,6 @@ export class Pipeline {
         logger.info(
           {
             crisisLevel: crisisResult.value.level,
-            
             hasMemoryContext: !!memoryContext,
             toolCount: tools.length,
           },
@@ -1645,6 +1746,7 @@ export class Pipeline {
           stageDurations: {},
           cacheHits: preflightResult.memoryStats.cacheHits,
           cacheMisses: preflightResult.memoryStats.cacheMisses,
+          memoryTier: 'L2_POSTGRESQL',
         },
       }
 
@@ -1739,7 +1841,7 @@ export class Pipeline {
             l1: { messageCount: 0 }, // L1 only stores session metadata, not messages
             l2: { messageCount: 2 }, // Always 2 messages persisted
             l3: { entitiesAdded: 0, entitiesUpdated: 0 }, // Entity extraction is fire-and-forget
-            l4: { embeddingsStored: this.deps.embedding ? 2 : 0 },
+            l4: { embeddingsStored: process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding ? 2 : 0 },
           },
           safety: {
             passed: safetyResult.ok ? safetyResult.value.passed : true,

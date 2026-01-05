@@ -121,56 +121,66 @@ export class MemoryOrchestrator {
         userProfile = profileResult.ok ? profileResult.value : null
       }
 
-      // Get previous session summaries
-      const summariesResult = await this.l2.getSessionSummaries(conversationId, 5, ctx)
-      const previousSessions = summariesResult.ok ? summariesResult.value : []
+      // Get previous session summaries (only if L2 retrieval enabled)
+      const l2RetrievalEnabled = process.env.ENABLE_L2_RETRIEVAL !== 'false'
+      let previousSessions: import('@pippa/types').SessionSummary[] = []
+
+      if (l2RetrievalEnabled) {
+        const summariesResult = await this.l2.getSessionSummaries(conversationId, 5, ctx)
+        previousSessions = summariesResult.ok ? summariesResult.value : []
+      }
 
       // STAGE 1: Try L2 (PostgreSQL) - authoritative message store
-      const l2Result = await this.l2.getConversationHistory(
-        conversationId,
-        this.config.l2MessageLimit,
-        ctx
-      )
-
-      if (!l2Result.ok) {
-        logger.error({ error: l2Result.error }, 'L2 retrieval failed')
-        return err({
-          kind: 'RetrievalError',
-          message: 'Failed to retrieve from L2',
-          context: { conversationId },
-          cause: l2Result.error,
-        })
-      }
-
-      if (l2Result.value.length > 0) {
-        cacheHits++
-        pipelineMetrics.memoryCacheHits.add(1, { tier: 'L2' })
-        logger.debug({ count: l2Result.value.length }, 'L2 hit')
-
-        // Query L3 for related entities (non-blocking)
-        const relatedEntities = await this.queryL3Entities(userId, ctx)
-
-        const context = this.assembleContext(
-          l2Result.value,
-          userProfile,
-          sessionState,
-          previousSessions,
-          [],
-          relatedEntities,
-          displayName
+      // Skip if L2 retrieval disabled (client sends full history with Vercel AI SDK)
+      if (l2RetrievalEnabled) {
+        const l2Result = await this.l2.getConversationHistory(
+          conversationId,
+          this.config.l2MessageLimit,
+          ctx
         )
 
-        return ok({
-          context,
-          latencyMs: Date.now() - startTime,
-          cacheHits,
-          cacheMisses,
-        })
-      }
+        if (!l2Result.ok) {
+          logger.error({ error: l2Result.error }, 'L2 retrieval failed')
+          return err({
+            kind: 'RetrievalError',
+            message: 'Failed to retrieve from L2',
+            context: { conversationId },
+            cause: l2Result.error,
+          })
+        }
 
-      cacheMisses++
-      pipelineMetrics.memoryCacheMisses.add(1, { tier: 'L2' })
-      logger.debug('L2 miss, searching L3/L4')
+        if (l2Result.value.length > 0) {
+          cacheHits++
+          pipelineMetrics.memoryCacheHits.add(1, { tier: 'L2' })
+          logger.debug({ count: l2Result.value.length }, 'L2 hit')
+
+          // Query L3 for related entities (non-blocking)
+          const relatedEntities = await this.queryL3Entities(userId, ctx)
+
+          const context = this.assembleContext(
+            l2Result.value,
+            userProfile,
+            sessionState,
+            previousSessions,
+            [],
+            relatedEntities,
+            displayName
+          )
+
+          return ok({
+            context,
+            latencyMs: Date.now() - startTime,
+            cacheHits,
+            cacheMisses,
+          })
+        }
+
+        cacheMisses++
+        pipelineMetrics.memoryCacheMisses.add(1, { tier: 'L2' })
+        logger.debug('L2 miss, searching L3/L4')
+      } else {
+        logger.debug('L2 retrieval disabled (ENABLE_L2_RETRIEVAL=false)')
+      }
 
       // STAGE 2: Semantic search in L4 (and optionally L3)
       if (queryEmbedding) {

@@ -44,7 +44,6 @@ describe("getDefaultPipelineConfig", () => {
 
   it("returns correct memory configuration", () => {
     const config = getDefaultPipelineConfig();
-    expect(config.memory.l1MessageLimit).toBe(20);
     expect(config.memory.l2MessageLimit).toBe(50);
     expect(config.memory.semanticSearchDays).toBe(90);
   });

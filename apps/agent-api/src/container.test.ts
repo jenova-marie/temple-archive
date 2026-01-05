@@ -161,7 +161,6 @@ vi.mock('@pippa/pipeline', () => ({
 vi.mock('@pippa/types', () => ({
   getDefaultPipelineConfig: vi.fn().mockReturnValue({
     memory: {
-      l1MessageLimit: 50,
       l2MessageLimit: 200,
       semanticSearchDays: 30,
     },

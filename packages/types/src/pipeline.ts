@@ -53,8 +53,6 @@ export interface PipelineConfig {
   }
   /** Memory configuration */
   memory: {
-    /** Max messages to retrieve from L1 */
-    l1MessageLimit: number
     /** Max messages to retrieve from L2 */
     l2MessageLimit: number
     /** Days back to search for semantic matches */
@@ -83,7 +81,6 @@ export function getDefaultPipelineConfig(): PipelineConfig {
       criticalThreshold: 9,
     },
     memory: {
-      l1MessageLimit: 20,
       l2MessageLimit: 50,
       semanticSearchDays: 90,
     },

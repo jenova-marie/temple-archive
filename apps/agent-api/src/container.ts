@@ -266,7 +266,6 @@ export function createContainer(options: ContainerConfig = {}): Container {
     knowledgeStore,
     vectorStore,
     {
-      l1MessageLimit: pipelineConfig.memory.l1MessageLimit,
       l2MessageLimit: pipelineConfig.memory.l2MessageLimit,
       semanticSearchDays: pipelineConfig.memory.semanticSearchDays,
       enableL3Queries: l3QueriesEnabled,
@@ -389,18 +388,24 @@ export function createContainer(options: ContainerConfig = {}): Container {
     evaluator = stubEvaluator;
   }
 
-  // Create embedding provider - requires OPENAI_API_KEY and ENABLE_EMBEDDINGS=true
-  // When disabled, skips embedding generation and L4 storage (saves OpenAI API costs)
-  const embeddingsEnabled = process.env.ENABLE_EMBEDDINGS !== "false";
+  // Create embedding provider - requires OPENAI_API_KEY
+  // ENABLE_PREFLIGHT_EMBEDDINGS: Query embeddings for semantic search (default: true)
+  // ENABLE_POSTFLIGHT_EMBEDDINGS: Message embeddings for L4 storage (default: true)
+  const preflightEmbeddingsEnabled = process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== "false";
+  const postflightEmbeddingsEnabled = process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== "false";
+  const needsEmbeddings = preflightEmbeddingsEnabled || postflightEmbeddingsEnabled;
   let embedding: IEmbeddingProvider | undefined;
 
-  if (!embeddingsEnabled) {
-    logger.info("Embeddings disabled (ENABLE_EMBEDDINGS=false) - no semantic search or L4 storage");
+  if (!needsEmbeddings) {
+    logger.info("Embeddings disabled - no semantic search or L4 storage");
   } else if (!useStubs && process.env.OPENAI_API_KEY) {
-    logger.info("Using OpenAIEmbeddingProvider for semantic search");
+    logger.info({
+      preflight: preflightEmbeddingsEnabled,
+      postflight: postflightEmbeddingsEnabled,
+    }, "Using OpenAIEmbeddingProvider");
     embedding = new OpenAIEmbeddingProvider();
   } else if (!useStubs) {
-    logger.warn("OPENAI_API_KEY not set - semantic search disabled");
+    logger.warn("OPENAI_API_KEY not set - embeddings disabled");
   }
 
   // L3 Memory Embedding Batch Job
@@ -908,6 +913,9 @@ export function createContainer(options: ContainerConfig = {}): Container {
     safety,
     evaluator,
     embedding,
+    l4Enabled: !!qdrantVectorStore,
+    preflightEmbeddingsEnabled,
+    postflightEmbeddingsEnabled,
     entityExtractor,
     memoryContextBuilder,
     memoryToolAccess,

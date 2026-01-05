@@ -142,7 +142,6 @@ describe("MemoryOrchestrator", () => {
 
     it("accepts custom config", () => {
       const config: Partial<MemoryOrchestratorConfig> = {
-        l1MessageLimit: 10,
         l2MessageLimit: 30,
         semanticSearchDays: 60,
         semanticScoreThreshold: 0.8,
