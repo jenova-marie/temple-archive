@@ -903,6 +903,11 @@ export function createContainer(options: ContainerConfig = {}): Container {
   });
   logger.info("Clear conversation function configured");
 
+  // Anthropic client for query preprocessing (shared)
+  const anthropicForPreprocessor = !useStubs && process.env.ANTHROPIC_API_KEY
+    ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    : null;
+
   // Assemble dependencies
   const deps: PipelineDependencies = {
     crisisDetector,
@@ -922,6 +927,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     bootstrapOrchestrator,
     contextCompactor,
     memoryReflector,
+    anthropic: anthropicForPreprocessor,
     // baseIdentity is set after init() fetches it from the database
     get baseIdentity() {
       return baseIdentity;
