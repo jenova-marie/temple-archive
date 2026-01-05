@@ -83,9 +83,6 @@
 # Set API key
 export ANTHROPIC_API_KEY=sk-ant-xxx
 
-# Start server
-USE_STUBS=false pnpm dev
-
 # Test real response
 curl -X POST http://localhost:3333/api/chat \
   -H "Content-Type: application/json" \

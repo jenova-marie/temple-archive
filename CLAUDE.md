@@ -23,8 +23,6 @@ pnpm build:all
 # Start dev server (uses tsx watch)
 pnpm dev
 
-# Run with real services (requires docker-compose up -d first)
-USE_STUBS=false pnpm dev
 
 # Run tests
 pnpm test
@@ -115,13 +113,12 @@ Crisis level ≥8 triggers emergency response, bypassing normal flow.
 | L3 | Neo4j | Entity knowledge graph | 20-100ms |
 | L4 | Qdrant | Semantic similarity search | 5-20ms |
 
-All tiers have real implementations plus in-memory stubs for testing. Set `USE_STUBS=true` (default) for stub mode.
+All tiers have real implementations plus in-memory stubs for testing.
 
 ### Dependency Injection
 
 All external services are injected via `apps/api/src/container.ts`. Key environment variables:
 
-- `USE_STUBS=true` → All in-memory stubs (default for dev)
 - `REDIS_URL` → Real Redis L1 cache
 - `DATABASE_URL` → Real PostgreSQL L2 session store
 - `NEO4J_URI` → Real Neo4j L3 knowledge graph
