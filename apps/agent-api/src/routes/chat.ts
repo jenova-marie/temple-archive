@@ -59,8 +59,8 @@ const chatBodySchema = z
           .passthrough(),
       )
       .min(1),
-    /** Optional guide ID (system prompt) to use instead of default pippa */
-    guide: z.string().optional(),
+    /** Optional agent/persona (system prompt) to use instead of default pippa */
+    agent: z.string().optional(),
   })
   .passthrough();
 
@@ -175,7 +175,7 @@ export function createChatRouter({
 
       const {
         messages: rawMessages,
-        guide: systemPromptId,
+        agent: systemPromptId,
         conversation_id,
       } = parseResult.data;
 
@@ -322,6 +322,9 @@ export function createChatRouter({
         ...(memoryToolAccess !== "off" ? getMemoryTools(memoryToolAccess) : {}),
       };
 
+      // Track preflight duration for metrics
+      const preflightDuration = Date.now() - startTime;
+
       const result = streamText({
         model: anthropic("claude-sonnet-4-20250514"),
         system: systemPrompt,
@@ -342,11 +345,29 @@ export function createChatRouter({
         },
       });
 
-      // Use native UI Message Stream - this is what assistant-ui expects
+      // Use native UI Message Stream with metrics metadata
       pipeUIMessageStreamToResponse({
         response: res,
         status: 200,
-        stream: result.toUIMessageStream(),
+        stream: result.toUIMessageStream({
+          messageMetadata: ({ part }) => {
+            // Add metrics on finish event
+            if (part.type === "finish") {
+              return {
+                metrics: {
+                  preflightMs: preflightDuration,
+                  totalMs: Date.now() - startTime,
+                  inputTokens: part.totalUsage?.inputTokens ?? 0,
+                  outputTokens: part.totalUsage?.outputTokens ?? 0,
+                  memorySource: preflightResult.value.memoryStats.source,
+                  crisisLevel: crisisCheck.level,
+                  toolsEnabled: Object.keys(tools).length,
+                },
+              };
+            }
+            return undefined;
+          },
+        }),
       });
 
       // STAGE 3: Post-process after stream completes (async, don't await)
