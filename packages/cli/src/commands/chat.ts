@@ -22,13 +22,84 @@ export interface ChatOptions {
 function displayMetrics(metrics: ChatMetrics): void {
   console.log(chalk.gray('─'.repeat(50)))
   console.log(chalk.cyan.bold('Metrics:'))
-  console.log(chalk.gray(`  Preflight:    ${metrics.preflightMs}ms`))
-  console.log(chalk.gray(`  Total:        ${metrics.totalMs}ms`))
-  console.log(chalk.gray(`  Input tokens: ${metrics.inputTokens}`))
+  console.log(chalk.gray(`  Preflight:     ${metrics.preflightMs}ms`))
+  console.log(chalk.gray(`  Total:         ${metrics.totalMs}ms`))
+  console.log(chalk.gray(`  Input tokens:  ${metrics.inputTokens}`))
   console.log(chalk.gray(`  Output tokens: ${metrics.outputTokens}`))
-  console.log(chalk.gray(`  Memory:       ${metrics.memorySource}`))
-  console.log(chalk.gray(`  Crisis level: ${metrics.crisisLevel}`))
-  console.log(chalk.gray(`  Tools:        ${metrics.toolsEnabled}`))
+  console.log(chalk.gray(`  Crisis level:  ${metrics.crisisLevel}`))
+  console.log(chalk.gray(`  Tools:         ${metrics.toolsEnabled}`))
+
+  // Memory tier diagnostics
+  console.log(chalk.cyan.bold('Memory:'))
+
+  if (metrics.memory) {
+    const { l1, l2, l3, l4, cacheHits, cacheMisses } = metrics.memory
+    console.log(chalk.gray(`  Cache:         ${cacheHits} hits / ${cacheMisses} misses`))
+
+    // L1 Redis (session state only, not messages)
+    const l1Status = l1.hit
+      ? chalk.green('✓ session state')
+      : chalk.gray('○ no session')
+    console.log(chalk.gray(`  L1 Redis:      ${l1Status}`))
+
+    // L2 PostgreSQL
+    const l2Status = l2.queried
+      ? (l2.messageCount > 0
+          ? chalk.green(`✓ ${l2.messageCount} msgs`)
+          : chalk.yellow('○ empty'))
+      : chalk.gray('- skipped')
+    console.log(chalk.gray(`  L2 Postgres:   ${l2Status}`))
+
+    // L3 Neo4j
+    const l3Status = l3.queried
+      ? (l3.entityCount > 0
+          ? chalk.green(`✓ ${l3.entityCount} entities`)
+          : chalk.gray('○ no entities'))
+      : chalk.gray('- disabled')
+    console.log(chalk.gray(`  L3 Neo4j:      ${l3Status}`))
+
+    // L4 Qdrant
+    const l4Status = l4.queried
+      ? (l4.matchCount > 0
+          ? chalk.green(`✓ ${l4.matchCount} matches`)
+          : chalk.gray('○ no matches'))
+      : chalk.gray('- disabled')
+    console.log(chalk.gray(`  L4 Qdrant:     ${l4Status}`))
+  }
+
+  // Phase-shifted stats from previous exchange
+  if (metrics.previousExchange) {
+    const prev = metrics.previousExchange
+    const age = Math.round((Date.now() - prev.timestamp) / 1000)
+
+    console.log(chalk.cyan.bold('Previous Exchange:'))
+    console.log(chalk.gray(`  Age:           ${age}s ago`))
+    console.log(chalk.gray(`  Duration:      ${prev.durationMs}ms`))
+
+    // Write operations
+    const { writes } = prev
+    console.log(chalk.gray(`  L1 cached:     ${writes.l1.messageCount} msgs`))
+    console.log(chalk.gray(`  L2 persisted:  ${writes.l2.messageCount} msgs`))
+
+    if (writes.l3.entitiesAdded > 0 || writes.l3.entitiesUpdated > 0) {
+      console.log(chalk.gray(`  L3 entities:   +${writes.l3.entitiesAdded} / ~${writes.l3.entitiesUpdated}`))
+    }
+
+    if (writes.l4.embeddingsStored > 0) {
+      console.log(chalk.gray(`  L4 embeddings: ${writes.l4.embeddingsStored}`))
+    }
+
+    // Safety & evaluation
+    const safetyStatus = prev.safety.passed
+      ? chalk.green('✓ passed')
+      : chalk.red(`✗ ${prev.safety.violationCount} violations`)
+    console.log(chalk.gray(`  Safety:        ${safetyStatus}`))
+
+    if (prev.evaluation.score !== null) {
+      const scoreColor = prev.evaluation.score >= 0.7 ? chalk.green : prev.evaluation.score >= 0.4 ? chalk.yellow : chalk.red
+      console.log(chalk.gray(`  Eval score:    ${scoreColor(prev.evaluation.score.toFixed(2))}`))
+    }
+  }
 }
 
 export async function chatCommand(message: string, options: ChatOptions): Promise<void> {

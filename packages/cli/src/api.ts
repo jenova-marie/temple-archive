@@ -28,14 +28,39 @@ export interface ChatRequest {
   agent?: string
 }
 
+export interface MemoryTierStats {
+  l1: { hit: boolean; messageCount: number }
+  l2: { queried: boolean; messageCount: number }
+  l3: { queried: boolean; entityCount: number }
+  l4: { queried: boolean; matchCount: number }
+  cacheHits: number
+  cacheMisses: number
+}
+
+export interface TierWriteStats {
+  l1: { messageCount: number }
+  l2: { messageCount: number }
+  l3: { entitiesAdded: number; entitiesUpdated: number }
+  l4: { embeddingsStored: number }
+}
+
+export interface PreviousExchange {
+  timestamp: number
+  durationMs: number
+  writes: TierWriteStats
+  safety: { passed: boolean; violationCount: number }
+  evaluation: { score: number | null }
+}
+
 export interface ChatMetrics {
   preflightMs: number
   totalMs: number
   inputTokens: number
   outputTokens: number
-  memorySource: string
   crisisLevel: number
   toolsEnabled: number
+  memory?: MemoryTierStats
+  previousExchange?: PreviousExchange | null
 }
 
 export interface ChatResponse {
