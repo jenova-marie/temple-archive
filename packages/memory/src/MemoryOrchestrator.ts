@@ -49,6 +49,13 @@ export interface MemoryRetrievalResult {
   cacheHits: number
   /** Number of cache misses during retrieval */
   cacheMisses: number
+  /** Semantic search results from L4 (if queried) */
+  semanticResults?: Array<{
+    score: number
+    content: string
+    role?: string
+    timestamp?: number
+  }>
 }
 
 export interface MemoryError {
@@ -183,6 +190,7 @@ export class MemoryOrchestrator {
       }
 
       // STAGE 2: Semantic search in L4 (and optionally L3)
+      let semanticResults: MemoryRetrievalResult['semanticResults'] = undefined
       if (queryEmbedding) {
         const l4Result = await this.l4.search(
           queryEmbedding,
@@ -199,6 +207,14 @@ export class MemoryOrchestrator {
           cacheHits++
           pipelineMetrics.memoryCacheHits.add(1, { tier: 'L4' })
           logger.debug({ count: l4Result.value.length }, 'L4 semantic matches found')
+
+          // Capture semantic results for diagnostics
+          semanticResults = l4Result.value.map(match => ({
+            score: match.score,
+            content: match.content.slice(0, 200), // Truncate for display
+            role: match.metadata.role,
+            timestamp: match.metadata.timestamp,
+          }))
 
           // Query L3 for related entities (non-blocking)
           const relatedEntities = await this.queryL3Entities(userId, ctx)
@@ -218,6 +234,7 @@ export class MemoryOrchestrator {
             latencyMs: Date.now() - startTime,
             cacheHits,
             cacheMisses,
+            semanticResults,
           })
         }
       }
