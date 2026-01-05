@@ -67,6 +67,18 @@ function displayMetrics(metrics: ChatMetrics): void {
     console.log(chalk.gray(`  L4 Qdrant:     ${l4Status}`))
   }
 
+  // Memory prompts (phase-shifted from previous postflight)
+  if (metrics.memoryPrompts) {
+    const { count, totalChars } = metrics.memoryPrompts
+    console.log(chalk.cyan.bold('Memory Prompts:'))
+    if (count > 0) {
+      console.log(chalk.gray(`  Active:        ${chalk.green(`${count} prompt${count > 1 ? 's' : ''}`)}`))
+      console.log(chalk.gray(`  Total chars:   ${totalChars}`))
+    } else {
+      console.log(chalk.gray(`  Active:        ${chalk.gray('none (1st exchange or expired)')}`))
+    }
+  }
+
   // Phase-shifted stats from previous exchange
   if (metrics.previousExchange) {
     const prev = metrics.previousExchange
