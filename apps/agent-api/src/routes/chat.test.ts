@@ -332,7 +332,7 @@ describe('chat routes', () => {
       expect(mockRes.status).toHaveBeenCalledWith(500)
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Internal Server Error',
-        message: 'An unexpected error occurred',
+        message: 'Unexpected error', // Now returns actual error message
       })
     })
   })
