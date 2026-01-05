@@ -1,13 +1,26 @@
 name: Build & Push Docker Image to AWS ECR
 on:
   push:
+    tags:
+      - 'v*' # Only trigger on version tags (e.g., v1.0.0, v2.1.3)
   workflow_dispatch: # Allows manual triggering
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read
 env:
-  ENV: ${{ github.ref_name }}
-  AWS_REGION: ${{ github.ref_name == 'dev' && 'us-east-2' || github.ref_name == 'staging' && 'us-west-2' || github.ref_name == 'prod' && 'us-east-1' || 'us-east-2' }}
+  # For tag pushes, default to prod; for manual dispatch, use input
+  ENV: ${{ github.event.inputs.environment || 'prod' }}
+  AWS_REGION: us-east-1 # Default to prod region, overridden in job
 jobs:
   docker-build-and-push:
     runs-on: hestia # Runs directly on host
@@ -16,20 +29,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set environment from branch
+      - name: Set environment and region
         run: |
-          # Branch name is directly available from github.ref_name
-          BRANCH="${{ github.ref_name }}"
-          echo "ENV=$BRANCH" >> $GITHUB_ENV
+          # Use input for manual dispatch, default to prod for tag pushes
+          TARGET_ENV="${{ github.event.inputs.environment || 'prod' }}"
+          echo "ENV=$TARGET_ENV" >> $GITHUB_ENV
 
-          # Set AWS region based on branch
-          case "$BRANCH" in
+          # Set AWS region based on environment
+          case "$TARGET_ENV" in
             dev)     echo "AWS_REGION=us-east-2" >> $GITHUB_ENV ;;
             staging) echo "AWS_REGION=us-west-2" >> $GITHUB_ENV ;;
             prod)    echo "AWS_REGION=us-east-1" >> $GITHUB_ENV ;;
+            *)       echo "AWS_REGION=us-east-1" >> $GITHUB_ENV ;; # Default to prod
           esac
 
-          echo "Branch: $BRANCH"
+          echo "Environment: $TARGET_ENV"
+          echo "Tag: ${{ github.ref_name }}"
 
       - name: Upload opt/ to rsync.net
         run: |
@@ -117,7 +132,10 @@ jobs:
         with:
           images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
           tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{ env.ENV }}
+            type=raw,value=latest,enable=${{ env.ENV == 'prod' }}
 
       - name: Login to Amazon ECR
         id: login-ecr
