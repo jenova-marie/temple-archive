@@ -19,9 +19,7 @@ import type { PipelineInput, TraceContext } from "@pippa/types";
 import type { Pipeline } from "@pippa/pipeline";
 import { getLogger } from "@pippa/observability";
 import {
-  recoveryTools,
-  meetingTools,
-  literatureTools,
+  agentTools,
   getMemoryTools,
   setMemoryToolTraceContext,
   clearMemoryToolTraceContext,
@@ -274,9 +272,8 @@ export function createChatRouter({
           const emergencyStream = streamText({
             model: anthropic("claude-sonnet-4-20250514"),
             system:
-              "You are Sky, a compassionate recovery companion. Respond with care and provide crisis resources.",
+              "You are Pippa. The user may be in crisis. Respond with care and compassion.",
             messages: [{ role: "user", content: lastUserMessage }],
-            tools: { getCrisisResources: recoveryTools.getCrisisResources },
             maxOutputTokens: 500,
           });
 
@@ -309,22 +306,15 @@ export function createChatRouter({
       // Build tools object from enabled tool categories
       const deps = pipeline.getDeps();
       const memoryToolAccess = deps.memoryToolAccess || "off";
-      const recoveryToolsEnabled = process.env.ENABLE_RECOVERY_TOOLS !== "false";
+      const toolsEnabled = process.env.ENABLE_TOOLS !== "false";
 
       // Set trace context for memory tools before streaming
       if (memoryToolAccess !== "off") {
         setMemoryToolTraceContext(traceContext);
       }
 
-      // Log disabled tool categories (only on first request to avoid spam)
-      if (!recoveryToolsEnabled) {
-        logger.debug("Recovery tools disabled (ENABLE_RECOVERY_TOOLS=false)");
-      }
-
       const tools = {
-        ...(recoveryToolsEnabled ? recoveryTools : {}),
-        ...meetingTools,
-        ...literatureTools,
+        ...(toolsEnabled ? agentTools : {}),
         ...(memoryToolAccess !== "off" ? getMemoryTools(memoryToolAccess) : {}),
       };
 
@@ -352,6 +342,7 @@ export function createChatRouter({
       });
 
       // Use native UI Message Stream with metrics metadata
+      const { memoryStats, previousPostProcess } = preflightResult.value;
       pipeUIMessageStreamToResponse({
         response: res,
         status: 200,
@@ -365,9 +356,27 @@ export function createChatRouter({
                   totalMs: Date.now() - startTime,
                   inputTokens: part.totalUsage?.inputTokens ?? 0,
                   outputTokens: part.totalUsage?.outputTokens ?? 0,
-                  memorySource: preflightResult.value.memoryStats.source,
                   crisisLevel: crisisCheck.level,
                   toolsEnabled: Object.keys(tools).length,
+                  // Detailed tier diagnostics (read operations)
+                  memory: {
+                    cacheHits: memoryStats.cacheHits,
+                    cacheMisses: memoryStats.cacheMisses,
+                    l1: memoryStats.l1,
+                    l2: memoryStats.l2,
+                    l3: memoryStats.l3,
+                    l4: memoryStats.l4,
+                  },
+                  // Phase-shifted stats from previous exchange (write operations)
+                  previousExchange: previousPostProcess
+                    ? {
+                        timestamp: previousPostProcess.timestamp,
+                        durationMs: previousPostProcess.durationMs,
+                        writes: previousPostProcess.writes,
+                        safety: previousPostProcess.safety,
+                        evaluation: previousPostProcess.evaluation,
+                      }
+                    : null,
                 },
               };
             }

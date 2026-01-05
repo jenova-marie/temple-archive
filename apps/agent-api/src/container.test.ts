@@ -88,10 +88,6 @@ vi.mock('@pippa/tools', () => ({
   setBootstrapOrchestrator: vi.fn(),
   setSystemPromptRefreshFn: vi.fn(),
   setClearConversationFn: vi.fn(),
-  setLiteratureRepository: vi.fn(),
-  setLiteratureQdrantStore: vi.fn(),
-  setLiteratureEmbeddingProvider: vi.fn(),
-  setLiteratureToolsConfig: vi.fn(),
 }))
 
 vi.mock('@pippa/db', () => ({
@@ -108,7 +104,6 @@ vi.mock('@pippa/db', () => ({
   UserRepository: vi.fn().mockImplementation(() => ({
     getOrCreateUser: vi.fn().mockResolvedValue({ ok: true, value: {} }),
   })),
-  LiteratureRepository: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock('@pippa/crisis', () => ({
@@ -146,6 +141,9 @@ vi.mock('@pippa/agent', () => ({
 vi.mock('@pippa/evaluation', () => ({
   StubEvaluator: vi.fn().mockImplementation(() => ({
     evaluate: vi.fn().mockResolvedValue({ ok: true, value: { score: 1.0 } }),
+  })),
+  NoOpEvaluator: vi.fn().mockImplementation(() => ({
+    evaluate: vi.fn().mockResolvedValue({ ok: true, value: { overallScore: 0.5 } }),
   })),
   LLMEvaluator: vi.fn().mockImplementation(() => ({
     evaluate: vi.fn().mockResolvedValue({ ok: true, value: { score: 1.0 } }),

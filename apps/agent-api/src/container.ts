@@ -77,10 +77,6 @@ import {
   setBootstrapOrchestrator,
   setSystemPromptRefreshFn,
   setClearConversationFn,
-  setLiteratureRepository,
-  setLiteratureQdrantStore,
-  setLiteratureEmbeddingProvider,
-  setLiteratureToolsConfig,
   type MemoryToolAccessLevel,
 } from "@pippa/tools";
 import {
@@ -105,11 +101,7 @@ import {
 } from "@pippa/evaluation";
 import { Pipeline, type PipelineDependencies } from "@pippa/pipeline";
 import { getLogger } from "@pippa/observability";
-import {
-  SystemPromptRepository,
-  UserRepository,
-  LiteratureRepository,
-} from "@pippa/db";
+import { SystemPromptRepository, UserRepository } from "@pippa/db";
 
 import type { UserProfile } from "@pippa/types";
 
@@ -253,20 +245,8 @@ export function createContainer(options: ContainerConfig = {}): Container {
     // Pass userCacheStore to UserRepository for user caching
     userRepo = new UserRepository(db, userCacheStore ?? undefined);
 
-    // Create literature repository and wire up tools
-    const literatureRepo = new LiteratureRepository(db);
-    setLiteratureRepository(literatureRepo);
-
-    // Literature search limit from env
-    const literatureSearchLimit = parseInt(
-      process.env.LITERATURE_SEARCH_LIMIT || "10",
-      10,
-    );
-    setLiteratureToolsConfig({ searchLimit: literatureSearchLimit });
-
     logger.info(
-      { literatureSearchLimit },
-      "Database repositories initialized (SystemPromptRepository, UserRepository, LiteratureRepository)",
+      "Database repositories initialized (SystemPromptRepository, UserRepository)",
     );
   } else {
     logger.info("Using InMemorySessionStore (L2 stub)");
@@ -419,15 +399,6 @@ export function createContainer(options: ContainerConfig = {}): Container {
   } else if (!useStubs && process.env.OPENAI_API_KEY) {
     logger.info("Using OpenAIEmbeddingProvider for semantic search");
     embedding = new OpenAIEmbeddingProvider();
-
-    // Wire up literature tools with Qdrant and embedding provider for semantic search
-    if (qdrantVectorStore) {
-      setLiteratureQdrantStore(qdrantVectorStore);
-      setLiteratureEmbeddingProvider(embedding);
-      logger.info(
-        "Literature semantic search enabled (Qdrant + OpenAI embeddings)",
-      );
-    }
   } else if (!useStubs) {
     logger.warn("OPENAI_API_KEY not set - semantic search disabled");
   }
