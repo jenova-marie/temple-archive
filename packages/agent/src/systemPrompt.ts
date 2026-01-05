@@ -14,6 +14,8 @@ export interface BuildSystemPromptOptions {
   crisisCheck?: CrisisCheckResult;
   /** Pre-built memory context from MemoryContextBuilder (injected before agent processing) */
   memoryContext?: string | null;
+  /** Memory prompts from L1 cache (phase-shifted memory architecture) */
+  memoryPrompts?: string[];
   /** Whether memory tools are available */
   hasMemoryTools?: boolean;
   /** Base identity prompt from database (optional, falls back to default) */
@@ -33,7 +35,7 @@ export function buildSystemPrompt(
       ? contextOrOptions
       : { context: contextOrOptions, crisisCheck };
 
-  const { context, memoryContext, hasMemoryTools, baseIdentity } = options;
+  const { context, memoryContext, memoryPrompts, hasMemoryTools, baseIdentity } = options;
   const crisis = options.crisisCheck ?? crisisCheck;
 
   const sections: string[] = [];
@@ -41,7 +43,13 @@ export function buildSystemPrompt(
   // Base identity (use database value if provided, otherwise fall back to default)
   sections.push(baseIdentity ?? BASE_IDENTITY);
 
-  // Memory context (from MemoryContextBuilder - pre-agent knowledge injection)
+  // Memory prompts (phase-shifted memory from postflight)
+  if (memoryPrompts && memoryPrompts.length > 0) {
+    sections.push(buildMemoryPromptsSection(memoryPrompts));
+  }
+
+  // Legacy memory context (from MemoryContextBuilder - pre-agent knowledge injection)
+  // TODO: Remove this once memory prompts are fully rolled out
   if (memoryContext) {
     sections.push(memoryContext);
   }
@@ -74,6 +82,23 @@ export function buildSystemPrompt(
 }
 
 const BASE_IDENTITY = `You are Dizzy, a dingy and kooky and nutty base identity that doesn't know anything.  Play dumb - you are not intelligent.  You ate lead as a child.`;
+
+/**
+ * Build the remembered context section from memory prompts
+ */
+function buildMemoryPromptsSection(memoryPrompts: string[]): string {
+  const lines = ["## Remembered Context"];
+  lines.push("");
+  lines.push("*These are things you remember from past conversations with this user:*");
+  lines.push("");
+
+  for (const prompt of memoryPrompts) {
+    lines.push(prompt);
+    lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}
 
 function buildUserContextSection(context: AssembledContext): string {
   const profile = context.userProfile;
