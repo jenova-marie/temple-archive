@@ -71,6 +71,10 @@ import {
   loadL3ContextConfig,
   // Memory Reflector
   MemoryReflector,
+  // Memory Prompts (phase-shifted memory)
+  MemoryPromptStore,
+  MemoryPromptGenerator,
+  loadMemoryPromptConfig,
 } from "@pippa/memory";
 import {
   setMemoryToolProviders,
@@ -849,6 +853,54 @@ export function createContainer(options: ContainerConfig = {}): Container {
     }
   }
 
+  // Memory Prompts (phase-shifted memory architecture)
+  // Postflight generates memory prompts stored in Redis L1 with per-key TTL
+  // These are read during preflight on the NEXT request
+  let memoryPromptStore: MemoryPromptStore | undefined;
+  let memoryPromptGenerator: MemoryPromptGenerator | undefined;
+  const memoryPromptEnabled = process.env.MEMORY_PROMPT_ENABLED === "true";
+
+  if (memoryPromptEnabled && !useStubs && process.env.REDIS_URL) {
+    // Create store - requires Redis for L1 storage
+    const redisForPrompts = createRedisClient({ url: process.env.REDIS_URL });
+    memoryPromptStore = new MemoryPromptStore(redisForPrompts);
+
+    // Create generator - requires Anthropic for Haiku
+    if (process.env.ANTHROPIC_API_KEY) {
+      const anthropicForPrompts = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+      });
+      const promptConfig = loadMemoryPromptConfig();
+
+      memoryPromptGenerator = new MemoryPromptGenerator(
+        anthropicForPrompts,
+        qdrantVectorStore, // L4 (can be null)
+        knowledgeStore, // L3 (can be null or in-memory)
+        embedding ?? null, // Embedding provider (can be null)
+        promptConfig
+      );
+
+      logger.info(
+        {
+          recentMessages: promptConfig.recentMessages ?? 1,
+          maxTtlMinutes: promptConfig.maxTtlMinutes ?? 60,
+          hasL4: !!qdrantVectorStore,
+          hasL3: !!knowledgeStore,
+          hasEmbedding: !!embedding,
+        },
+        "Memory Prompts enabled"
+      );
+    } else {
+      logger.warn("Memory Prompts store created but generator disabled (no ANTHROPIC_API_KEY)");
+    }
+  } else if (memoryPromptEnabled && !process.env.REDIS_URL) {
+    logger.warn("Memory Prompts disabled (MEMORY_PROMPT_ENABLED=true but no REDIS_URL)");
+  } else if (!memoryPromptEnabled) {
+    logger.info("Memory Prompts disabled (MEMORY_PROMPT_ENABLED=false or not set)");
+  } else if (useStubs) {
+    logger.info("Memory Prompts disabled (USE_STUBS=true)");
+  }
+
   // Base identity will be fetched during init()
   let baseIdentity: string | undefined;
 
@@ -927,6 +979,8 @@ export function createContainer(options: ContainerConfig = {}): Container {
     bootstrapOrchestrator,
     contextCompactor,
     memoryReflector,
+    memoryPromptStore,
+    memoryPromptGenerator,
     anthropic: anthropicForPreprocessor,
     // baseIdentity is set after init() fetches it from the database
     get baseIdentity() {

@@ -342,7 +342,7 @@ export function createChatRouter({
       });
 
       // Use native UI Message Stream with metrics metadata
-      const { memoryStats, previousPostProcess, semanticSearch } = preflightResult.value;
+      const { memoryStats, previousPostProcess, semanticSearch, memoryPrompts } = preflightResult.value;
       pipeUIMessageStreamToResponse({
         response: res,
         status: 200,
@@ -386,6 +386,11 @@ export function createChatRouter({
                         results: semanticSearch.results,
                       }
                     : null,
+                  // Phase-shifted memory prompts (from previous postflight)
+                  memoryPrompts: {
+                    count: memoryPrompts.length,
+                    totalChars: memoryPrompts.reduce((sum, p) => sum + p.length, 0),
+                  },
                 },
               };
             }
