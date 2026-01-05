@@ -24,12 +24,14 @@ program
   .command('chat')
   .description('Send a message to Pippa')
   .argument('[message]', 'Message to send (omit for interactive mode)')
+  .option('-a, --agent <name>', 'Agent/persona to use', 'pippa')
   .option('-v, --verbose', 'Show conversation ID')
+  .option('-m, --metrics', 'Show execution metrics (timing, tokens, etc.)')
   .action(async (message: string | undefined, options: ChatOptions) => {
     if (message) {
       await chatCommand(message, options)
     } else {
-      await interactiveChat()
+      await interactiveChat(options)
     }
   })
 
@@ -37,8 +39,10 @@ program
 program
   .command('interactive', { isDefault: true })
   .description('Start an interactive chat session')
-  .action(async () => {
-    await interactiveChat()
+  .option('-a, --agent <name>', 'Agent/persona to use', 'pippa')
+  .option('-m, --metrics', 'Show execution metrics (timing, tokens, etc.)')
+  .action(async (options: ChatOptions) => {
+    await interactiveChat(options)
   })
 
 // Health check

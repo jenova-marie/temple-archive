@@ -7,11 +7,28 @@
 
 import chalk from 'chalk'
 import ora from 'ora'
-import { sendMessage } from '../api.js'
+import { sendMessage, type ChatMetrics } from '../api.js'
 import { getConversationId, getUserId } from '../config.js'
 
 export interface ChatOptions {
+  agent?: string
   verbose?: boolean
+  metrics?: boolean
+}
+
+/**
+ * Format and display metrics
+ */
+function displayMetrics(metrics: ChatMetrics): void {
+  console.log(chalk.gray('─'.repeat(50)))
+  console.log(chalk.cyan.bold('Metrics:'))
+  console.log(chalk.gray(`  Preflight:    ${metrics.preflightMs}ms`))
+  console.log(chalk.gray(`  Total:        ${metrics.totalMs}ms`))
+  console.log(chalk.gray(`  Input tokens: ${metrics.inputTokens}`))
+  console.log(chalk.gray(`  Output tokens: ${metrics.outputTokens}`))
+  console.log(chalk.gray(`  Memory:       ${metrics.memorySource}`))
+  console.log(chalk.gray(`  Crisis level: ${metrics.crisisLevel}`))
+  console.log(chalk.gray(`  Tools:        ${metrics.toolsEnabled}`))
 }
 
 export async function chatCommand(message: string, options: ChatOptions): Promise<void> {
@@ -19,7 +36,7 @@ export async function chatCommand(message: string, options: ChatOptions): Promis
   let firstDelta = true
 
   try {
-    const response = await sendMessage(message, (delta) => {
+    const response = await sendMessage(message, { agent: options.agent }, (delta) => {
       // Stop spinner on first text and print header
       if (firstDelta) {
         spinner.stop()
@@ -46,6 +63,11 @@ export async function chatCommand(message: string, options: ChatOptions): Promis
       console.log(chalk.gray(`Conversation: ${response.conversationId}`))
     }
 
+    // Display metrics if enabled
+    if (options.metrics && response.metrics) {
+      displayMetrics(response.metrics)
+    }
+
   } catch (error) {
     spinner.fail('Failed to send message')
     console.error(chalk.red((error as Error).message))
@@ -53,13 +75,19 @@ export async function chatCommand(message: string, options: ChatOptions): Promis
   }
 }
 
-export async function interactiveChat(): Promise<void> {
+export async function interactiveChat(options: ChatOptions = {}): Promise<void> {
   const { default: inquirer } = await import('inquirer')
 
   console.log()
   console.log(chalk.magenta.bold('Pippa Chat'))
   console.log(chalk.gray(`Conversation: ${getConversationId()}`))
   console.log(chalk.gray(`User: ${getUserId()}`))
+  if (options.agent) {
+    console.log(chalk.cyan(`Agent: ${options.agent}`))
+  }
+  if (options.metrics) {
+    console.log(chalk.cyan('Metrics: enabled'))
+  }
   console.log(chalk.gray('Type "exit" or "quit" to end the conversation'))
   console.log(chalk.gray('Type "new" to start a new conversation'))
   console.log()
@@ -97,7 +125,7 @@ export async function interactiveChat(): Promise<void> {
     let firstDelta = true
 
     try {
-      await sendMessage(message, (delta) => {
+      const response = await sendMessage(message, { agent: options.agent }, (delta) => {
         if (firstDelta) {
           spinner.stop()
           process.stdout.write('\n' + chalk.magenta('Pippa: '))
@@ -111,6 +139,11 @@ export async function interactiveChat(): Promise<void> {
       } else {
         spinner.stop()
         console.log()
+      }
+
+      // Display metrics if enabled
+      if (options.metrics && response.metrics) {
+        displayMetrics(response.metrics)
       }
 
     } catch (error) {

@@ -8,6 +8,13 @@
 import { getApiUrl, getConversationId, getUserId } from './config.js'
 
 /**
+ * Options for sendMessage
+ */
+export interface SendMessageOptions {
+  agent?: string
+}
+
+/**
  * Vercel AI SDK UIMessage format for requests
  */
 export interface ChatRequest {
@@ -18,11 +25,23 @@ export interface ChatRequest {
     parts?: Array<{ type: 'text'; text: string }>
     content?: string
   }>
+  agent?: string
+}
+
+export interface ChatMetrics {
+  preflightMs: number
+  totalMs: number
+  inputTokens: number
+  outputTokens: number
+  memorySource: string
+  crisisLevel: number
+  toolsEnabled: number
 }
 
 export interface ChatResponse {
   response: string
   conversationId: string
+  metrics?: ChatMetrics
 }
 
 export interface HealthResponse {
@@ -48,10 +67,12 @@ export interface ApiError {
  * - `data: [DONE]`
  *
  * @param message - The user message to send
+ * @param options - Options including agent selection
  * @param onDelta - Optional callback for real-time text streaming
  */
 export async function sendMessage(
   message: string,
+  options: SendMessageOptions,
   onDelta?: (text: string) => void
 ): Promise<ChatResponse> {
   const apiUrl = getApiUrl()
@@ -74,6 +95,7 @@ export async function sendMessage(
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         },
       ],
+      agent: options.agent,
     } satisfies ChatRequest),
   })
 
@@ -92,6 +114,7 @@ export async function sendMessage(
   const decoder = new TextDecoder()
   let buffer = ''
   let fullText = ''
+  let metrics: ChatMetrics | undefined
 
   while (true) {
     const { done, value } = await reader.read()
@@ -124,6 +147,9 @@ export async function sendMessage(
           id?: string
           delta?: string
           finishReason?: string
+          messageMetadata?: {
+            metrics?: ChatMetrics
+          }
         }
 
         switch (event.type) {
@@ -135,10 +161,17 @@ export async function sendMessage(
             }
             break
           }
+          case 'finish': {
+            // Extract metrics from messageMetadata if present
+            if (event.messageMetadata?.metrics) {
+              metrics = event.messageMetadata.metrics
+            }
+            break
+          }
           case 'error': {
             throw new Error(`Stream error: ${JSON.stringify(event)}`)
           }
-          // Ignore other event types (start, start-step, finish-step, finish, text-start, text-end)
+          // Ignore other event types (start, start-step, finish-step, text-start, text-end)
         }
       } catch (e) {
         // Ignore JSON parse errors for non-JSON lines
@@ -153,6 +186,7 @@ export async function sendMessage(
   return {
     response: fullText,
     conversationId,
+    metrics,
   }
 }
 
