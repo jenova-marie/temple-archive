@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
-const agentApiPort = process.env.AGENT_API_PORT || process.env.PORT;
+const agentApiPort = process.env.AGENT_API_PORT || process.env.PORT || "6000";
 if (!agentApiPort) {
   throw new Error("AGENT_API_PORT or PORT environment variable must be set");
 }
