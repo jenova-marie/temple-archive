@@ -21,7 +21,6 @@ import {
 import { createContainer } from "./container.js";
 import { createChatRouter } from "./routes/chat.js";
 import { createHealthRouter } from "./routes/health.js";
-import { createGuidesRouter } from "./routes/guides.js";
 import { tracingMiddleware } from "./middleware/tracing.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { getAuthMiddleware } from "./middleware/auth.js";
@@ -83,8 +82,7 @@ if (auth) {
     pipeline: container.pipeline,
     loadUserData: container.loadUserData,
   }));
-  app.use("/api/v1/guides", auth.required, createGuidesRouter(container));
-  logger.info("Zitadel JWT authentication enabled for /api/v1/chat and /api/v1/guides");
+  logger.info("Zitadel JWT authentication enabled for /api/v1/chat");
 } else {
   // Check if we're in production without auth
   const isProduction = process.env.NODE_ENV === "production";
@@ -110,7 +108,6 @@ if (auth) {
     pipeline: container.pipeline,
     loadUserData: container.loadUserData,
   }));
-  app.use("/api/v1/guides", createGuidesRouter(container));
 }
 
 // Error handling
