@@ -8,6 +8,7 @@
 |-----|---------|
 | [README.md](README.md) | Features, architecture overview, quick start |
 | [CONFIG.md](CONFIG.md) | All environment variables and YAML configuration |
+| [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md) | Master reference for all feature toggles |
 
 ## Architecture
 

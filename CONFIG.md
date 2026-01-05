@@ -27,6 +27,54 @@ url: ${DATABASE_URL:-postgresql://localhost:5432/pippa}
 
 ---
 
+## Feature Selection
+
+Master switches for all major system features. Set to `false` to completely disable a feature regardless of other configuration. All features default to `true` when their dependencies are available.
+
+### Pipeline Processing
+
+| Feature | Env Var | Default | Description |
+|---------|---------|---------|-------------|
+| Safety Validation | `ENABLE_SAFETY_VALIDATION` | `true` | PII detection, medical advice filtering, enabling language detection |
+| Response Evaluation | `ENABLE_RESPONSE_EVALUATION` | `true` | LLM-based quality scoring of agent responses |
+| Response Streaming | `ENABLE_STREAMING` | `true` | Stream responses as they generate vs. wait for completion |
+| Agent Tools | `ENABLE_AGENT_TOOLS` | `true` | Allow Claude to call tools iteratively (agentic loop) |
+
+### Crisis Detection
+
+| Feature | Env Var | Default | Description |
+|---------|---------|---------|-------------|
+| Fast Detection | `ENABLE_CRISIS_DETECTION` | `true` | Keyword-based pattern matching (<10ms) |
+| Deep Evaluation | `ENABLE_DEEP_CRISIS_EVAL` | `true` | LLM-based secondary analysis (requires Anthropic API) |
+
+### Memory System
+
+| Feature | Env Var | Default | Description |
+|---------|---------|---------|-------------|
+| Entity Extraction | `ENABLE_ENTITY_EXTRACTION` | `true` | Extract people, places, events from conversations |
+| L3 Extraction | `USE_L3_EXTRACTION` | `true` | Use rich Cadillac schema with observations |
+| L3 Retrieval | `USE_L3_RETRIEVAL` | `false` | Use new MemoryRetrievalService with Deep Memory |
+| Deep Memory | `DEEP_MEMORY_ENABLED` | `true` | Enrich entities with original conversation context |
+| Memory Bootstrap | `MEMORY_BOOTSTRAP_ENABLED` | `false` | Prime conversations with related past memories |
+| Context Compaction | `COMPACTION_ENABLED` | `true` | Summarize old messages to reduce context size |
+| Memory Reflector | `MEMORY_REFLECTOR_ENABLED` | `true` | Automatic insight extraction after each exchange |
+| Embedding Batch | `EMBEDDING_BATCH_ENABLED` | `true` | Background generation of L3/L4 embeddings |
+
+### Tool Features
+
+| Feature | Env Var | Default | Description |
+|---------|---------|---------|-------------|
+| Meeting Tools | `ENABLE_MEETING_TOOLS` | `true` | findMeetings tool for recovery meeting discovery |
+| Literature Tools | `ENABLE_LITERATURE_TOOLS` | `true` | searchLiterature tool for recovery text search |
+
+### Observability
+
+| Feature | Env Var | Default | Description |
+|---------|---------|---------|-------------|
+| Tracing | `ENABLE_TRACING` | `true` | OpenTelemetry distributed tracing |
+
+---
+
 ## Configuration Sections
 
 ### `app` - Application Settings
@@ -38,7 +86,7 @@ Core application settings controlling the runtime environment.
 | `nodeEnv` | `"development"` \| `"production"` \| `"test"` | `"development"` | `NODE_ENV` | Runtime environment. Affects logging verbosity and error handling. |
 | `port` | number | `3333` | `PORT` | HTTP server port. |
 | `logLevel` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"debug"` | `LOG_LEVEL` | Minimum log level. Lower levels include higher ones. |
-| `useStubs` | boolean | `true` | `USE_STUBS` | When `true`, uses in-memory stubs instead of real services. Set to `false` for production. |
+| `useStubs` | boolean | `true` | When `true`, uses in-memory stubs instead of real services. Set to `false` for production. |
 
 **Example:**
 ```yaml
@@ -582,7 +630,23 @@ memory:
 | **App** | `NODE_ENV` | `app.nodeEnv` |
 | | `PORT` | `app.port` |
 | | `LOG_LEVEL` | `app.logLevel` |
-| | `USE_STUBS` | `app.useStubs` |
+| **Feature Flags** | `ENABLE_SAFETY_VALIDATION` | `features.safetyValidation` |
+| | `ENABLE_RESPONSE_EVALUATION` | `features.responseEvaluation` |
+| | `ENABLE_STREAMING` | `features.streaming` |
+| | `ENABLE_AGENT_TOOLS` | `features.agentTools` |
+| | `ENABLE_CRISIS_DETECTION` | `features.crisisDetection` |
+| | `ENABLE_DEEP_CRISIS_EVAL` | `features.deepCrisisEval` |
+| | `ENABLE_ENTITY_EXTRACTION` | `features.entityExtraction` |
+| | `USE_L3_EXTRACTION` | `features.l3Extraction` |
+| | `USE_L3_RETRIEVAL` | `features.l3Retrieval` |
+| | `DEEP_MEMORY_ENABLED` | `features.deepMemory` |
+| | `MEMORY_BOOTSTRAP_ENABLED` | `features.memoryBootstrap` |
+| | `COMPACTION_ENABLED` | `features.compaction` |
+| | `MEMORY_REFLECTOR_ENABLED` | `features.memoryReflector` |
+| | `EMBEDDING_BATCH_ENABLED` | `features.embeddingBatch` |
+| | `ENABLE_MEETING_TOOLS` | `features.meetingTools` |
+| | `ENABLE_LITERATURE_TOOLS` | `features.literatureTools` |
+| | `ENABLE_TRACING` | `features.tracing` |
 | **AI** | `ANTHROPIC_API_KEY` | `ai.anthropic.apiKey` |
 | | `OPENAI_API_KEY` | `ai.openai.apiKey` |
 | **Redis** | `REDIS_URL` | `redis.url` |
@@ -602,15 +666,9 @@ memory:
 | **Crisis** | `CRISIS_THRESHOLD_HIGH` | `crisis.thresholdHigh` |
 | | `CRISIS_THRESHOLD_CRITICAL` | `crisis.thresholdCritical` |
 | | `CRISIS_WEBHOOK_URL` | `crisis.webhookUrl` |
-| | `ENABLE_CRISIS_DETECTION` | `crisis.detectionEnabled` |
-| | `ENABLE_DEEP_CRISIS_EVAL` | `crisis.deepEvalEnabled` |
 | **Auth** | `ZITADEL_ISSUER` | `auth.zitadel.issuer` |
 | | `ZITADEL_AUDIENCE` | `auth.zitadel.audience` |
 | **Memory** | `MEMORY_CONTEXT_MODE` | `memory.contextMode` |
 | | `MEMORY_TOOL_ACCESS` | `memory.toolAccess` |
 | | `ENTITY_EXTRACTION_MODE` | `memory.entityExtraction.mode` |
-| | `USE_L3_EXTRACTION` | `memory.l3.extractionEnabled` |
-| | `USE_L3_RETRIEVAL` | `memory.l3.retrievalEnabled` |
-| | `DEEP_MEMORY_ENABLED` | `memory.deepMemory.enabled` |
-| | `COMPACTION_ENABLED` | `memory.compaction.enabled` |
 | | `COMPACTION_THRESHOLD` | `memory.compaction.threshold` |

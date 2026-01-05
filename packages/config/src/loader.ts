@@ -69,6 +69,23 @@ const ENV_VAR_MAPPING: Record<string, string> = {
   ENABLE_CRISIS_DETECTION: "crisis.detectionEnabled",
   ENABLE_DEEP_CRISIS_EVAL: "crisis.deepEvalEnabled",
 
+  // Feature Flags - Pipeline Processing
+  ENABLE_SAFETY_VALIDATION: "features.safetyValidation",
+  ENABLE_RESPONSE_EVALUATION: "features.responseEvaluation",
+  ENABLE_STREAMING: "features.streaming",
+  ENABLE_AGENT_TOOLS: "features.agentTools",
+
+  // Feature Flags - Memory System
+  ENABLE_ENTITY_EXTRACTION: "features.entityExtraction",
+  EMBEDDING_BATCH_ENABLED: "features.embeddingBatch",
+
+  // Feature Flags - Tools
+  ENABLE_MEETING_TOOLS: "features.meetingTools",
+  ENABLE_LITERATURE_TOOLS: "features.literatureTools",
+
+  // Feature Flags - Observability
+  ENABLE_TRACING: "features.tracing",
+
   // Evaluation
   EVALUATION_MODE: "evaluation.mode",
 
