@@ -306,17 +306,23 @@ export function createChatRouter({
       }
 
       // STAGE 2: Stream response using Vercel AI SDK
-      // Build tools object from recovery tools + optional memory tools
+      // Build tools object from enabled tool categories
       const deps = pipeline.getDeps();
       const memoryToolAccess = deps.memoryToolAccess || "off";
+      const recoveryToolsEnabled = process.env.ENABLE_RECOVERY_TOOLS !== "false";
 
       // Set trace context for memory tools before streaming
       if (memoryToolAccess !== "off") {
         setMemoryToolTraceContext(traceContext);
       }
 
+      // Log disabled tool categories (only on first request to avoid spam)
+      if (!recoveryToolsEnabled) {
+        logger.debug("Recovery tools disabled (ENABLE_RECOVERY_TOOLS=false)");
+      }
+
       const tools = {
-        ...recoveryTools,
+        ...(recoveryToolsEnabled ? recoveryTools : {}),
         ...meetingTools,
         ...literatureTools,
         ...(memoryToolAccess !== "off" ? getMemoryTools(memoryToolAccess) : {}),
