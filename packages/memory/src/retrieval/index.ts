@@ -19,3 +19,10 @@ export {
   type IMemoryContextProvider,
   type L3MemoryContextProviderConfig,
 } from './MemoryContextProvider.js'
+
+export {
+  QueryPreprocessor,
+  DEFAULT_PREPROCESSOR_CONFIG,
+  type QueryPreprocessingMode,
+  type QueryPreprocessorConfig,
+} from './QueryPreprocessor.js'

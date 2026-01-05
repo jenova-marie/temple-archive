@@ -178,6 +178,11 @@ export {
   DEFAULT_L3_CONTEXT_CONFIG,
   type IMemoryContextProvider,
   type L3MemoryContextProviderConfig,
+  // Query preprocessing for L4 semantic search
+  QueryPreprocessor,
+  DEFAULT_PREPROCESSOR_CONFIG,
+  type QueryPreprocessingMode,
+  type QueryPreprocessorConfig,
 } from './retrieval/index.js'
 
 // Migrations
