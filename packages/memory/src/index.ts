@@ -203,3 +203,14 @@ export {
   type ReinforcementExtraction,
   type MemoryReflectorConfig,
 } from './reflection/index.js'
+
+// Memory Prompts (phase-shifted memory architecture)
+export {
+  MemoryPromptStore,
+  MemoryPromptGenerator,
+  loadMemoryPromptConfig,
+  type MemoryPrompt,
+  type MemoryPromptStoreConfig,
+  type MemoryPromptConfig,
+  type MemoryPromptResult,
+} from './prompts/index.js'
