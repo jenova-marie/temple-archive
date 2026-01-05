@@ -42,6 +42,11 @@ The memory system is Pippa's most complex subsystem. Read in this order:
 | [packages/memory/src/embeddings/L3_EMBEDDINGS.md](packages/memory/src/embeddings/L3_EMBEDDINGS.md) | MiniLM graph-local semantic search |
 | [docs/DEEPMEMORY.md](docs/DEEPMEMORY.md) | Context enrichment from conversation history |
 
+### Advanced Concepts
+| Doc | Purpose |
+|-----|---------|
+| [docs/CONSCIOUS_RETRIEVAL.md](docs/CONSCIOUS_RETRIEVAL.md) | LLM inner dialogue - active curiosity-driven memory queries |
+
 ### Configuration Guides
 | Doc | Purpose |
 |-----|---------|
@@ -99,6 +104,7 @@ Quick links to the most important implementation files:
 - [`packages/memory/src/extraction/EntityExtractor.ts`](packages/memory/src/extraction/EntityExtractor.ts) - Entity extraction
 - [`packages/memory/src/reflection/MemoryReflector.ts`](packages/memory/src/reflection/MemoryReflector.ts) - Insight generation
 - [`packages/memory/src/deepmemory/DeepMemoryService.ts`](packages/memory/src/deepmemory/DeepMemoryService.ts) - Context enrichment
+- `packages/memory/src/curiosity/` - Conscious retrieval (planned)
 
 ### Pipeline & Agent
 - [`packages/pipeline/src/pipeline.ts`](packages/pipeline/src/pipeline.ts) - Main processing pipeline
