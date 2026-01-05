@@ -17,6 +17,7 @@ interface SessionData {
   state: SessionState
   messages: Message[]
   expiresAt: number
+  postProcessStats?: unknown
 }
 
 export class InMemoryContextStore implements IContextStore {
@@ -131,6 +132,62 @@ export class InMemoryContextStore implements IContextStore {
 
       logger.debug('Message stored in L1 cache')
       return ok(undefined)
+    })
+  }
+
+  /**
+   * Store post-process stats for phase-shifted diagnostics
+   */
+  async storePostProcessStats<T>(
+    sessionId: string,
+    stats: T,
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('InMemoryContextStore.storePostProcessStats', async () => {
+      const logger = getLogger().child({ sessionId, requestId: ctx.requestId })
+
+      let session = this.sessions.get(sessionId)
+      if (!session) {
+        session = {
+          state: {
+            startTime: Date.now(),
+            lastActivity: Date.now(),
+            messageCount: 0,
+            crisisLevel: 1,
+          },
+          messages: [],
+          expiresAt: Date.now() + this.ttlMs,
+        }
+        this.sessions.set(sessionId, session)
+      }
+
+      session.postProcessStats = stats
+      session.expiresAt = Date.now() + this.ttlMs
+
+      logger.debug('Post-process stats stored in L1 cache')
+      return ok(undefined)
+    })
+  }
+
+  /**
+   * Retrieve post-process stats from previous exchange
+   */
+  async getPostProcessStats<T>(
+    sessionId: string,
+    ctx: TraceContext
+  ): Promise<Result<T | null, StoreError>> {
+    return withSpan('InMemoryContextStore.getPostProcessStats', async () => {
+      const logger = getLogger().child({ sessionId, requestId: ctx.requestId })
+
+      const session = this.sessions.get(sessionId)
+
+      if (!session || Date.now() > session.expiresAt || !session.postProcessStats) {
+        logger.debug('No post-process stats found')
+        return ok(null)
+      }
+
+      logger.debug('Retrieved post-process stats from L1 cache')
+      return ok(session.postProcessStats as T)
     })
   }
 

@@ -22,6 +22,13 @@ export const RedisKeys = {
    */
   sessionMessages: (conversationId: string): string =>
     `session:${conversationId}:messages`,
+
+  /**
+   * Post-process stats key (String - JSON)
+   * Stores the previous exchange's post-process statistics for phase-shifted diagnostics
+   */
+  postProcessStats: (conversationId: string): string =>
+    `session:${conversationId}:postprocess`,
 } as const
 
 /**

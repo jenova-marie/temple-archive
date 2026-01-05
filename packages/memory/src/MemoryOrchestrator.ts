@@ -1,10 +1,15 @@
 /**
- * Memory Orchestrator - Coordinates multi-tier memory retrieval
+ * Memory Orchestrator - Coordinates multi-tier memory operations
  *
- * This is the main entry point for memory operations. It implements
- * the tiered caching strategy described in the architecture:
+ * This is the main entry point for memory operations. Architecture:
  *
- * L1 (Redis) → L2 (PostgreSQL) → L3 (Neo4j) + L4 (Qdrant)
+ * L1 (Redis)     - Session metadata only (state, post-process stats)
+ * L2 (PostgreSQL) - Authoritative message store, user profiles
+ * L3 (Neo4j)     - Knowledge graph entities
+ * L4 (Qdrant)    - Semantic vector search
+ *
+ * Note: L1 does NOT cache messages since Vercel AI SDK clients send
+ * full conversation history with each request.
  */
 
 import type {
@@ -25,8 +30,6 @@ import { ok, err } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 
 export interface MemoryOrchestratorConfig {
-  /** Maximum messages to retrieve from L1 */
-  l1MessageLimit: number
   /** Maximum messages to retrieve from L2 */
   l2MessageLimit: number
   /** Days back to search in semantic search */
@@ -41,7 +44,6 @@ export interface MemoryOrchestratorConfig {
 
 export interface MemoryRetrievalResult {
   context: AssembledContext
-  source: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED'
   latencyMs: number
   /** Number of cache hits during retrieval */
   cacheHits: number
@@ -67,7 +69,6 @@ export class MemoryOrchestrator {
     config?: Partial<MemoryOrchestratorConfig>
   ) {
     this.config = {
-      l1MessageLimit: 20,
       l2MessageLimit: 50,
       semanticSearchDays: 90,
       semanticScoreThreshold: 0.7,
@@ -79,6 +80,11 @@ export class MemoryOrchestrator {
 
   /**
    * Retrieve assembled context for a conversation
+   *
+   * Note: L1 is not used for message retrieval since Vercel AI SDK clients
+   * send full message history with each request. L1 is only used for session
+   * metadata (state, post-process stats). Messages are retrieved from L2.
+   *
    * @param preloadedProfile - Optional pre-loaded user profile to avoid redundant fetch
    * @param displayName - Optional user's display name for personalization
    */
@@ -102,63 +108,24 @@ export class MemoryOrchestrator {
       let cacheHits = 0
       let cacheMisses = 0
 
-      // STAGE 1: Try L1 cache (Redis)
-      const l1Result = await this.l1.getRecentMessages(
-        conversationId,
-        this.config.l1MessageLimit,
-        ctx
-      )
+      // Get session state from L1 (for crisis level tracking, etc.)
+      const stateResult = await this.l1.get(conversationId, ctx)
+      const sessionState = stateResult.ok && stateResult.value
+        ? stateResult.value
+        : this.createDefaultSessionState()
 
-      if (!l1Result.ok) {
-        logger.warn({ error: l1Result.error }, 'L1 retrieval failed, continuing to L2')
-        pipelineMetrics.errors.add(1, { error_kind: l1Result.error.kind })
+      // Use pre-loaded profile if available, otherwise fetch from L2
+      let userProfile: UserProfile | null = preloadedProfile ?? null
+      if (preloadedProfile === undefined) {
+        const profileResult = await this.l2.getUserProfile(userId, ctx)
+        userProfile = profileResult.ok ? profileResult.value : null
       }
 
-      if (l1Result.ok && l1Result.value.length > 0) {
-        cacheHits++
-        pipelineMetrics.memoryCacheHits.add(1, { tier: 'L1' })
-        logger.debug({ count: l1Result.value.length }, 'L1 cache hit')
+      // Get previous session summaries
+      const summariesResult = await this.l2.getSessionSummaries(conversationId, 5, ctx)
+      const previousSessions = summariesResult.ok ? summariesResult.value : []
 
-        // Get session state
-        const stateResult = await this.l1.get(conversationId, ctx)
-        const sessionState = stateResult.ok && stateResult.value
-          ? stateResult.value
-          : this.createDefaultSessionState()
-
-        // Use pre-loaded profile if available, otherwise fetch from L2
-        let userProfile: UserProfile | null = preloadedProfile ?? null
-        if (preloadedProfile === undefined) {
-          const profileResult = await this.l2.getUserProfile(userId, ctx)
-          userProfile = profileResult.ok ? profileResult.value : null
-        }
-
-        // Query L3 for related entities (non-blocking)
-        const relatedEntities = await this.queryL3Entities(userId, ctx)
-
-        const context = this.assembleContext(
-          l1Result.value,
-          userProfile,
-          sessionState,
-          [],
-          [],
-          relatedEntities,
-          displayName
-        )
-
-        return ok({
-          context,
-          source: 'L1_REDIS' as const,
-          latencyMs: Date.now() - startTime,
-          cacheHits,
-          cacheMisses,
-        })
-      }
-
-      cacheMisses++
-      pipelineMetrics.memoryCacheMisses.add(1, { tier: 'L1' })
-      logger.debug('L1 cache miss, trying L2')
-
-      // STAGE 2: Try L2 (PostgreSQL)
+      // STAGE 1: Try L2 (PostgreSQL) - authoritative message store
       const l2Result = await this.l2.getConversationHistory(
         conversationId,
         this.config.l2MessageLimit,
@@ -175,24 +142,10 @@ export class MemoryOrchestrator {
         })
       }
 
-      // Use pre-loaded profile if available, otherwise fetch from L2
-      let userProfile: UserProfile | null = preloadedProfile ?? null
-      if (preloadedProfile === undefined) {
-        const profileResult = await this.l2.getUserProfile(userId, ctx)
-        userProfile = profileResult.ok ? profileResult.value : null
-      }
-
-      // Get previous session summaries
-      const summariesResult = await this.l2.getSessionSummaries(conversationId, 5, ctx)
-      const previousSessions = summariesResult.ok ? summariesResult.value : []
-
       if (l2Result.value.length > 0) {
         cacheHits++
         pipelineMetrics.memoryCacheHits.add(1, { tier: 'L2' })
         logger.debug({ count: l2Result.value.length }, 'L2 hit')
-
-        // Warm L1 cache with recent messages
-        await this.warmL1Cache(conversationId, l2Result.value.slice(-20), ctx)
 
         // Query L3 for related entities (non-blocking)
         const relatedEntities = await this.queryL3Entities(userId, ctx)
@@ -200,7 +153,7 @@ export class MemoryOrchestrator {
         const context = this.assembleContext(
           l2Result.value,
           userProfile,
-          this.createDefaultSessionState(),
+          sessionState,
           previousSessions,
           [],
           relatedEntities,
@@ -209,7 +162,6 @@ export class MemoryOrchestrator {
 
         return ok({
           context,
-          source: 'L2_POSTGRESQL' as const,
           latencyMs: Date.now() - startTime,
           cacheHits,
           cacheMisses,
@@ -220,7 +172,7 @@ export class MemoryOrchestrator {
       pipelineMetrics.memoryCacheMisses.add(1, { tier: 'L2' })
       logger.debug('L2 miss, searching L3/L4')
 
-      // STAGE 3: Semantic search in L4 (and optionally L3)
+      // STAGE 2: Semantic search in L4 (and optionally L3)
       if (queryEmbedding) {
         const l4Result = await this.l4.search(
           queryEmbedding,
@@ -244,7 +196,7 @@ export class MemoryOrchestrator {
           const context = this.assembleContext(
             [],
             userProfile,
-            this.createDefaultSessionState(),
+            sessionState,
             previousSessions,
             l4Result.value,
             relatedEntities,
@@ -253,7 +205,6 @@ export class MemoryOrchestrator {
 
           return ok({
             context,
-            source: 'L3_NEO4J_L4_QDRANT' as const,
             latencyMs: Date.now() - startTime,
             cacheHits,
             cacheMisses,
@@ -270,7 +221,7 @@ export class MemoryOrchestrator {
       const context = this.assembleContext(
         [],
         userProfile,
-        this.createDefaultSessionState(),
+        sessionState,
         previousSessions,
         [],
         relatedEntities,
@@ -279,7 +230,6 @@ export class MemoryOrchestrator {
 
       return ok({
         context,
-        source: 'COMBINED' as const,
         latencyMs: Date.now() - startTime,
         cacheHits,
         cacheMisses,
@@ -288,7 +238,11 @@ export class MemoryOrchestrator {
   }
 
   /**
-   * Store a message across all tiers
+   * Store a message to L2 (and optionally L4 for semantic search)
+   *
+   * Note: L1 message caching is disabled since Vercel AI SDK clients send
+   * full message history with each request. L1 is only used for session
+   * metadata (state, post-process stats).
    */
   async storeMessage(
     message: Message,
@@ -303,14 +257,7 @@ export class MemoryOrchestrator {
         requestId: ctx.requestId,
       })
 
-      // L1: Immediate write to Redis (synchronous for fast access)
-      const l1Result = await this.l1.storeMessage(message, ctx)
-      if (!l1Result.ok) {
-        logger.warn({ error: l1Result.error }, 'L1 write failed')
-        // Continue - L1 is cache, not authoritative
-      }
-
-      // L2: Persist to PostgreSQL
+      // L2: Persist to PostgreSQL (authoritative store)
       const l2Result = await this.l2.storeMessage(message, embedding, ctx)
       if (!l2Result.ok) {
         logger.error({ error: l2Result.error }, 'L2 write failed')
@@ -331,7 +278,7 @@ export class MemoryOrchestrator {
         }
       }
 
-      logger.debug({ role: message.role }, 'Message stored across tiers')
+      logger.debug({ role: message.role }, 'Message stored in L2')
       return ok(undefined)
     })
   }
@@ -463,17 +410,70 @@ export class MemoryOrchestrator {
     }
   }
 
-  private async warmL1Cache(
+  /**
+   * Store post-process stats in L1 for phase-shifted diagnostics
+   * These are retrieved on the next request to show what happened in the previous exchange
+   */
+  async storePostProcessStats<T>(
     conversationId: string,
-    messages: Message[],
+    stats: T,
     ctx: TraceContext
-  ): Promise<void> {
-    const logger = getLogger().child({ conversationId, requestId: ctx.requestId })
+  ): Promise<Result<void, MemoryError>> {
+    return withSpan('MemoryOrchestrator.storePostProcessStats', async () => {
+      const logger = getLogger().child({ conversationId, requestId: ctx.requestId })
 
-    for (const message of messages) {
-      await this.l1.storeMessage(message, ctx)
-    }
+      // Check if L1 store supports post-process stats
+      const l1WithStats = this.l1 as typeof this.l1 & {
+        storePostProcessStats?: <S>(id: string, s: S, c: TraceContext) => Promise<Result<void, unknown>>
+      }
 
-    logger.debug({ count: messages.length }, 'L1 cache warmed')
+      if (!l1WithStats.storePostProcessStats) {
+        logger.debug('L1 store does not support post-process stats')
+        return ok(undefined)
+      }
+
+      const result = await l1WithStats.storePostProcessStats(conversationId, stats, ctx)
+      if (!result.ok) {
+        return err({
+          kind: 'PersistError',
+          message: 'Failed to store post-process stats',
+          context: { conversationId },
+          cause: result.error,
+        })
+      }
+
+      return ok(undefined)
+    })
+  }
+
+  /**
+   * Retrieve post-process stats from previous exchange
+   * Returns null if no stats exist (first message or L1 doesn't support it)
+   */
+  async getPostProcessStats<T>(
+    conversationId: string,
+    ctx: TraceContext
+  ): Promise<Result<T | null, MemoryError>> {
+    return withSpan('MemoryOrchestrator.getPostProcessStats', async () => {
+      const logger = getLogger().child({ conversationId, requestId: ctx.requestId })
+
+      // Check if L1 store supports post-process stats
+      const l1WithStats = this.l1 as typeof this.l1 & {
+        getPostProcessStats?: <S>(id: string, c: TraceContext) => Promise<Result<S | null, unknown>>
+      }
+
+      if (!l1WithStats.getPostProcessStats) {
+        logger.debug('L1 store does not support post-process stats')
+        return ok(null)
+      }
+
+      const result = await l1WithStats.getPostProcessStats<T>(conversationId, ctx)
+      if (!result.ok) {
+        logger.warn({ error: result.error }, 'Failed to get post-process stats')
+        return ok(null) // Non-fatal - return null instead of error
+      }
+
+      return ok(result.value)
+    })
   }
 }

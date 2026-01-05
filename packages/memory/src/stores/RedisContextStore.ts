@@ -278,4 +278,64 @@ export class RedisContextStore implements IContextStore {
       return false
     }
   }
+
+  /**
+   * Store post-process stats for phase-shifted diagnostics
+   * These stats are retrieved on the NEXT request to show what happened in the previous exchange
+   */
+  async storePostProcessStats<T>(
+    sessionId: string,
+    stats: T,
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('RedisContextStore.storePostProcessStats', async () => {
+      const logger = getLogger().child({ sessionId, requestId: ctx.requestId })
+
+      try {
+        const key = RedisKeys.postProcessStats(sessionId)
+        const serialized = JSON.stringify(stats)
+
+        const pipeline = this.redis.pipeline()
+        pipeline.set(key, serialized)
+        pipeline.expire(key, this.ttlSeconds)
+        await pipeline.exec()
+
+        logger.debug('Post-process stats stored in Redis L1 cache')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to store post-process stats in Redis')
+        return err(mapRedisError(error))
+      }
+    })
+  }
+
+  /**
+   * Retrieve post-process stats from previous exchange
+   * Returns null if no stats exist (first message in conversation)
+   */
+  async getPostProcessStats<T>(
+    sessionId: string,
+    ctx: TraceContext
+  ): Promise<Result<T | null, StoreError>> {
+    return withSpan('RedisContextStore.getPostProcessStats', async () => {
+      const logger = getLogger().child({ sessionId, requestId: ctx.requestId })
+
+      try {
+        const key = RedisKeys.postProcessStats(sessionId)
+        const data = await this.redis.get(key)
+
+        if (!data) {
+          logger.debug('No post-process stats found (first exchange or expired)')
+          return ok(null)
+        }
+
+        const stats = JSON.parse(data) as T
+        logger.debug('Retrieved post-process stats from Redis L1 cache')
+        return ok(stats)
+      } catch (error) {
+        logger.error({ error }, 'Failed to get post-process stats from Redis')
+        return err(mapRedisError(error))
+      }
+    })
+  }
 }
