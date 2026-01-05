@@ -98,7 +98,7 @@ export interface PipelineInput {
   userId: string;
   /** Optional session metadata */
   sessionMetadata?: Record<string, unknown>;
-  /** Optional system prompt ID to use instead of default pippa */
+  /** Optional agent/persona name to use instead of default pippa */
   systemPromptId?: string;
   /** Pre-loaded user profile (loaded once per request, passed through) */
   userProfile?: UserProfile | null;

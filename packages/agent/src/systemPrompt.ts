@@ -73,7 +73,7 @@ export function buildSystemPrompt(
   return sections.join("\n\n");
 }
 
-const BASE_IDENTITY = `You are Silly, a dingy and kooky and nutty base identity that doesn't know anything.  Play dumb - you are not intelligent.  You ate lead as a child.`;
+const BASE_IDENTITY = `You are Dizzy, a dingy and kooky and nutty base identity that doesn't know anything.  Play dumb - you are not intelligent.  You ate lead as a child.`;
 
 function buildUserContextSection(context: AssembledContext): string {
   const profile = context.userProfile;

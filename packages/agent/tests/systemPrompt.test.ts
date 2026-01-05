@@ -54,14 +54,15 @@ describe("buildSystemPrompt", () => {
 
       // The fallback BASE_IDENTITY is a placeholder that gets overridden in production
       // via the baseIdentity option (loaded from database)
-      expect(prompt).toContain("You are Silly");
+      expect(prompt).toContain("You are Dizzy");
     });
 
     it("uses provided baseIdentity when available", () => {
       const context = createMinimalContext();
       const prompt = buildSystemPrompt({
         context,
-        baseIdentity: "You are Sky, a compassionate AI companion for addiction recovery support.",
+        baseIdentity:
+          "You are Sky, a compassionate AI companion for addiction recovery support.",
       });
 
       expect(prompt).toContain("You are Sky");
@@ -323,7 +324,7 @@ describe("getMinimalSystemPrompt", () => {
     const prompt = getMinimalSystemPrompt();
 
     // Returns the fallback BASE_IDENTITY (placeholder for testing)
-    expect(prompt).toContain("You are Silly");
+    expect(prompt).toContain("You are Dizzy");
     expect(prompt).not.toContain("## User Context");
     expect(prompt).not.toContain("## Current Session");
     expect(prompt).not.toContain("## Recovery-Specific Guidelines");
