@@ -1449,23 +1449,46 @@ export class Pipeline {
 
         // STAGE 4: Resolve base identity (always fetch fresh from database)
         let baseIdentity = this.deps.baseIdentity // fallback if no database
+        logger.debug({
+          requestedAgent: input.systemPromptId,
+          hasGetSystemPrompt: !!this.deps.getSystemPrompt,
+          hasGetDefaultSystemPrompt: !!this.deps.getDefaultSystemPrompt,
+          hasFallbackIdentity: !!this.deps.baseIdentity,
+        }, 'Resolving system prompt')
+
         if (input.systemPromptId && this.deps.getSystemPrompt) {
-          // Custom guide requested - fetch by ID
+          // Custom agent requested - fetch by name
+          logger.debug({ agent: input.systemPromptId }, 'Fetching custom agent from database')
           const customPrompt = await this.deps.getSystemPrompt(input.systemPromptId)
           if (customPrompt) {
             baseIdentity = customPrompt.content
-            logger.debug({ promptId: customPrompt.id, promptName: customPrompt.name }, 'Using custom system prompt')
+            logger.debug({
+              promptId: customPrompt.id,
+              promptName: customPrompt.name,
+              contentLength: customPrompt.content.length,
+            }, 'Loaded custom system prompt from database')
           } else {
-            logger.warn({ guideName: input.systemPromptId }, 'Custom system prompt not found, using default')
+            logger.warn({ agent: input.systemPromptId }, 'Custom agent not found in database, using fallback')
           }
         } else if (this.deps.getDefaultSystemPrompt) {
-          // No custom guide - fetch default fresh
+          // No custom agent - fetch default fresh
+          logger.debug('Fetching default pippa prompt from database')
           const defaultPrompt = await this.deps.getDefaultSystemPrompt()
           if (defaultPrompt) {
             baseIdentity = defaultPrompt.content
-            logger.debug({ promptId: defaultPrompt.id, promptName: defaultPrompt.name }, 'Using fresh default system prompt')
+            logger.debug({
+              promptId: defaultPrompt.id,
+              promptName: defaultPrompt.name,
+              contentLength: defaultPrompt.content.length,
+            }, 'Loaded default system prompt from database')
+          } else {
+            logger.warn('Default pippa prompt not found in database, using fallback')
           }
+        } else {
+          logger.debug('No database prompt functions available, using fallback identity')
         }
+
+        logger.debug({ identityLength: baseIdentity?.length ?? 0 }, 'Final base identity resolved')
 
         // STAGE 5: Build system prompt
         const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
