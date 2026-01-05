@@ -37,7 +37,7 @@ import type {
 } from '@pippa/types'
 import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext, QueryPreprocessor, type QueryPreprocessingMode } from '@pippa/memory'
+import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext, QueryPreprocessor, type QueryPreprocessingMode, type MemoryPromptStore, type MemoryPromptGenerator  } from '@pippa/memory'
 import { buildSystemPrompt } from '@pippa/agent'
 import { agentTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
 
@@ -106,6 +106,10 @@ export interface PipelineDependencies {
   postflightEmbeddingsEnabled?: boolean
   /** Anthropic client for query preprocessing (optional, needed for Haiku mode) */
   anthropic?: import('@anthropic-ai/sdk').default | null
+  /** Memory prompt store for reading/writing memory prompts (optional) */
+  memoryPromptStore?: MemoryPromptStore
+  /** Memory prompt generator for postflight memory retrieval (optional) */
+  memoryPromptGenerator?: MemoryPromptGenerator
 }
 
 /**
@@ -221,6 +225,8 @@ export interface PreflightResult {
   crisisCheck: CrisisCheckResult
   /** Memory context string (if configured) */
   memoryContext: string | null
+  /** Memory prompts from L1 cache (phase-shifted from postflight) */
+  memoryPrompts: string[]
   /** Memory retrieval stats (detailed diagnostics) */
   memoryStats: MemoryDiagnostics
   /** Previous exchange's post-process stats (phase-shifted) */
@@ -753,9 +759,10 @@ export class Pipeline {
       // STAGE 3: Build agent input and stream response
       const agentStageStart = Date.now()
 
-      // Build memory context pre-agent (if configured)
+      // Build memory context pre-agent (legacy, if configured)
+      // Skip when memory prompts are enabled (phase-shifted architecture)
       let memoryContext: string | null = null
-      if (this.deps.memoryContextBuilder) {
+      if (this.deps.memoryContextBuilder && !this.deps.memoryPromptStore) {
         try {
           memoryContext = await this.deps.memoryContextBuilder.buildContext(
             input.message,
@@ -767,12 +774,30 @@ export class Pipeline {
         }
       }
 
+      // Read memory prompts from L1 (phase-shifted from postflight)
+      let memoryPrompts: string[] = []
+      if (this.deps.memoryPromptStore) {
+        const promptsResult = await this.deps.memoryPromptStore.getAll(
+          input.userId,
+          input.conversationId
+        )
+        if (promptsResult.ok) {
+          memoryPrompts = promptsResult.value
+          if (memoryPrompts.length > 0) {
+            logger.debug({ count: memoryPrompts.length }, 'Memory prompts retrieved from L1')
+          }
+        } else {
+          logger.warn({ error: promptsResult.error }, 'Failed to retrieve memory prompts')
+        }
+      }
+
       const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
 
       const systemPrompt = buildSystemPrompt({
         context: ctx.memory!,
         crisisCheck: ctx.crisisCheck,
         memoryContext,
+        memoryPrompts,
         hasMemoryTools,
         baseIdentity: this.deps.baseIdentity,
       })
@@ -1067,9 +1092,10 @@ export class Pipeline {
     const stageStart = Date.now()
     const logger = getLogger().child({ requestId: ctx.requestId })
 
-    // Build memory context pre-agent (if configured)
+    // Build memory context pre-agent (legacy, if configured)
+    // Skip when memory prompts are enabled (phase-shifted architecture)
     let memoryContext: string | null = null
-    if (this.deps.memoryContextBuilder) {
+    if (this.deps.memoryContextBuilder && !this.deps.memoryPromptStore) {
       try {
         memoryContext = await this.deps.memoryContextBuilder.buildContext(
           input.message,
@@ -1077,10 +1103,27 @@ export class Pipeline {
           ctx
         )
         if (memoryContext) {
-          logger.debug({ contextLength: memoryContext.length }, 'Memory context built')
+          logger.debug({ contextLength: memoryContext.length }, 'Memory context built (legacy)')
         }
       } catch (error) {
         logger.warn({ error }, 'Memory context builder failed, continuing without')
+      }
+    }
+
+    // Read memory prompts from L1 (phase-shifted from postflight)
+    let memoryPrompts: string[] = []
+    if (this.deps.memoryPromptStore) {
+      const promptsResult = await this.deps.memoryPromptStore.getAll(
+        input.userId,
+        input.conversationId
+      )
+      if (promptsResult.ok) {
+        memoryPrompts = promptsResult.value
+        if (memoryPrompts.length > 0) {
+          logger.debug({ count: memoryPrompts.length }, 'Memory prompts retrieved from L1')
+        }
+      } else {
+        logger.warn({ error: promptsResult.error }, 'Failed to retrieve memory prompts')
       }
     }
 
@@ -1091,6 +1134,7 @@ export class Pipeline {
       context: ctx.memory!,
       crisisCheck: ctx.crisisCheck,
       memoryContext,
+      memoryPrompts,
       hasMemoryTools,
       baseIdentity: this.deps.baseIdentity,
     })
@@ -1622,9 +1666,10 @@ export class Pipeline {
         ctx.metrics.cacheHits = cacheHits
         ctx.metrics.cacheMisses = cacheMisses
 
-        // STAGE 3: Build memory context (if configured)
+        // STAGE 3: Build memory context (legacy, if configured)
+        // Skip when memory prompts are enabled (phase-shifted architecture takes over)
         let memoryContext: string | null = null
-        if (this.deps.memoryContextBuilder) {
+        if (this.deps.memoryContextBuilder && !this.deps.memoryPromptStore) {
           try {
             memoryContext = await this.deps.memoryContextBuilder.buildContext(
               input.message,
@@ -1632,7 +1677,7 @@ export class Pipeline {
               ctx
             )
             if (memoryContext) {
-              logger.debug({ contextLength: memoryContext.length }, 'Memory context built')
+              logger.debug({ contextLength: memoryContext.length }, 'Memory context built (legacy)')
             }
           } catch (error) {
             logger.warn({ error }, 'Memory context builder failed, continuing without')
@@ -1682,17 +1727,38 @@ export class Pipeline {
 
         logger.debug({ identityLength: baseIdentity?.length ?? 0 }, 'Final base identity resolved')
 
-        // STAGE 5: Build system prompt
+        // STAGE 5: Read memory prompts from L1 (phase-shifted from postflight)
+        let memoryPrompts: string[] = []
+        if (this.deps.memoryPromptStore) {
+          const promptsResult = await this.deps.memoryPromptStore.getAll(
+            input.userId,
+            input.conversationId
+          )
+          if (promptsResult.ok) {
+            memoryPrompts = promptsResult.value
+            if (memoryPrompts.length > 0) {
+              logger.debug(
+                { count: memoryPrompts.length },
+                'Memory prompts retrieved from L1'
+              )
+            }
+          } else {
+            logger.warn({ error: promptsResult.error }, 'Failed to retrieve memory prompts')
+          }
+        }
+
+        // STAGE 6: Build system prompt
         const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
         const systemPrompt = buildSystemPrompt({
           context: ctx.memory!,
           crisisCheck: ctx.crisisCheck,
           memoryContext,
+          memoryPrompts,
           hasMemoryTools,
           baseIdentity,
         })
 
-        // STAGE 6: Get tools
+        // STAGE 7: Get tools
         const tools = this.convertToolsToDefinitions()
 
         logger.info(
@@ -1771,6 +1837,7 @@ export class Pipeline {
           context: ctx.memory!,
           crisisCheck: crisisResult.value,
           memoryContext,
+          memoryPrompts,
           memoryStats,
           previousPostProcess,
           semanticSearch,
@@ -1941,6 +2008,18 @@ export class Pipeline {
           traceCtx
         )
 
+        // STAGE 4: Generate memory prompts for next request (fire-and-forget)
+        if (this.deps.memoryPromptGenerator && this.deps.memoryPromptStore) {
+          this.generateAndStoreMemoryPrompt(
+            [userMessage, assistantMessage],
+            input.userId,
+            input.conversationId,
+            ctx
+          ).catch((err) => {
+            logger.warn({ err }, 'Memory prompt generation failed')
+          })
+        }
+
         logger.info(
           {
             safetyPassed: postProcessStats.safety.passed,
@@ -1954,6 +2033,93 @@ export class Pipeline {
         // Don't throw - post-process errors shouldn't affect the response
       }
     })
+  }
+
+  /**
+   * Generate and store memory prompt for next request
+   * Fire-and-forget, does not block the response.
+   */
+  private async generateAndStoreMemoryPrompt(
+    messages: Message[],
+    userId: string,
+    conversationId: string,
+    ctx: PipelineContext
+  ): Promise<void> {
+    const startTime = Date.now()
+    const logger = getLogger().child({
+      component: 'Pipeline',
+      operation: 'memoryPromptGeneration',
+      conversationId,
+      userId,
+      requestId: ctx.requestId,
+    })
+
+    if (!this.deps.memoryPromptGenerator || !this.deps.memoryPromptStore) {
+      return
+    }
+
+    try {
+      logger.debug({ messageCount: messages.length }, 'Starting memory prompt generation')
+
+      const result = await this.deps.memoryPromptGenerator.generate(
+        messages,
+        userId,
+        ctx
+      )
+
+      if (!result) {
+        logger.debug('No memory prompt generated (null result)')
+        return
+      }
+
+      if (result.ttlMinutes <= 0) {
+        logger.debug(
+          { reasoning: result.reasoning },
+          'Memory prompt skipped (TTL=0)'
+        )
+        return
+      }
+
+      // Store the memory prompt with TTL
+      const storeResult = await this.deps.memoryPromptStore.store(
+        userId,
+        conversationId,
+        result.content,
+        result.ttlMinutes
+      )
+
+      if (storeResult.ok) {
+        const durationMs = Date.now() - startTime
+        logger.info(
+          {
+            ttlMinutes: result.ttlMinutes,
+            contentLength: result.content.length,
+            l4Matches: result.l4Matches,
+            l3Entities: result.l3Entities,
+            durationMs,
+          },
+          'Memory prompt generated and stored'
+        )
+      } else {
+        logger.warn(
+          { error: storeResult.error },
+          'Failed to store memory prompt'
+        )
+      }
+    } catch (error) {
+      const durationMs = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      logger.error(
+        {
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+          durationMs,
+        },
+        'Memory prompt generation failed unexpectedly'
+      )
+      // Don't re-throw - this is fire-and-forget
+    }
   }
 
   /**
