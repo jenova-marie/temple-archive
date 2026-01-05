@@ -52,6 +52,18 @@ export interface PreviousExchange {
   evaluation: { score: number | null }
 }
 
+export interface SemanticSearchResult {
+  query: string
+  preprocessedQuery: string
+  searched: boolean
+  results: Array<{
+    score: number
+    content: string
+    role?: string
+    timestamp?: number
+  }>
+}
+
 export interface ChatMetrics {
   preflightMs: number
   totalMs: number
@@ -61,6 +73,7 @@ export interface ChatMetrics {
   toolsEnabled: number
   memory?: MemoryTierStats
   previousExchange?: PreviousExchange | null
+  semanticSearch?: SemanticSearchResult | null
 }
 
 export interface ChatResponse {

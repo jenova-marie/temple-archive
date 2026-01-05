@@ -88,6 +88,34 @@ function displayMetrics(metrics: ChatMetrics): void {
       console.log(chalk.gray(`  L4 embeddings: ${writes.l4.embeddingsStored}`))
     }
   }
+
+  // L4 Semantic search diagnostics
+  if (metrics.semanticSearch) {
+    const { query, preprocessedQuery, searched, results } = metrics.semanticSearch
+    console.log(chalk.cyan.bold('Semantic Search:'))
+    console.log(chalk.gray(`  Query:         "${query.slice(0, 50)}${query.length > 50 ? '...' : ''}"`))
+
+    // Show preprocessed query if different from original
+    if (preprocessedQuery && preprocessedQuery !== query) {
+      console.log(chalk.gray(`  Preprocessed:  "${preprocessedQuery.slice(0, 50)}${preprocessedQuery.length > 50 ? '...' : ''}"`))
+    }
+
+    console.log(chalk.gray(`  Searched:      ${searched ? chalk.green('yes') : chalk.gray('no')}`))
+
+    if (results.length > 0) {
+      console.log(chalk.gray(`  Results:       ${results.length} matches`))
+      for (const match of results.slice(0, 3)) { // Show top 3
+        const scoreColor = match.score >= 0.8 ? chalk.green : match.score >= 0.6 ? chalk.yellow : chalk.gray
+        const preview = match.content.slice(0, 60).replace(/\n/g, ' ')
+        console.log(chalk.gray(`    ${scoreColor(match.score.toFixed(2))} [${match.role || '?'}] ${preview}...`))
+      }
+      if (results.length > 3) {
+        console.log(chalk.gray(`    ... and ${results.length - 3} more`))
+      }
+    } else if (searched) {
+      console.log(chalk.gray(`  Results:       ${chalk.yellow('no matches')}`))
+    }
+  }
 }
 
 export async function chatCommand(message: string, options: ChatOptions): Promise<void> {
