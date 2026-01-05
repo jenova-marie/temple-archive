@@ -918,6 +918,13 @@ export class Pipeline {
   private convertToolsToDefinitions(): ToolDefinition[] {
     const tools: ToolDefinition[] = []
 
+    // Check master switch for agent tools
+    const agentToolsEnabled = process.env.ENABLE_AGENT_TOOLS !== 'false'
+    if (!agentToolsEnabled) {
+      getLogger().info('Agent tools disabled (ENABLE_AGENT_TOOLS=false)')
+      return tools // Return empty array - no tools available
+    }
+
     // Add recovery tools
     // Note: AI SDK v5 tools use inputSchema instead of parameters
     const recoveryToolEntries = Object.entries(recoveryTools)
@@ -937,40 +944,50 @@ export class Pipeline {
       })
     }
 
-    // Add meeting tools
-    const meetingToolEntries = Object.entries(meetingTools)
-    getLogger().debug({ count: meetingToolEntries.length, names: meetingToolEntries.map(([n]) => n) }, 'Adding meeting tools')
-    for (const [name, tool] of meetingToolEntries) {
-      const t = tool as unknown as {
-        description?: string
-        inputSchema?: unknown
-        execute?: (args: Record<string, unknown>) => Promise<unknown>
-      }
+    // Add meeting tools (if enabled)
+    const meetingToolsEnabled = process.env.ENABLE_MEETING_TOOLS !== 'false'
+    if (meetingToolsEnabled) {
+      const meetingToolEntries = Object.entries(meetingTools)
+      getLogger().debug({ count: meetingToolEntries.length, names: meetingToolEntries.map(([n]) => n) }, 'Adding meeting tools')
+      for (const [name, tool] of meetingToolEntries) {
+        const t = tool as unknown as {
+          description?: string
+          inputSchema?: unknown
+          execute?: (args: Record<string, unknown>) => Promise<unknown>
+        }
 
-      tools.push({
-        name,
-        description: t.description || `Meeting Tool: ${name}`,
-        parameters: t.inputSchema as Record<string, unknown>,
-        execute: t.execute || (async () => ({ error: 'Not implemented' })),
-      })
+        tools.push({
+          name,
+          description: t.description || `Meeting Tool: ${name}`,
+          parameters: t.inputSchema as Record<string, unknown>,
+          execute: t.execute || (async () => ({ error: 'Not implemented' })),
+        })
+      }
+    } else {
+      getLogger().info('Meeting tools disabled (ENABLE_MEETING_TOOLS=false)')
     }
 
-    // Add literature tools
-    const litToolEntries = Object.entries(literatureTools)
-    getLogger().debug({ count: litToolEntries.length, names: litToolEntries.map(([n]) => n) }, 'Adding literature tools')
-    for (const [name, tool] of litToolEntries) {
-      const t = tool as unknown as {
-        description?: string
-        inputSchema?: unknown
-        execute?: (args: Record<string, unknown>) => Promise<unknown>
-      }
+    // Add literature tools (if enabled)
+    const literatureToolsEnabled = process.env.ENABLE_LITERATURE_TOOLS !== 'false'
+    if (literatureToolsEnabled) {
+      const litToolEntries = Object.entries(literatureTools)
+      getLogger().debug({ count: litToolEntries.length, names: litToolEntries.map(([n]) => n) }, 'Adding literature tools')
+      for (const [name, tool] of litToolEntries) {
+        const t = tool as unknown as {
+          description?: string
+          inputSchema?: unknown
+          execute?: (args: Record<string, unknown>) => Promise<unknown>
+        }
 
-      tools.push({
-        name,
-        description: t.description || `Literature Tool: ${name}`,
-        parameters: t.inputSchema as Record<string, unknown>,
-        execute: t.execute || (async () => ({ error: 'Not implemented' })),
-      })
+        tools.push({
+          name,
+          description: t.description || `Literature Tool: ${name}`,
+          parameters: t.inputSchema as Record<string, unknown>,
+          execute: t.execute || (async () => ({ error: 'Not implemented' })),
+        })
+      }
+    } else {
+      getLogger().info('Literature tools disabled (ENABLE_LITERATURE_TOOLS=false)')
     }
 
     // Add memory tools based on access level

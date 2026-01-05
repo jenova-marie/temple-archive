@@ -351,8 +351,13 @@ export function createContainer(options: ContainerConfig = {}): Container {
   // Create safety validator
   // Uses SafetyValidator with PII detection, medical advice detection, and enabling language detection
   // LLM-based detection is enabled when ANTHROPIC_API_KEY is set
+  const safetyValidationEnabled =
+    process.env.ENABLE_SAFETY_VALIDATION !== "false";
   let safety: ISafetyValidator;
-  if (useStubs) {
+  if (!safetyValidationEnabled) {
+    logger.info("Safety validation disabled (ENABLE_SAFETY_VALIDATION=false)");
+    safety = new StubSafetyValidator();
+  } else if (useStubs) {
     logger.info("Using StubSafetyValidator");
     safety = new StubSafetyValidator();
   } else {
@@ -368,9 +373,16 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
   // Create evaluator
   // Uses LLMEvaluator when ANTHROPIC_API_KEY is set, otherwise StubEvaluator
+  const responseEvaluationEnabled =
+    process.env.ENABLE_RESPONSE_EVALUATION !== "false";
   const stubEvaluator = new StubEvaluator();
   let evaluator: IEvaluator;
-  if (useStubs) {
+  if (!responseEvaluationEnabled) {
+    logger.info(
+      "Response evaluation disabled (ENABLE_RESPONSE_EVALUATION=false)"
+    );
+    evaluator = stubEvaluator;
+  } else if (useStubs) {
     logger.info("Using StubEvaluator");
     evaluator = stubEvaluator;
   } else if (process.env.ANTHROPIC_API_KEY) {
@@ -461,10 +473,14 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // Create entity extractor for knowledge graph
-  // Controlled by ENTITY_EXTRACTION_MODE env var (default: 'all')
+  // Controlled by ENABLE_ENTITY_EXTRACTION master switch and ENTITY_EXTRACTION_MODE for fine-tuning
+  const entityExtractionEnabled =
+    process.env.ENABLE_ENTITY_EXTRACTION !== "false";
   let entityExtractor: EntityExtractor | undefined;
-  const extractionMode =
-    (process.env.ENTITY_EXTRACTION_MODE as ExtractionMode) || "all";
+  // If master switch is off, treat as mode=none
+  const extractionMode = entityExtractionEnabled
+    ? ((process.env.ENTITY_EXTRACTION_MODE as ExtractionMode) || "all")
+    : "none";
   // Use L3 Memory extraction when Neo4j is available
   const useL3Extraction =
     process.env.USE_L3_EXTRACTION !== "false" && neo4jL3Store !== null;
@@ -524,8 +540,12 @@ export function createContainer(options: ContainerConfig = {}): Container {
       },
       "Entity extraction enabled",
     );
+  } else if (!entityExtractionEnabled) {
+    logger.info(
+      "Entity extraction disabled (ENABLE_ENTITY_EXTRACTION=false)"
+    );
   } else if (extractionMode === "none") {
-    logger.info("Entity extraction disabled (mode=none)");
+    logger.info("Entity extraction disabled (ENTITY_EXTRACTION_MODE=none)");
   } else if (useStubs) {
     logger.info("Entity extraction disabled (USE_STUBS=true)");
   } else {
