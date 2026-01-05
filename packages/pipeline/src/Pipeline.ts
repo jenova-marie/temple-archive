@@ -36,7 +36,7 @@ import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext } from '@pippa/memory'
 import { buildSystemPrompt } from '@pippa/agent'
-import { recoveryTools, meetingTools, getMemoryTools, literatureTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
+import { getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
 
 /**
  * Memory tool names for filtering tool calls during post-processing.
@@ -98,6 +98,82 @@ export interface PipelineDependencies {
 }
 
 /**
+ * Per-tier read statistics
+ */
+export interface TierReadStats {
+  /** L1 Redis session cache */
+  l1: {
+    hit: boolean
+    messageCount: number
+  }
+  /** L2 PostgreSQL persistent store */
+  l2: {
+    queried: boolean
+    messageCount: number
+  }
+  /** L3 Neo4j knowledge graph */
+  l3: {
+    queried: boolean
+    entityCount: number
+  }
+  /** L4 Qdrant vector search */
+  l4: {
+    queried: boolean
+    matchCount: number
+  }
+}
+
+/**
+ * Per-tier write statistics
+ */
+export interface TierWriteStats {
+  /** L1 Redis: messages cached */
+  l1: { messageCount: number }
+  /** L2 PostgreSQL: messages persisted */
+  l2: { messageCount: number }
+  /** L3 Neo4j: entities added/updated */
+  l3: { entitiesAdded: number; entitiesUpdated: number }
+  /** L4 Qdrant: embeddings stored */
+  l4: { embeddingsStored: number }
+}
+
+/**
+ * Post-process statistics (stored in L1, returned phase-shifted)
+ */
+export interface PostProcessStats {
+  /** Timestamp when post-process completed */
+  timestamp: number
+  /** Duration of post-process in ms */
+  durationMs: number
+  /** Write operations per tier */
+  writes: TierWriteStats
+  /** Safety validation result */
+  safety: { passed: boolean; violationCount: number }
+  /** Evaluation score (if enabled) */
+  evaluation: { score: number | null }
+  /** Entity extraction (if enabled) */
+  entityExtraction: { extracted: number; relationships: number }
+}
+
+/**
+ * Detailed memory tier diagnostics (read operations)
+ *
+ * Note: L1 is only used for session state, not message retrieval.
+ * Client sends full message history with each request (Vercel AI SDK pattern).
+ */
+export interface MemoryDiagnostics {
+  /** Total cache hits across tiers */
+  cacheHits: number
+  /** Total cache misses across tiers */
+  cacheMisses: number
+  /** Read operations per tier */
+  l1: TierReadStats['l1']
+  l2: TierReadStats['l2']
+  l3: TierReadStats['l3']
+  l4: TierReadStats['l4']
+}
+
+/**
  * Result from preflight checks before streaming
  */
 export interface PreflightResult {
@@ -111,12 +187,10 @@ export interface PreflightResult {
   crisisCheck: CrisisCheckResult
   /** Memory context string (if configured) */
   memoryContext: string | null
-  /** Memory retrieval stats */
-  memoryStats: {
-    source: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED' | 'NONE'
-    cacheHits: number
-    cacheMisses: number
-  }
+  /** Memory retrieval stats (detailed diagnostics) */
+  memoryStats: MemoryDiagnostics
+  /** Previous exchange's post-process stats (phase-shifted) */
+  previousPostProcess: PostProcessStats | null
 }
 
 export class Pipeline {
@@ -222,7 +296,6 @@ export class Pipeline {
                 memoryDuration: 0,
                 agentDuration: 0,
                 tokensUsed: { input: 0, output: 0 },
-                memorySource: 'none',
               },
               crisisLevel: crisisResult.value.level,
               emergencyTriggered: true,
@@ -248,7 +321,6 @@ export class Pipeline {
         if (memoryResult.ok) {
           ctx.metrics.cacheHits = memoryResult.value.cacheHits
           ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
-          ctx.metrics.memoryTier = memoryResult.value.source
         }
 
         // Fire-and-forget context compaction (runs in parallel with agent processing)
@@ -379,7 +451,7 @@ export class Pipeline {
           totalDuration,
           ctx,
           crisisResult.value,
-          memoryResult.ok ? memoryResult.value.source : 'NONE',
+          
           agentResult.value,
           safetyResult.ok ? safetyResult.value : undefined,
           evaluationResult.ok ? evaluationResult.value : undefined
@@ -396,7 +468,7 @@ export class Pipeline {
               input: agentResult.value.usage.inputTokens,
               output: agentResult.value.usage.outputTokens,
             },
-            memorySource: memoryResult.ok ? memoryResult.value.source : 'none',
+            
           },
           safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
           crisisLevel: effectiveCrisisLevel,
@@ -508,7 +580,6 @@ export class Pipeline {
                 memoryDuration: 0,
                 agentDuration: 0,
                 tokensUsed: { input: 0, output: 0 },
-                memorySource: 'none',
               },
               crisisLevel: crisisResult.value.level,
               emergencyTriggered: true,
@@ -536,7 +607,7 @@ export class Pipeline {
       if (memoryResult.ok) {
         ctx.metrics.cacheHits = memoryResult.value.cacheHits
         ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
-        ctx.metrics.memoryTier = memoryResult.value.source
+        
       }
 
       // Fire-and-forget context compaction (runs in parallel with agent processing)
@@ -737,7 +808,7 @@ export class Pipeline {
         totalDuration,
         ctx,
         crisisResult.value,
-        memoryResult.ok ? memoryResult.value.source : 'NONE',
+        
         agentResponse,
         safetyResult.ok ? safetyResult.value : undefined,
         evaluationResult.ok ? evaluationResult.value : undefined
@@ -757,7 +828,7 @@ export class Pipeline {
               input: agentResponse.usage.inputTokens,
               output: agentResponse.usage.outputTokens,
             },
-            memorySource: memoryResult.ok ? memoryResult.value.source : 'none',
+            
           },
           safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
           crisisLevel: effectiveCrisisLevel,
@@ -796,7 +867,7 @@ export class Pipeline {
   private async runMemoryRetrieval(
     input: PipelineInput,
     ctx: PipelineContext
-  ): Promise<Result<{ context: PipelineContext['memory']; source: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED'; cacheHits: number; cacheMisses: number }, { kind: string; message: string }>> {
+  ): Promise<Result<{ context: PipelineContext['memory']; cacheHits: number; cacheMisses: number }, { kind: string; message: string }>> {
     const stageStart = Date.now()
 
     // Generate embedding for semantic search (if provider available)
@@ -826,7 +897,6 @@ export class Pipeline {
 
     return ok({
       context: result.value.context,
-      source: result.value.source,
       cacheHits: result.value.cacheHits,
       cacheMisses: result.value.cacheMisses,
     })
@@ -919,37 +989,17 @@ export class Pipeline {
     const tools: ToolDefinition[] = []
 
     // Check master switch for agent tools
-    const agentToolsEnabled = process.env.ENABLE_AGENT_TOOLS !== 'false'
-    if (!agentToolsEnabled) {
-      getLogger().info('Agent tools disabled (ENABLE_AGENT_TOOLS=false)')
-      return tools // Return empty array - no tools available
-    }
-
-    // Add recovery tools
-    // Note: AI SDK v5 tools use inputSchema instead of parameters
-    const recoveryToolEntries = Object.entries(recoveryTools)
-    getLogger().debug({ count: recoveryToolEntries.length, names: recoveryToolEntries.map(([n]) => n) }, 'Adding recovery tools')
-    for (const [name, tool] of recoveryToolEntries) {
-      const t = tool as unknown as {
-        description?: string
-        inputSchema?: unknown
-        execute?: (args: Record<string, unknown>) => Promise<unknown>
-      }
-
-      tools.push({
-        name,
-        description: t.description || `Tool: ${name}`,
-        parameters: t.inputSchema as Record<string, unknown>,
-        execute: t.execute || (async () => ({ error: 'Not implemented' })),
-      })
-    }
-
-    // Add meeting tools (if enabled)
-    const meetingToolsEnabled = process.env.ENABLE_MEETING_TOOLS !== 'false'
-    if (meetingToolsEnabled) {
-      const meetingToolEntries = Object.entries(meetingTools)
-      getLogger().debug({ count: meetingToolEntries.length, names: meetingToolEntries.map(([n]) => n) }, 'Adding meeting tools')
-      for (const [name, tool] of meetingToolEntries) {
+    const toolsEnabled = process.env.ENABLE_TOOLS !== 'false'
+    if (!toolsEnabled) {
+      getLogger().info('Agent tools disabled (ENABLE_TOOLS=false)')
+      // Continue to add memory tools if configured
+    } else {
+      // Add agent tools (logMood, etc.)
+      // Note: AI SDK v5 tools use inputSchema instead of parameters
+      const { agentTools } = require('@pippa/tools')
+      const agentToolEntries = Object.entries(agentTools)
+      getLogger().debug({ count: agentToolEntries.length, names: agentToolEntries.map(([n]) => n) }, 'Adding agent tools')
+      for (const [name, tool] of agentToolEntries) {
         const t = tool as unknown as {
           description?: string
           inputSchema?: unknown
@@ -958,36 +1008,11 @@ export class Pipeline {
 
         tools.push({
           name,
-          description: t.description || `Meeting Tool: ${name}`,
+          description: t.description || `Tool: ${name}`,
           parameters: t.inputSchema as Record<string, unknown>,
           execute: t.execute || (async () => ({ error: 'Not implemented' })),
         })
       }
-    } else {
-      getLogger().info('Meeting tools disabled (ENABLE_MEETING_TOOLS=false)')
-    }
-
-    // Add literature tools (if enabled)
-    const literatureToolsEnabled = process.env.ENABLE_LITERATURE_TOOLS !== 'false'
-    if (literatureToolsEnabled) {
-      const litToolEntries = Object.entries(literatureTools)
-      getLogger().debug({ count: litToolEntries.length, names: litToolEntries.map(([n]) => n) }, 'Adding literature tools')
-      for (const [name, tool] of litToolEntries) {
-        const t = tool as unknown as {
-          description?: string
-          inputSchema?: unknown
-          execute?: (args: Record<string, unknown>) => Promise<unknown>
-        }
-
-        tools.push({
-          name,
-          description: t.description || `Literature Tool: ${name}`,
-          parameters: t.inputSchema as Record<string, unknown>,
-          execute: t.execute || (async () => ({ error: 'Not implemented' })),
-        })
-      }
-    } else {
-      getLogger().info('Literature tools disabled (ENABLE_LITERATURE_TOOLS=false)')
     }
 
     // Add memory tools based on access level
@@ -1044,7 +1069,7 @@ export class Pipeline {
     totalDuration: number,
     ctx: PipelineContext,
     crisisCheck: CrisisCheckResult,
-    memorySource: string,
+    
     agentResponse: AgentResponse,
     safetyResult?: SafetyValidationResult,
     evaluationResult?: EvaluationResult
@@ -1071,7 +1096,7 @@ export class Pipeline {
         processingTimeMs: crisisCheck.processingTimeMs,
       },
       memory: {
-        sourceTier: memorySource,
+        
         cacheHits: ctx.metrics.cacheHits,
         cacheMisses: ctx.metrics.cacheMisses,
         messagesRetrieved: ctx.memory?.messages.length || 0,
@@ -1403,10 +1428,9 @@ export class Pipeline {
 
         ctx.crisisCheck = crisisResult.value
 
-        // STAGE 2: Memory retrieval
+        // STAGE 2: Memory retrieval (L2 for context, L1 for session state only)
         const memoryResult = await this.runMemoryRetrieval(input, ctx)
 
-        let memorySource: 'L1_REDIS' | 'L2_POSTGRESQL' | 'L3_NEO4J_L4_QDRANT' | 'COMBINED' | 'NONE' = 'NONE'
         let cacheHits = 0
         let cacheMisses = 0
 
@@ -1421,14 +1445,12 @@ export class Pipeline {
           }
         } else {
           ctx.memory = memoryResult.value.context
-          memorySource = memoryResult.value.source
           cacheHits = memoryResult.value.cacheHits
           cacheMisses = memoryResult.value.cacheMisses
         }
 
         ctx.metrics.cacheHits = cacheHits
         ctx.metrics.cacheMisses = cacheMisses
-        ctx.metrics.memoryTier = memorySource
 
         // STAGE 3: Build memory context (if configured)
         let memoryContext: string | null = null
@@ -1506,12 +1528,64 @@ export class Pipeline {
         logger.info(
           {
             crisisLevel: crisisResult.value.level,
-            memorySource,
+            
             hasMemoryContext: !!memoryContext,
             toolCount: tools.length,
           },
           'Preflight checks completed'
         )
+
+        // Build detailed memory diagnostics from available data
+        const messages = ctx.memory?.messages || []
+        const semanticMatches = ctx.memory?.semanticMatches || []
+        const entities = ctx.memory?.sessionEntities
+        const sessionState = ctx.memory?.sessionState ?? null
+
+        // Count entities if available
+        const entityCount = entities
+          ? (entities.people?.length || 0) +
+            (entities.places?.length || 0) +
+            (entities.events?.length || 0) +
+            (entities.emotions?.length || 0) +
+            (entities.medications?.length || 0)
+          : 0
+
+        // Build tier diagnostics
+        // Note: L1 is only used for session state, not message retrieval
+        const memoryStats: MemoryDiagnostics = {
+          cacheHits,
+          cacheMisses,
+          l1: {
+            hit: sessionState !== null, // L1 used for session state only
+            messageCount: 0, // L1 no longer stores messages
+          },
+          l2: {
+            queried: true, // L2 is always queried (authoritative store)
+            messageCount: messages.length,
+          },
+          l3: {
+            queried: this.deps.memory !== undefined, // L3 queried if configured
+            entityCount,
+          },
+          l4: {
+            queried: semanticMatches.length > 0,
+            matchCount: semanticMatches.length,
+          },
+        }
+
+        // STAGE 7: Retrieve previous post-process stats (phase-shifted)
+        let previousPostProcess: PostProcessStats | null = null
+        const prevStatsResult = await this.deps.memory.getPostProcessStats<PostProcessStats>(
+          input.conversationId,
+          traceCtx
+        )
+        if (prevStatsResult.ok && prevStatsResult.value) {
+          previousPostProcess = prevStatsResult.value
+          logger.debug(
+            { prevTimestamp: previousPostProcess.timestamp },
+            'Retrieved previous post-process stats'
+          )
+        }
 
         return ok({
           systemPrompt,
@@ -1519,11 +1593,8 @@ export class Pipeline {
           context: ctx.memory!,
           crisisCheck: crisisResult.value,
           memoryContext,
-          memoryStats: {
-            source: memorySource,
-            cacheHits,
-            cacheMisses,
-          },
+          memoryStats,
+          previousPostProcess,
         })
       } catch (error) {
         logger.error({ error }, 'Unexpected preflight error')
@@ -1574,9 +1645,10 @@ export class Pipeline {
           stageDurations: {},
           cacheHits: preflightResult.memoryStats.cacheHits,
           cacheMisses: preflightResult.memoryStats.cacheMisses,
-          memoryTier: preflightResult.memoryStats.source,
         },
       }
+
+      const startTime = Date.now()
 
       try {
         // STAGE 1: Safety validation + Evaluation (parallel)
@@ -1655,10 +1727,45 @@ export class Pipeline {
 
         await this.persistMessages(userMessage, assistantMessage, toolCalls, ctx)
 
+        // Calculate duration and build stats
+        const durationMs = Date.now() - startTime
+
+        // Build post-process stats for phase-shifted diagnostics
+        // Note: L1 message caching disabled (Vercel AI SDK clients send full history)
+        const postProcessStats: PostProcessStats = {
+          timestamp: Date.now(),
+          durationMs,
+          writes: {
+            l1: { messageCount: 0 }, // L1 only stores session metadata, not messages
+            l2: { messageCount: 2 }, // Always 2 messages persisted
+            l3: { entitiesAdded: 0, entitiesUpdated: 0 }, // Entity extraction is fire-and-forget
+            l4: { embeddingsStored: this.deps.embedding ? 2 : 0 },
+          },
+          safety: {
+            passed: safetyResult.ok ? safetyResult.value.passed : true,
+            violationCount: safetyResult.ok ? safetyResult.value.violations?.length ?? 0 : 0,
+          },
+          evaluation: {
+            score: evaluationResult.ok ? evaluationResult.value.overallScore : null,
+          },
+          entityExtraction: {
+            extracted: 0, // Fire-and-forget, can't track accurately
+            relationships: 0,
+          },
+        }
+
+        // Store stats for next request's phase-shifted diagnostics
+        await this.deps.memory.storePostProcessStats(
+          input.conversationId,
+          postProcessStats,
+          traceCtx
+        )
+
         logger.info(
           {
-            safetyPassed: safetyResult.ok ? safetyResult.value.passed : false,
-            evaluationScore: evaluationResult.ok ? evaluationResult.value.overallScore : null,
+            safetyPassed: postProcessStats.safety.passed,
+            evaluationScore: postProcessStats.evaluation.score,
+            durationMs,
           },
           'Post-process completed'
         )

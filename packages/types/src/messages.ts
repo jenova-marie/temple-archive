@@ -143,8 +143,6 @@ export interface PipelineResultMetrics {
   agentDuration: number;
   /** Tokens used */
   tokensUsed: { input: number; output: number };
-  /** Memory source */
-  memorySource: string;
 }
 
 /**

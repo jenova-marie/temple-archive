@@ -49,13 +49,11 @@ export interface CrisisDiagnostics {
  * Memory system diagnostics
  */
 export interface MemoryDiagnostics {
-  /** Which tier provided the context */
-  sourceTier: string
   /** Cache hit count */
   cacheHits: number
   /** Cache miss count */
   cacheMisses: number
-  /** Number of messages retrieved */
+  /** Number of messages retrieved from L2 */
   messagesRetrieved: number
   /** Whether user profile was loaded */
   userProfileLoaded: boolean
