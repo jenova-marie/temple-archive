@@ -5,6 +5,7 @@
  */
 
 import Conf from 'conf'
+import { randomUUID } from 'node:crypto'
 
 export interface CLIConfig {
   apiUrl: string
@@ -13,13 +14,13 @@ export interface CLIConfig {
 }
 
 const defaults: CLIConfig = {
-  apiUrl: 'http://localhost:3333',
-  userId: `user_${Date.now().toString(36)}`,
+  apiUrl: 'http://localhost:61664',
+  userId: randomUUID(),
   conversationId: null,
 }
 
 export const config = new Conf<CLIConfig>({
-  projectName: 'recoverysky-cli',
+  projectName: 'pippa-cli',
   defaults,
 })
 
@@ -42,14 +43,14 @@ export function setUserId(id: string): void {
 export function getConversationId(): string {
   let convId = config.get('conversationId')
   if (!convId) {
-    convId = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    convId = randomUUID()
     config.set('conversationId', convId)
   }
   return convId
 }
 
 export function newConversation(): string {
-  const convId = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const convId = randomUUID()
   config.set('conversationId', convId)
   return convId
 }

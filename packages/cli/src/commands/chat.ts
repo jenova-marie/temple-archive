@@ -16,16 +16,30 @@ export interface ChatOptions {
 
 export async function chatCommand(message: string, options: ChatOptions): Promise<void> {
   const spinner = ora('Sending message...').start()
+  let firstDelta = true
 
   try {
-    const response = await sendMessage(message)
+    const response = await sendMessage(message, (delta) => {
+      // Stop spinner on first text and print header
+      if (firstDelta) {
+        spinner.stop()
+        process.stdout.write('\n' + chalk.magenta('Pippa: '))
+        firstDelta = false
+      }
+      // Stream text in real-time
+      process.stdout.write(delta)
+    })
 
-    spinner.stop()
-
-    // Display response
-    console.log()
-    console.log(chalk.cyan('Sky:'), response.response)
-    console.log()
+    // Ensure we end on a new line
+    if (!firstDelta) {
+      console.log('\n')
+    } else {
+      // No text received
+      spinner.stop()
+      console.log()
+      console.log(chalk.magenta('Pippa:'), response.response || '(no response)')
+      console.log()
+    }
 
     // Verbose output
     if (options.verbose) {
@@ -43,7 +57,7 @@ export async function interactiveChat(): Promise<void> {
   const { default: inquirer } = await import('inquirer')
 
   console.log()
-  console.log(chalk.cyan.bold('RecoverySky Chat'))
+  console.log(chalk.magenta.bold('Pippa Chat'))
   console.log(chalk.gray(`Conversation: ${getConversationId()}`))
   console.log(chalk.gray(`User: ${getUserId()}`))
   console.log(chalk.gray('Type "exit" or "quit" to end the conversation'))
@@ -63,7 +77,7 @@ export async function interactiveChat(): Promise<void> {
     const trimmed = message.trim().toLowerCase()
 
     if (trimmed === 'exit' || trimmed === 'quit') {
-      console.log(chalk.cyan('Goodbye! Take care of yourself.'))
+      console.log(chalk.magenta('Goodbye! Take care of yourself.'))
       process.exit(0)
     }
 
@@ -80,14 +94,24 @@ export async function interactiveChat(): Promise<void> {
     }
 
     const spinner = ora('').start()
+    let firstDelta = true
 
     try {
-      const response = await sendMessage(message)
-      spinner.stop()
+      await sendMessage(message, (delta) => {
+        if (firstDelta) {
+          spinner.stop()
+          process.stdout.write('\n' + chalk.magenta('Pippa: '))
+          firstDelta = false
+        }
+        process.stdout.write(delta)
+      })
 
-      console.log()
-      console.log(chalk.cyan('Sky:'), response.response)
-      console.log()
+      if (!firstDelta) {
+        console.log('\n')
+      } else {
+        spinner.stop()
+        console.log()
+      }
 
     } catch (error) {
       spinner.stop()

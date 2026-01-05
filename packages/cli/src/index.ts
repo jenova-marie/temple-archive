@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * RecoverySky CLI
+ * Pippa CLI
  *
- * Command-line interface for interacting with the RecoverySky Agent API
+ * Command-line interface for interacting with the Pippa Agent API
  */
 
 import { Command } from 'commander'
@@ -15,14 +15,14 @@ import { healthCommand, metricsCommand } from './commands/health.js'
 const program = new Command()
 
 program
-  .name('recoverysky')
-  .description('CLI for the RecoverySky Agent API')
+  .name('pippa')
+  .description('CLI for the Pippa Agent API')
   .version('0.1.0')
 
 // Chat command - send a single message
 program
   .command('chat')
-  .description('Send a message to the RecoverySky agent')
+  .description('Send a message to Pippa')
   .argument('[message]', 'Message to send (omit for interactive mode)')
   .option('-v, --verbose', 'Show conversation ID')
   .action(async (message: string | undefined, options: ChatOptions) => {

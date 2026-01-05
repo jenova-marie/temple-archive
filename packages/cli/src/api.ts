@@ -1,16 +1,17 @@
 /**
- * API Client for RecoverySky Agent
+ * API Client for Pippa Agent
  *
  * Handles streaming responses from the Vercel AI SDK UI Message Stream format
  * (produced by pipeUIMessageStreamToResponse)
  */
 
-import { getApiUrl, getConversationId } from './config.js'
+import { getApiUrl, getConversationId, getUserId } from './config.js'
 
 /**
  * Vercel AI SDK UIMessage format for requests
  */
 export interface ChatRequest {
+  conversation_id: string
   messages: Array<{
     id?: string
     role: 'user' | 'assistant' | 'system'
@@ -45,8 +46,14 @@ export interface ApiError {
  * - `data: {"type":"text-delta","id":"0","delta":"text"}`
  * - `data: {"type":"finish","finishReason":"stop"}`
  * - `data: [DONE]`
+ *
+ * @param message - The user message to send
+ * @param onDelta - Optional callback for real-time text streaming
  */
-export async function sendMessage(message: string): Promise<ChatResponse> {
+export async function sendMessage(
+  message: string,
+  onDelta?: (text: string) => void
+): Promise<ChatResponse> {
   const apiUrl = getApiUrl()
   const conversationId = getConversationId()
 
@@ -54,8 +61,12 @@ export async function sendMessage(message: string): Promise<ChatResponse> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // For local dev with DISABLE_AUTH=true, we pass userId as a header
+      // In production, this would be a JWT token
+      'X-User-Id': getUserId(),
     },
     body: JSON.stringify({
+      conversation_id: conversationId,
       messages: [
         {
           role: 'user',
@@ -117,9 +128,10 @@ export async function sendMessage(message: string): Promise<ChatResponse> {
 
         switch (event.type) {
           case 'text-delta': {
-            // Accumulate text deltas
+            // Accumulate text deltas and stream to callback
             if (event.delta) {
               fullText += event.delta
+              onDelta?.(event.delta)
             }
             break
           }

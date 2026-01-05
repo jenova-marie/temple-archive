@@ -308,9 +308,23 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
 /**
  * Create a bypass middleware that skips JWT verification
  * Used when DISABLE_AUTH=true for local development
+ *
+ * Supports X-User-Id header to allow CLI and other tools to specify user ID
  */
 function createBypassAuthMiddleware() {
   const logger = getLogger().child({ middleware: "auth" });
+
+  const createDevUser = (req: Request): AuthenticatedUser => {
+    // Allow X-User-Id header to override default user ID for CLI/testing
+    const userId = (req.headers["x-user-id"] as string) || "dev-user";
+    return {
+      id: userId,
+      email: "dev@pippa.app",
+      name: "Development User",
+      roles: ["admin"],
+      claims: { sub: userId } as ZitadelClaims,
+    };
+  };
 
   return {
     required: async (
@@ -318,15 +332,7 @@ function createBypassAuthMiddleware() {
       _res: Response,
       next: NextFunction,
     ): Promise<void> => {
-      // Set a development user
-      req.user = {
-        id: "dev-user",
-        email: "dev@recoverysky.app",
-        name: "Development User",
-        roles: ["admin"],
-        claims: { sub: "dev-user" } as ZitadelClaims,
-      };
-
+      req.user = createDevUser(req);
       logger.debug({ userId: req.user.id }, "Auth bypassed (DISABLE_AUTH=true)");
       next();
     },
@@ -336,13 +342,7 @@ function createBypassAuthMiddleware() {
       _res: Response,
       next: NextFunction,
     ): Promise<void> => {
-      req.user = {
-        id: "dev-user",
-        email: "dev@recoverysky.app",
-        name: "Development User",
-        roles: ["admin"],
-        claims: { sub: "dev-user" } as ZitadelClaims,
-      };
+      req.user = createDevUser(req);
       next();
     },
 
