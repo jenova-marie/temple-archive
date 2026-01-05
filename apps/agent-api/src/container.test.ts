@@ -200,7 +200,6 @@ describe('container', () => {
       expect(container.config).toBeDefined()
       expect(typeof container.init).toBe('function')
       expect(typeof container.shutdown).toBe('function')
-      expect(typeof container.listSystemPrompts).toBe('function')
       expect(typeof container.loadUserData).toBe('function')
     })
 
@@ -240,16 +239,6 @@ describe('container', () => {
 
       // Should not throw
       await expect(container.shutdown()).resolves.not.toThrow()
-    })
-  })
-
-  describe('container.listSystemPrompts', () => {
-    it('returns empty array in stub mode', async () => {
-      const container = createContainer({ useStubs: true })
-
-      const guides = await container.listSystemPrompts()
-
-      expect(Array.isArray(guides)).toBe(true)
     })
   })
 
@@ -348,14 +337,12 @@ describe('container', () => {
       const _config = container.config
       const _init = container.init
       const _shutdown = container.shutdown
-      const _listSystemPrompts = container.listSystemPrompts
       const _loadUserData = container.loadUserData
 
       expect(_pipeline).toBeDefined()
       expect(_config).toBeDefined()
       expect(typeof _init).toBe('function')
       expect(typeof _shutdown).toBe('function')
-      expect(typeof _listSystemPrompts).toBe('function')
       expect(typeof _loadUserData).toBe('function')
     })
   })

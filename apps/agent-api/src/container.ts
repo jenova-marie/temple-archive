@@ -5,6 +5,9 @@
  * based on configuration.
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   PipelineConfig,
@@ -123,10 +126,6 @@ export interface Container {
   init: () => Promise<void>;
   /** Graceful shutdown - stops background jobs, closes connections. */
   shutdown: () => Promise<void>;
-  /** List all active system prompts (for guide selection UI) */
-  listSystemPrompts: () => Promise<
-    Array<{ id: string; name: string; description: string | null }>
-  >;
   /**
    * Load user and profile data - call once early in request after JWT auth.
    * Returns user + profile to be passed through the request lifecycle.
@@ -274,6 +273,12 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // Create memory orchestrator
+  // ENABLE_L3_QUERIES controls Neo4j entity lookups during retrieval (default: true)
+  const l3QueriesEnabled = process.env.ENABLE_L3_QUERIES !== "false";
+  if (!l3QueriesEnabled) {
+    logger.info("L3 Neo4j queries disabled (ENABLE_L3_QUERIES=false)");
+  }
+
   const memory = new MemoryOrchestrator(
     contextStore,
     sessionStore,
@@ -283,6 +288,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
       l1MessageLimit: pipelineConfig.memory.l1MessageLimit,
       l2MessageLimit: pipelineConfig.memory.l2MessageLimit,
       semanticSearchDays: pipelineConfig.memory.semanticSearchDays,
+      enableL3Queries: l3QueriesEnabled,
     },
   );
 
@@ -401,9 +407,14 @@ export function createContainer(options: ContainerConfig = {}): Container {
     evaluator = stubEvaluator;
   }
 
-  // Create embedding provider - requires OPENAI_API_KEY
+  // Create embedding provider - requires OPENAI_API_KEY and ENABLE_EMBEDDINGS=true
+  // When disabled, skips embedding generation and L4 storage (saves OpenAI API costs)
+  const embeddingsEnabled = process.env.ENABLE_EMBEDDINGS !== "false";
   let embedding: IEmbeddingProvider | undefined;
-  if (!useStubs && process.env.OPENAI_API_KEY) {
+
+  if (!embeddingsEnabled) {
+    logger.info("Embeddings disabled (ENABLE_EMBEDDINGS=false) - no semantic search or L4 storage");
+  } else if (!useStubs && process.env.OPENAI_API_KEY) {
     logger.info("Using OpenAIEmbeddingProvider for semantic search");
     embedding = new OpenAIEmbeddingProvider();
 
@@ -934,30 +945,122 @@ export function createContainer(options: ContainerConfig = {}): Container {
     get baseIdentity() {
       return baseIdentity;
     },
-    // getSystemPrompt allows looking up custom system prompts by name
-    getSystemPrompt: systemPromptRepo
-      ? async (name: string) => {
-          const result = await systemPromptRepo.findActive(name);
-          if (!result.ok || !result.value) return null;
+    // getSystemPrompt: disk first, then database, then null
+    // Priority: 1) src/prompts/{name}.md on disk, 2) database, 3) null
+    getSystemPrompt: async (name: string) => {
+      // 1. Check for prompt file on disk first
+      // Try multiple locations to handle both dev (tsx) and production (dist/)
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      const possiblePaths = [
+        join(__dirname, "prompts", `${name}.md`),           // Same dir (dev: src/, prod: dist/)
+        join(__dirname, "..", "src", "prompts", `${name}.md`), // From dist/ -> src/
+      ];
+
+      for (const promptPath of possiblePaths) {
+        if (existsSync(promptPath)) {
+          try {
+            const content = readFileSync(promptPath, "utf-8");
+            logger.debug({
+              agent: name,
+              source: "disk",
+              path: promptPath,
+              contentLength: content.length,
+            }, "Loaded system prompt from disk");
+            return {
+              id: `disk:${name}`,
+              name,
+              content,
+            };
+          } catch (err) {
+            logger.warn({ agent: name, error: err, path: promptPath }, "Failed to read prompt file from disk");
+          }
+        }
+      }
+
+      // 2. Fall back to database
+      if (systemPromptRepo) {
+        logger.debug({ agent: name }, "Looking up system prompt in database");
+        const result = await systemPromptRepo.findActive(name);
+        if (!result.ok) {
+          logger.error({ agent: name, error: result.error }, "Database error looking up system prompt");
+          return null;
+        }
+        if (result.value) {
+          logger.debug({
+            agent: name,
+            source: "database",
+            promptId: result.value.id,
+            contentLength: result.value.content.length,
+          }, "Found system prompt in database");
           return {
             id: result.value.id,
             name: result.value.name,
             content: result.value.content,
           };
         }
-      : undefined,
-    // getDefaultSystemPrompt fetches the active pippa fresh from database
-    getDefaultSystemPrompt: systemPromptRepo
-      ? async () => {
-          const result = await systemPromptRepo.findActive("pippa");
-          if (!result.ok || !result.value) return null;
+      }
+
+      logger.debug({ agent: name }, "No system prompt found (disk or database)");
+      return null;
+    },
+    // getDefaultSystemPrompt: same priority - disk first, then database
+    getDefaultSystemPrompt: async () => {
+      const name = "pippa";
+
+      // 1. Check for prompt file on disk first
+      // Try multiple locations to handle both dev (tsx) and production (dist/)
+      const __dirname = dirname(fileURLToPath(import.meta.url));
+      const possiblePaths = [
+        join(__dirname, "prompts", `${name}.md`),           // Same dir (dev: src/, prod: dist/)
+        join(__dirname, "..", "src", "prompts", `${name}.md`), // From dist/ -> src/
+      ];
+
+      for (const promptPath of possiblePaths) {
+        if (existsSync(promptPath)) {
+          try {
+            const content = readFileSync(promptPath, "utf-8");
+            logger.debug({
+              agent: name,
+              source: "disk",
+              path: promptPath,
+              contentLength: content.length,
+            }, "Loaded default system prompt from disk");
+            return {
+              id: `disk:${name}`,
+              name,
+              content,
+            };
+          } catch (err) {
+            logger.warn({ agent: name, error: err, path: promptPath }, "Failed to read default prompt file from disk");
+          }
+        }
+      }
+
+      // 2. Fall back to database
+      if (systemPromptRepo) {
+        logger.debug("Looking up default pippa prompt in database");
+        const result = await systemPromptRepo.findActive("pippa");
+        if (!result.ok) {
+          logger.error({ error: result.error }, "Database error looking up default pippa prompt");
+          return null;
+        }
+        if (result.value) {
+          logger.debug({
+            source: "database",
+            promptId: result.value.id,
+            contentLength: result.value.content.length,
+          }, "Found default pippa prompt in database");
           return {
             id: result.value.id,
             name: result.value.name,
             content: result.value.content,
           };
         }
-      : undefined,
+      }
+
+      logger.debug("No default pippa prompt found (disk or database)");
+      return null;
+    },
   };
 
   // Create pipeline
@@ -1041,25 +1144,6 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info("Container shutdown complete");
   };
 
-  // List all active system prompts for guide selection
-  const listSystemPrompts = async (): Promise<
-    Array<{ id: string; name: string; description: string | null }>
-  > => {
-    if (!systemPromptRepo) {
-      return [];
-    }
-    const result = await systemPromptRepo.findAllActive();
-    if (!result.ok) {
-      logger.error({ error: result.error }, "Failed to list system prompts");
-      return [];
-    }
-    return result.value.map((p) => ({
-      id: p.id,
-      name: p.name,
-      description: null, // Schema doesn't have description field yet
-    }));
-  };
-
   // Load user and profile data - call once early in request after JWT auth
   const loadUserData = async (
     userId: string,
@@ -1107,7 +1191,6 @@ export function createContainer(options: ContainerConfig = {}): Container {
     config: pipelineConfig,
     init,
     shutdown,
-    listSystemPrompts,
     loadUserData,
   };
 }
