@@ -7,4 +7,5 @@ export type {
   PostProcessStats,
   TierWriteStats,
   MemoryDiagnostics,
+  SemanticSearchDiagnostics,
 } from './Pipeline.js'

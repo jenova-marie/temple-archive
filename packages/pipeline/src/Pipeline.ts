@@ -37,7 +37,7 @@ import type {
 } from '@pippa/types'
 import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext } from '@pippa/memory'
+import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext, QueryPreprocessor, type QueryPreprocessingMode } from '@pippa/memory'
 import { buildSystemPrompt } from '@pippa/agent'
 import { agentTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
 
@@ -104,6 +104,8 @@ export interface PipelineDependencies {
   preflightEmbeddingsEnabled?: boolean
   /** Enable message embeddings during postflight for L4 storage */
   postflightEmbeddingsEnabled?: boolean
+  /** Anthropic client for query preprocessing (optional, needed for Haiku mode) */
+  anthropic?: import('@anthropic-ai/sdk').default | null
 }
 
 /**
@@ -185,6 +187,29 @@ export interface MemoryDiagnostics {
 /**
  * Result from preflight checks before streaming
  */
+/**
+ * L4 semantic search diagnostics
+ */
+export interface SemanticSearchDiagnostics {
+  /** The original query text */
+  query: string
+  /** The preprocessed query that was embedded (may differ from query) */
+  preprocessedQuery: string
+  /** Whether search was performed */
+  searched: boolean
+  /** Semantic matches from L4 */
+  results: Array<{
+    /** Similarity score (0-1) */
+    score: number
+    /** Matched content (truncated for display) */
+    content: string
+    /** Role of the message (user/assistant) */
+    role?: string
+    /** Timestamp of the matched message */
+    timestamp?: number
+  }>
+}
+
 export interface PreflightResult {
   /** Built system prompt with context */
   systemPrompt: string
@@ -200,6 +225,8 @@ export interface PreflightResult {
   memoryStats: MemoryDiagnostics
   /** Previous exchange's post-process stats (phase-shifted) */
   previousPostProcess: PostProcessStats | null
+  /** L4 semantic search diagnostics */
+  semanticSearch?: SemanticSearchDiagnostics
 }
 
 export class Pipeline {
@@ -969,13 +996,40 @@ export class Pipeline {
   private async runMemoryRetrieval(
     input: PipelineInput,
     ctx: PipelineContext
-  ): Promise<Result<{ context: PipelineContext['memory']; cacheHits: number; cacheMisses: number }, { kind: string; message: string }>> {
+  ): Promise<Result<{ context: PipelineContext['memory']; cacheHits: number; cacheMisses: number; semanticResults?: SemanticSearchDiagnostics['results']; preprocessedQuery?: string }, { kind: string; message: string }>> {
     const stageStart = Date.now()
+    const logger = getLogger().child({ requestId: ctx.requestId })
 
     // Generate embedding for semantic search (only if preflight embeddings enabled)
     let queryEmbedding: number[] | null = null
+    let preprocessedQuery: string | undefined = undefined
+
     if (process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding) {
-      const embeddingResult = await this.deps.embedding.embed(input.message, ctx, { label: 'query' })
+      // Get preprocessing config from env
+      const preprocessingMode = parseInt(process.env.QUERY_PREPROCESSING_MODE || '0', 10) as QueryPreprocessingMode
+      const hybridThreshold = parseInt(process.env.QUERY_PREPROCESSING_THRESHOLD || '100', 10)
+
+      // Create preprocessor and preprocess the query
+      const preprocessor = new QueryPreprocessor(this.deps.anthropic ?? null, {
+        mode: preprocessingMode,
+        hybridThreshold,
+      })
+
+      // Preprocess the message for better semantic search
+      const searchQuery = await preprocessor.preprocess(input.message, ctx)
+      preprocessedQuery = searchQuery
+
+      // Log if query was modified
+      if (searchQuery !== input.message) {
+        logger.debug({
+          original: input.message.slice(0, 50),
+          processed: searchQuery.slice(0, 50),
+          mode: preprocessingMode,
+        }, 'Query preprocessed for semantic search')
+      }
+
+      // Embed the preprocessed query
+      const embeddingResult = await this.deps.embedding.embed(searchQuery, ctx, { label: 'query' })
       if (embeddingResult.ok) {
         queryEmbedding = embeddingResult.value
       }
@@ -1001,6 +1055,8 @@ export class Pipeline {
       context: result.value.context,
       cacheHits: result.value.cacheHits,
       cacheMisses: result.value.cacheMisses,
+      semanticResults: result.value.semanticResults,
+      preprocessedQuery,
     })
   }
 
@@ -1536,6 +1592,10 @@ export class Pipeline {
         let cacheHits = 0
         let cacheMisses = 0
 
+        // Track semantic search results for diagnostics
+        let semanticSearchResults: SemanticSearchDiagnostics['results'] = []
+        let preprocessedQuery: string = input.message
+
         if (!memoryResult.ok) {
           logger.warn({ error: memoryResult.error }, 'Memory retrieval failed, continuing with empty context')
           ctx.memory = {
@@ -1549,6 +1609,14 @@ export class Pipeline {
           ctx.memory = memoryResult.value.context
           cacheHits = memoryResult.value.cacheHits
           cacheMisses = memoryResult.value.cacheMisses
+          // Capture semantic search results if any
+          if (memoryResult.value.semanticResults) {
+            semanticSearchResults = memoryResult.value.semanticResults
+          }
+          // Capture preprocessed query if any
+          if (memoryResult.value.preprocessedQuery) {
+            preprocessedQuery = memoryResult.value.preprocessedQuery
+          }
         }
 
         ctx.metrics.cacheHits = cacheHits
@@ -1688,6 +1756,15 @@ export class Pipeline {
           )
         }
 
+        // Build semantic search diagnostics
+        const preflightEmbeddingsEnabled = process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== 'false'
+        const semanticSearch: SemanticSearchDiagnostics = {
+          query: input.message,
+          preprocessedQuery,
+          searched: preflightEmbeddingsEnabled && !!this.deps.embedding,
+          results: semanticSearchResults,
+        }
+
         return ok({
           systemPrompt,
           tools,
@@ -1696,6 +1773,7 @@ export class Pipeline {
           memoryContext,
           memoryStats,
           previousPostProcess,
+          semanticSearch,
         })
       } catch (error) {
         logger.error({ error }, 'Unexpected preflight error')

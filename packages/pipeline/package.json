@@ -19,14 +19,15 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@pippa/types": "workspace:*",
-    "@pippa/observability": "workspace:*",
-    "@pippa/memory": "workspace:*",
-    "@pippa/crisis": "workspace:*",
-    "@pippa/safety": "workspace:*",
+    "@anthropic-ai/sdk": "^0.71.2",
     "@pippa/agent": "workspace:*",
+    "@pippa/crisis": "workspace:*",
     "@pippa/evaluation": "workspace:*",
-    "@pippa/tools": "workspace:*"
+    "@pippa/memory": "workspace:*",
+    "@pippa/observability": "workspace:*",
+    "@pippa/safety": "workspace:*",
+    "@pippa/tools": "workspace:*",
+    "@pippa/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
