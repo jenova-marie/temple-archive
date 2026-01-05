@@ -99,6 +99,7 @@ import { StubSafetyValidator, SafetyValidator } from "@pippa/safety";
 import { MockAgentProvider, VercelAIAgentProvider } from "@pippa/agent";
 import {
   StubEvaluator,
+  NoOpEvaluator,
   LLMEvaluator,
   type EvaluationMode,
 } from "@pippa/evaluation";
@@ -379,6 +380,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
   // Create evaluator
   // Uses LLMEvaluator when ANTHROPIC_API_KEY is set, otherwise StubEvaluator
+  // Uses NoOpEvaluator (silent, no logging) when evaluation is disabled
   const responseEvaluationEnabled =
     process.env.ENABLE_RESPONSE_EVALUATION !== "false";
   const stubEvaluator = new StubEvaluator();
@@ -387,7 +389,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info(
       "Response evaluation disabled (ENABLE_RESPONSE_EVALUATION=false)"
     );
-    evaluator = stubEvaluator;
+    evaluator = new NoOpEvaluator();
   } else if (useStubs) {
     logger.info("Using StubEvaluator");
     evaluator = stubEvaluator;

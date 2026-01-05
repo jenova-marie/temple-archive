@@ -342,7 +342,7 @@ export function createChatRouter({
           logger.debug(
             {
               toolCalls: toolCalls?.map(
-                (t: { toolName?: string }) => t.toolName,
+                (t) => (t as { toolName?: string }).toolName,
               ),
               finishReason,
             },
