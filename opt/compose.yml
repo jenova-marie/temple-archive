@@ -8,62 +8,56 @@
 #   - External services (Redis, PostgreSQL, Neo4j, Qdrant)
 
 services:
-  agent:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-      target: agent
-      secrets:
-        - npmrc
+  pippa-agent-api:
     image: ${DOCKER_IMAGE:-pippa-agent:latest}
-    container_name: pippa-agent
+    container_name: pippa-agent-api
     restart: unless-stopped
     networks:
       - recoverysky
     ports:
-      - "${PORT:-3000}:3000"
+      - "${AGENT_API_PORT}:${AGENT_API_PORT}"
     volumes:
-      # Standard container config & pki
-      - /opt/containers/caddy:/container:ro
-      - /etc/pki/tls/certs/ca-bundle.crt:/container/ca-bundle.crt:ro
+      - ./spiffe-bundle.pem:/spiffe-bundle.pem:ro
     environment:
-      - NODE_EXTRA_CA_CERTS=/container/ca-bundle.crt
+      - NODE_EXTRA_CA_CERTS=/spiffe-bundle.pem
 
       # Application
-      - NODE_ENV
-      - PORT
-      - LOG_LEVEL
-      - USE_STUBS
+      - AGENT_API_PORT=${AGENT_API_PORT}
+      - NODE_ENV=production
+      - PORT=${AGENT_API_PORT}
+      - LOG_LEVEL=debug
+      - USE_STUBS=false
 
       # AI Providers
       - ANTHROPIC_API_KEY
       - OPENAI_API_KEY
 
-      # Authentication
-      - ZITADEL_ISSUER
-      - ZITADEL_AUDIENCE
+      # Authentication (disable for local dev)
+      - DISABLE_AUTH
+      - ZITADEL_ISSUER=https://auth.rso
+      - ZITADEL_AUDIENCE=352079658088464386
+      - ZITADEL_PROJECT_ID=352079615960809474
+      - ZITADEL_CLIENT_ID=352079658088464386
 
       # Memory config
       - MEMORY_CONTEXT_MODE
       - MEMORY_TOOL_ACCESS
 
       # L1: Redis
-      - REDIS_URL
-      - REDIS_USERNAME=agent-sky
-      - REDIS_PASSWORD=${REDIS_AGENT_SKY_PASSWORD}
+      - REDIS_URL=redis://redis.rso:6379
 
       # L2: PostgreSQL
-      - DATABASE_URL
+      - DATABASE_URL=postgresql://postgres:postgres@db.rso:5432/pippa
 
       # L3: Neo4j
-      - NEO4J_URI
+      - NEO4J_URI=neo4j://neo4j.rso:7687
       - NEO4J_USER
       - NEO4J_PASSWORD
       - NEO4J_DATABASE
       - NEO4J_DATABASE_PER_USER
 
       # L4: Qdrant
-      - QDRANT_URL
+      - QDRANT_URL=http://qdrant.rso:6333
       - QDRANT_API_KEY
 
       # Observability
