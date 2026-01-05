@@ -21,15 +21,31 @@
 
 The memory system is Pippa's most complex subsystem. Read in this order:
 
+### Overview
 | Doc | Purpose |
 |-----|---------|
 | [docs/MEMORY_TIERS.md](docs/MEMORY_TIERS.md) | Overview of all 4 tiers and when each is used |
-| [docs/L3_KNOWLEDGE_GRAPH.md](docs/L3_KNOWLEDGE_GRAPH.md) | Neo4j "Cadillac" schema for entities/relationships |
+
+### Per-Tier Deep Dives
+| Doc | Purpose |
+|-----|---------|
+| [docs/L1_CONTEXT.md](docs/L1_CONTEXT.md) | L1 Redis session cache - hot context storage |
+| [docs/L2_DATA_STORE.md](docs/L2_DATA_STORE.md) | L2 PostgreSQL - durable storage and pgvector |
+| [docs/L3_KNOWLEDGE_GRAPH.md](docs/L3_KNOWLEDGE_GRAPH.md) | L3 Neo4j "Cadillac" - entities and relationships |
+| [docs/L4_VECTOR_STORE.md](docs/L4_VECTOR_STORE.md) | L4 Qdrant - hybrid semantic search |
+
+### Memory Processing
+| Doc | Purpose |
+|-----|---------|
 | [docs/ENTITY_EXTRACTION.md](docs/ENTITY_EXTRACTION.md) | How entities are extracted from conversations |
 | [docs/MEMORY_REFLECTOR.md](docs/MEMORY_REFLECTOR.md) | Automatic insight generation with Haiku |
 | [packages/memory/src/embeddings/L3_EMBEDDINGS.md](packages/memory/src/embeddings/L3_EMBEDDINGS.md) | MiniLM graph-local semantic search |
 | [docs/DEEPMEMORY.md](docs/DEEPMEMORY.md) | Context enrichment from conversation history |
-| [docs/QDRANT.md](docs/QDRANT.md) | L4 Qdrant vector store configuration |
+
+### Configuration Guides
+| Doc | Purpose |
+|-----|---------|
+| [docs/QDRANT.md](docs/QDRANT.md) | Qdrant setup and configuration |
 
 ## Package Reference
 
