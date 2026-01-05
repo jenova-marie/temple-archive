@@ -64,6 +64,11 @@ export interface SemanticSearchResult {
   }>
 }
 
+export interface MemoryPromptsStats {
+  count: number
+  totalChars: number
+}
+
 export interface ChatMetrics {
   preflightMs: number
   totalMs: number
@@ -74,6 +79,7 @@ export interface ChatMetrics {
   memory?: MemoryTierStats
   previousExchange?: PreviousExchange | null
   semanticSearch?: SemanticSearchResult | null
+  memoryPrompts?: MemoryPromptsStats
 }
 
 export interface ChatResponse {
