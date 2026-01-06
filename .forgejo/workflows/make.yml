@@ -97,6 +97,7 @@ jobs:
           images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook
           tags: |
             type=raw,value=${{ env.ENV }}
+            type=raw,value=latest
 
       - name: Build and Push pippa image
         if: steps.build_filter.outputs.build_required == 'true'
