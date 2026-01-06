@@ -18,7 +18,7 @@ services:
     container_name: pippa-agent-api
     restart: unless-stopped
     networks:
-      - bad-bitch-net
+      - recoverysky
     ports:
       - "${AGENT_API_PORT}:${AGENT_API_PORT}"
     volumes:
@@ -102,7 +102,7 @@ services:
     container_name: pippa-web-api
     restart: unless-stopped
     networks:
-      - bad-bitch-net
+      - recoverysky
     ports:
       - "${WEB_API_PORT}:${WEB_API_PORT}"
     environment:
@@ -129,7 +129,7 @@ services:
     container_name: pippa-web-app
     restart: unless-stopped
     networks:
-      - bad-bitch-net
+      - recoverysky
     ports:
       - "${WEB_APP_PORT}:80"
     environment:
@@ -151,7 +151,7 @@ services:
     #   retries: 3
 
 networks:
-  bad-bitch-net:
+  recoverysky:
     external: true
 
 secrets:

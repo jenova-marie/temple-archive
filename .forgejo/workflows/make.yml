@@ -88,28 +88,92 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Extract metadata (pippa)
+      # =========================================================================
+      # Agent API
+      # =========================================================================
+      - name: Extract metadata (agent-api)
         if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-pippa
+        id: meta-agent-api
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent
           tags: |
             type=raw,value=${{ env.ENV }}
             type=raw,value=latest
 
-      - name: Build and Push pippa image
+      - name: Build and Push agent-api image
         if: steps.build_filter.outputs.build_required == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
+          target: agent-api
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta-pippa.outputs.tags }}
-          labels: ${{ steps.meta-pippa.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa:cache,mode=max
+          tags: ${{ steps.meta-agent-api.outputs.tags }}
+          labels: ${{ steps.meta-agent-api.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache,mode=max
+          secret-files: |
+            npmrc=./.npmrc
+
+      # =========================================================================
+      # Web API
+      # =========================================================================
+      - name: Extract metadata (web-api)
+        if: steps.build_filter.outputs.build_required == 'true'
+        id: meta-web-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-api
+          tags: |
+            type=raw,value=${{ env.ENV }}
+            type=raw,value=latest
+
+      - name: Build and Push web-api image
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          target: web-api
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta-web-api.outputs.tags }}
+          labels: ${{ steps.meta-web-api.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-api:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-api:cache,mode=max
+          secret-files: |
+            npmrc=./.npmrc
+
+      # =========================================================================
+      # Web App (frontend)
+      # =========================================================================
+      - name: Extract metadata (web-app)
+        if: steps.build_filter.outputs.build_required == 'true'
+        id: meta-web-app
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-app
+          tags: |
+            type=raw,value=${{ env.ENV }}
+            type=raw,value=latest
+
+      - name: Build and Push web-app image
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          target: web-app
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta-web-app.outputs.tags }}
+          labels: ${{ steps.meta-web-app.outputs.labels }}
+          build-args: |
+            AGENT_API_PORT=61664
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-app:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-app:cache,mode=max
           secret-files: |
             npmrc=./.npmrc
 
