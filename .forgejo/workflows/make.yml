@@ -98,7 +98,7 @@ jobs:
           tags: |
             type=raw,value=${{ env.ENV }}
 
-      - name: Build and Push webhook image
+      - name: Build and Push pippa image
         if: steps.build_filter.outputs.build_required == 'true'
         uses: docker/build-push-action@v5
         with:
@@ -108,58 +108,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-webhook.outputs.tags }}
           labels: ${{ steps.meta-webhook.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook:cache,mode=max
-          secret-files: |
-            npmrc=./.npmrc
-
-      # Build CI notifier image
-      - name: Extract metadata (ci-notifier)
-        if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-ci-notifier
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-ci-notifier
-          tags: |
-            type=raw,value=${{ env.ENV }}
-
-      - name: Build and Push ci-notifier image
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.ci-notifier
-          platforms: linux/arm64
-          push: true
-          tags: ${{ steps.meta-ci-notifier.outputs.tags }}
-          labels: ${{ steps.meta-ci-notifier.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-ci-notifier:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-ci-notifier:cache,mode=max
-          secret-files: |
-            npmrc=./.npmrc
-
-      # Build EDA processor image
-      - name: Extract metadata (eda-processor)
-        if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-eda-processor
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-eda-processor
-          tags: |
-            type=raw,value=${{ env.ENV }}
-
-      - name: Build and Push eda-processor image
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile.eda-processor
-          platforms: linux/arm64
-          push: true
-          tags: ${{ steps.meta-eda-processor.outputs.tags }}
-          labels: ${{ steps.meta-eda-processor.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-eda-processor:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-eda-processor:cache,mode=max
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa:cache,mode=max
           secret-files: |
             npmrc=./.npmrc
 
@@ -171,7 +121,7 @@ jobs:
           streams: eda
           type: deploy
           action: deploy_container
-          service: webhook
+          service: pippa
           instance: inanna
           zone: ${{ env.AWS_REGION }}
           environment: ${{ env.ENV }}
