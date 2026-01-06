@@ -1,0 +1,54 @@
+# Wonder Logger Configuration for RecoverySky Agent
+# See: https://github.com/jenova-marie/wonder-logger
+
+service:
+  name: ${SERVICE_NAME:-pippa}
+  version: ${npm_package_version:-0.1.0}
+  environment: ${NODE_ENV:-production}
+
+logger:
+  enabled: true
+  level: ${LOG_LEVEL:-debug}
+  redact:
+    - password
+    - token
+    - apiKey
+    - ANTHROPIC_API_KEY
+  transports:
+    # Aligned console transport - clean, single-line output
+    # Output: [2025-12-01 04:00:57] INFO : User logged in userId=123 action=login
+    - type: console
+      level: ${LOG_LEVEL:-debug}
+      variant: aligned
+      alignedOptions:
+        dataFormat: inline # 'json' | 'inline' | 'hidden'
+        colorize: true
+        showTimestamp: true
+
+    # Memory transport for runtime log inspection
+    - type: memory
+      name: ${SERVICE_NAME:-recoverysky-agent}
+      maxSize: 10000
+      level: debug
+
+  plugins:
+    # Inject trace_id and span_id into logs
+    traceContext: true
+
+otel:
+  enabled: true
+  tracing:
+    enabled: true
+    # Use 'none' to disable trace output while keeping trace context for logs
+    # Spans are still created for log correlation, but not exported to console/OTLP
+    exporter: ${OTEL_TRACE_EXPORTER:-none}
+    endpoint: ${OTEL_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}
+    sampleRate: 1.0
+  metrics:
+    enabled: true
+    exporters:
+      - type: prometheus
+        port: 9464
+  instrumentation:
+    auto: true
+    http: true

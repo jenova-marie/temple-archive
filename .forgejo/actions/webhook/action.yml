@@ -1,0 +1,70 @@
+name: "Send Webhook"
+description: "Send signed webhook to one or more streams"
+
+inputs:
+  webhook_url:
+    description: "Webhook base URL (e.g., https://webhook.rso/webhooks)"
+    required: true
+  webhook_secret:
+    description: "HMAC secret for signing the payload"
+    required: true
+  streams:
+    description: "Streams to send to (comma-separated, e.g., eda,ci)"
+    required: true
+  type:
+    description: "Event type (e.g., deploy, trigger, notify)"
+    required: true
+  action:
+    description: "Action type (e.g., image_update, config_update)"
+    required: true
+  service:
+    description: "Target service"
+    required: true
+  environment:
+    description: "Target environment (dev, staging, prod)"
+    required: true
+  zone:
+    description: "Target zone/region (e.g., us-east-1)"
+    required: false
+    default: ""
+  instance:
+    description: "Target instance/host (e.g., inanna, nyx)"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send webhook to streams
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        PAYLOAD=$(cat <<EOF
+        {
+          "type": "${{ inputs.type }}",
+          "action": "${{ inputs.action }}",
+          "service": "${{ inputs.service }}",
+          "environment": "${{ inputs.environment }}",
+          "zone": "${{ inputs.zone }}",
+          "instance": "${{ inputs.instance }}"
+        }
+        EOF
+        )
+
+        SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ inputs.webhook_secret }}" | cut -d' ' -f2)
+
+        echo "Triggering ${{ inputs.action }} for ${{ inputs.service }} (${{ inputs.environment }})"
+
+        IFS=',' read -ra STREAM_ARRAY <<< "${{ inputs.streams }}"
+        for stream in "${STREAM_ARRAY[@]}"; do
+          stream=$(echo "$stream" | xargs)
+          echo "Sending to stream: $stream"
+          curl -X POST "${{ inputs.webhook_url }}/$stream" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Signature: $SIGNATURE" \
+            -d "$PAYLOAD" \
+            --fail --silent --show-error
+        done
+
+        echo "Webhook sent successfully"

@@ -1,50 +1,26 @@
-name: Build & Push Docker Image to AWS ECR
+name: Build & Push Docker Images to AWS ECR
+
 on:
   push:
-    tags:
-      - 'v*' # Only trigger on version tags (e.g., v1.0.0, v2.1.3)
-  workflow_dispatch: # Allows manual triggering
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'prod'
-        type: choice
-        options:
-          - dev
-          - staging
-          - prod
+    branches:
+      - cmd
+
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read
+
 env:
-  # For tag pushes, default to prod; for manual dispatch, use input
-  ENV: ${{ github.event.inputs.environment || 'prod' }}
-  AWS_REGION: us-east-1 # Default to prod region, overridden in job
+  ENV: "cmd"
+  AWS_REGION: us-east-2
+
 jobs:
   docker-build-and-push:
-    runs-on: hestia # Runs directly on host
+    runs-on: hestia
+
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Set environment and region
-        run: |
-          # Use input for manual dispatch, default to prod for tag pushes
-          TARGET_ENV="${{ github.event.inputs.environment || 'prod' }}"
-          echo "ENV=$TARGET_ENV" >> $GITHUB_ENV
-
-          # Set AWS region based on environment
-          case "$TARGET_ENV" in
-            dev)     echo "AWS_REGION=us-east-2" >> $GITHUB_ENV ;;
-            staging) echo "AWS_REGION=us-west-2" >> $GITHUB_ENV ;;
-            prod)    echo "AWS_REGION=us-east-1" >> $GITHUB_ENV ;;
-            *)       echo "AWS_REGION=us-east-1" >> $GITHUB_ENV ;; # Default to prod
-          esac
-
-          echo "Environment: $TARGET_ENV"
-          echo "Tag: ${{ github.ref_name }}"
 
       - name: Upload opt/ to rsync.net
         run: |
@@ -72,25 +48,15 @@ jobs:
           # Cleanup
           eval $(ssh-agent -k)
 
-      # OIDC might not work in Forgejo - consider using access keys instead
-      - name: Configure AWS Credentials via OIDC
-        uses: https://github.com/aws-actions/configure-aws-credentials@v4
+      - name: Check for build relevant file changes
+        id: build_filter
+        uses: ./.forgejo/actions/check-build-changes
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Setup pnpm
-        uses: https://github.com/pnpm/action-setup@v2
-        with:
-          version: 10.11.0
-
-      - name: Setup Node.js
-        uses: https://github.com/actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "pnpm"
+          before-ref: ${{ github.event.before }}
+          current-sha: ${{ github.sha }}
 
       - name: Create .npmrc in project directory
+        if: steps.build_filter.outputs.build_required == 'true'
         run: |
           cat > .npmrc << 'EOF'
           strict-ssl=false
@@ -106,53 +72,119 @@ jobs:
           echo "=== Generated .npmrc ==="
           cat .npmrc
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build source
-        run: pnpm build:all
-
-      - name: Run unit tests with coverage
-        run: CI=true pnpm test
-
-      # Store coverage as artifact in Forgejo
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v3
-        env:
-          NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
-        if: always()
+      - name: Configure AWS Credentials via OIDC
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 30
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Extract metadata
-        id: meta
-        uses: https://github.com/docker/metadata-action@v5
-        with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=${{ env.ENV }}
-            type=raw,value=latest,enable=${{ env.ENV == 'prod' }}
+      - name: Set up Docker Buildx
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Amazon ECR
+        if: steps.build_filter.outputs.build_required == 'true'
         id: login-ecr
-        uses: https://github.com/aws-actions/amazon-ecr-login@v2
-        env:
-          AWS_REGION: ${{ env.AWS_REGION }}
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push Docker Image
-        uses: https://github.com/docker/build-push-action@v5
+      # Build webhook server image
+      - name: Extract metadata (webhook)
+        if: steps.build_filter.outputs.build_required == 'true'
+        id: meta-webhook
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook
+          tags: |
+            type=raw,value=${{ env.ENV }}
+
+      - name: Build and Push webhook image
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-webhook.outputs.tags }}
+          labels: ${{ steps.meta-webhook.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook:cache,mode=max
           secret-files: |
             npmrc=./.npmrc
 
-      - name: Deploy to AWS Service (Optional)
-        run: |
-          echo "Trigger deployment here if needed"
+      # Build CI notifier image
+      - name: Extract metadata (ci-notifier)
+        if: steps.build_filter.outputs.build_required == 'true'
+        id: meta-ci-notifier
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-ci-notifier
+          tags: |
+            type=raw,value=${{ env.ENV }}
+
+      - name: Build and Push ci-notifier image
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.ci-notifier
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta-ci-notifier.outputs.tags }}
+          labels: ${{ steps.meta-ci-notifier.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-ci-notifier:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-ci-notifier:cache,mode=max
+          secret-files: |
+            npmrc=./.npmrc
+
+      # Build EDA processor image
+      - name: Extract metadata (eda-processor)
+        if: steps.build_filter.outputs.build_required == 'true'
+        id: meta-eda-processor
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-eda-processor
+          tags: |
+            type=raw,value=${{ env.ENV }}
+
+      - name: Build and Push eda-processor image
+        if: steps.build_filter.outputs.build_required == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.eda-processor
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta-eda-processor.outputs.tags }}
+          labels: ${{ steps.meta-eda-processor.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-eda-processor:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook-eda-processor:cache,mode=max
+          secret-files: |
+            npmrc=./.npmrc
+
+      - name: Trigger image deployment (includes config deployment)
+        uses: ./.forgejo/actions/webhook
+        with:
+          webhook_url: https://webhook.rso/webhooks
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          streams: eda
+          type: deploy
+          action: deploy_container
+          service: webhook
+          instance: inanna
+          zone: ${{ env.AWS_REGION }}
+          environment: ${{ env.ENV }}
+
+      - name: Notify build failure
+        if: failure()
+        uses: ./.forgejo/actions/webhook
+        with:
+          webhook_url: https://webhook.rso/webhooks
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          streams: ci
+          type: build
+          action: failure
+          service: webhook
+          instance: inanna
+          environment: ${{ env.ENV }}

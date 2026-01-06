@@ -1,0 +1,7 @@
+.make-build-patterns
+Dockerfile
+apps/
+packages/
+package.json
+pnpm-lock.yaml
+tsconfig.json

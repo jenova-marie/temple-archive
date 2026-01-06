@@ -1,11 +1,11 @@
 {
   "name": "agent",
-  "description": "Starting Docker Compose services for RecoverySky Agent",
+  "description": "Starting Docker Compose services for Pippa!!!",
   "vault": [
-    "docker-config:SkyAgent",
-    "app-config:SkyAgent",
-    "app-secrets:SkyAgent/JSON",
-    "db-users:SkyAgent/JSON",
-    "redis-passwords:SkyAgent/JSON"
+    "docker-config:Pippa",
+    "app-config:Pippa",
+    "app-secrets:Pippa/JSON",
+    "db-users:Pippa/JSON",
+    "redis-passwords:Pippa/JSON"
   ]
 }
