@@ -61,7 +61,7 @@ COPY packages/ ./packages/
 COPY apps/ ./apps/
 
 # Build all packages EXCEPT web-app (web-app is built separately in web-app-builder with AGENT_API_PORT)
-RUN pnpm --filter '!@pippa/web-app' build:all
+RUN pnpm -r --filter '!@pippa/web-app' build
 
 # =============================================================================
 # Stage 4: Web Builder (separate stage for web-specific build)
