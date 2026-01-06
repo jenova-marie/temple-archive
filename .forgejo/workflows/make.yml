@@ -88,13 +88,12 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Build webhook server image
-      - name: Extract metadata (webhook)
+      - name: Extract metadata (pippa)
         if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-webhook
+        id: meta-pippa
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/webhook
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa
           tags: |
             type=raw,value=${{ env.ENV }}
             type=raw,value=latest
@@ -107,8 +106,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta-webhook.outputs.tags }}
-          labels: ${{ steps.meta-webhook.outputs.labels }}
+          tags: ${{ steps.meta-pippa.outputs.tags }}
+          labels: ${{ steps.meta-pippa.outputs.labels }}
           cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa:cache
           cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa:cache,mode=max
           secret-files: |
