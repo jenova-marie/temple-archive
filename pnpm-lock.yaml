@@ -59,6 +59,9 @@ importers:
       '@pippa/evaluation':
         specifier: workspace:*
         version: link:../../packages/evaluation
+      '@pippa/mem0':
+        specifier: workspace:*
+        version: link:../../packages/mem0
       '@pippa/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -469,6 +472,25 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^2.1.9
+        version: 2.1.9(@types/node@24.10.4)(jsdom@27.3.0)(lightningcss@1.30.2)
+
+  packages/mem0:
+    dependencies:
+      '@pippa/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@pippa/types':
+        specifier: workspace:*
+        version: link:../types
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.6
         version: 2.1.9(@types/node@24.10.4)(jsdom@27.3.0)(lightningcss@1.30.2)
 
   packages/memory:
@@ -1795,8 +1817,12 @@ packages:
 
   '@jenova-marie/ts-rust-result@2.2.16':
     resolution: {integrity: sha512-JV/gz/COEdzQcTE4wSuiKFx1r/2Ybs/YPOWNDB2FhjI+pHql860q10KBoVp1gUU1/OF80OQm7SgEH19V4Xy/QA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fts-rust-result/-/2.2.16/ts-rust-result-2.2.16.tgz}
+    engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@jenova-marie/wonder-logger@2.0.16':
     resolution: {integrity: sha512-q9UzK6UtcD09Bb6hQXXpfK9caWSf+lLfTCq+GMOHC4lYRvs0hAJJZA6jpiSd6oNROWdK7M/iJ6FzscMP55aUXA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fwonder-logger/-/2.0.16/wonder-logger-2.0.16.tgz}
@@ -3017,6 +3043,7 @@ packages:
 
   '@trex-ts/core@1.1.8':
     resolution: {integrity: sha512-rVRPxqt6Q6Rbh12Kinsg0Xmh0sBaEAqqFR3a6mkweQLRxrjHThxyez36D8+oHxB/Nr0eBjywfFGbbTXjiniJvg==, tarball: https://git.rso/api/packages/trex/npm/%40trex-ts%2Fcore/-/1.1.8/core-1.1.8.tgz}
+    engines: {node: '>=18.0.0'}
 
   '@types/aria-query@5.0.4':
     resolution: {integrity: sha512-rfT93uj5s0PRL7EzccGMs3brplhcrghnDoV26NqKhCAS1hVo+WdNsPvE/yb6ilfr5hi2MEk6d5EWJTKdxg8jVw==}
@@ -7311,7 +7338,7 @@ snapshots:
   '@istanbuljs/schema@0.1.3': {}
 
   '@jenova-marie/ts-rust-result@2.2.16(zod@4.2.1)':
-    dependencies:
+    optionalDependencies:
       zod: 4.2.1
 
   '@jenova-marie/wonder-logger@2.0.16(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))':
@@ -9038,14 +9065,6 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 5.4.21(@types/node@22.19.3)(lightningcss@1.30.2)
-
-  '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@24.10.4)(lightningcss@1.30.2))':
-    dependencies:
-      '@vitest/spy': 2.1.9
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 5.4.21(@types/node@24.10.4)(lightningcss@1.30.2)
 
   '@vitest/mocker@4.0.16(vite@7.3.0(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -12304,7 +12323,7 @@ snapshots:
   vitest@2.1.9(@types/node@24.10.4)(jsdom@27.3.0)(lightningcss@1.30.2):
     dependencies:
       '@vitest/expect': 2.1.9
-      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@24.10.4)(lightningcss@1.30.2))
+      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@22.19.3)(lightningcss@1.30.2))
       '@vitest/pretty-format': 2.1.9
       '@vitest/runner': 2.1.9
       '@vitest/snapshot': 2.1.9

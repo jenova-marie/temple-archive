@@ -7,6 +7,7 @@
     { "path": "packages/observability" },
     { "path": "packages/db" },
     { "path": "packages/memory" },
+    { "path": "packages/mem0" },
     { "path": "packages/crisis" },
     { "path": "packages/safety" },
     { "path": "packages/tools" },
