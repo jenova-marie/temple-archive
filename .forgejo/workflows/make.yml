@@ -3,15 +3,15 @@ name: Build & Push Docker Images to AWS ECR
 on:
   push:
     branches:
-      - cmd
+      - prod
 
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read
 
 env:
-  ENV: "cmd"
-  AWS_REGION: us-east-2
+  ENV: "prod"
+  AWS_REGION: us-east-1
 
 jobs:
   docker-build-and-push:

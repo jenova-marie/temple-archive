@@ -110,10 +110,17 @@ Crisis level ≥8 triggers emergency response, bypassing normal flow.
 |------|-------|---------|---------|
 | L1 | Redis | Session cache | <10ms |
 | L2 | PostgreSQL + pgvector | Conversation history, profiles | 10-50ms |
-| L3 | Neo4j | Entity knowledge graph | 20-100ms |
-| L4 | Qdrant | Semantic similarity search | 5-20ms |
+| L3 | Neo4j | Entity knowledge graph (disabled when L5 enabled) | 20-100ms |
+| L4 | Qdrant | Semantic similarity search (disabled when L5 enabled) | 5-20ms |
+| **L5** | **Mem0** | **Primary memory - fact extraction & retrieval** | **10-50ms** |
 
 All tiers have real implementations plus in-memory stubs for testing.
+
+**L5 (Mem0) as Primary Memory:** When `ENABLE_L5_MEMORY=true`, Mem0 becomes the primary memory system. It handles:
+- Automatic fact extraction from conversations (`infer=true`)
+- Deduplication and conflict resolution
+- Semantic search for user memories
+- L3/L4 are disabled by default but kept for future hybrid use
 
 ### Dependency Injection
 
@@ -123,8 +130,23 @@ All external services are injected via `apps/api/src/container.ts`. Key environm
 - `DATABASE_URL` → Real PostgreSQL L2 session store
 - `NEO4J_URI` → Real Neo4j L3 knowledge graph
 - `QDRANT_URL` → Real Qdrant L4 vector store
+- `MEM0_API_URL` → Mem0 FastAPI endpoint (L5)
+- `ENABLE_L5_MEMORY=true` → Enable L5 as primary memory
 - `ANTHROPIC_API_KEY` → Real agent, crisis evaluator, entity extraction
 - `OPENAI_API_KEY` → Real embeddings for semantic search
+
+**L5 Memory Configuration:**
+```bash
+# Enable L5 Mem0 as primary memory
+ENABLE_L5_MEMORY=true
+MEM0_API_URL=http://localhost:8000
+
+# These are auto-disabled when L5 is enabled (set to true to force enable)
+ENABLE_L3_QUERIES=false
+ENABLE_ENTITY_EXTRACTION=false
+ENABLE_PREFLIGHT_EMBEDDINGS=false
+ENABLE_POSTFLIGHT_EMBEDDINGS=false
+```
 
 ## Key Patterns
 
