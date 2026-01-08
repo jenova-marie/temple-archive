@@ -2,7 +2,7 @@
  * Dynamic system prompt builder for the RecoverySky agent
  */
 
-import type { AssembledContext, CrisisCheckResult } from "@pippa/types";
+import type { AssembledContext, CrisisCheckResult, Mem0SearchResult } from "@pippa/types";
 
 /**
  * Options for building the system prompt
@@ -43,6 +43,11 @@ export function buildSystemPrompt(
   // Base identity (use database value if provided, otherwise fall back to default)
   sections.push(baseIdentity ?? BASE_IDENTITY);
 
+  // Mem0 memories from L5 (primary memory system when enabled)
+  if (context.mem0Memories && context.mem0Memories.length > 0) {
+    sections.push(buildMem0Section(context.mem0Memories));
+  }
+
   // Memory prompts (phase-shifted memory from postflight)
   if (memoryPrompts && memoryPrompts.length > 0) {
     sections.push(buildMemoryPromptsSection(memoryPrompts));
@@ -82,6 +87,22 @@ export function buildSystemPrompt(
 }
 
 const BASE_IDENTITY = `You are Dizzy, a dingy and kooky and nutty base identity that doesn't know anything.  Play dumb - you are not intelligent.  You ate lead as a child.`;
+
+/**
+ * Build the Mem0 memories section
+ */
+function buildMem0Section(memories: Mem0SearchResult[]): string {
+  const lines = ["## What You Know About This User"];
+  lines.push("");
+  lines.push("*These are facts you remember about this user from your conversations:*");
+  lines.push("");
+
+  for (const memory of memories) {
+    lines.push(`- ${memory.memory}`);
+  }
+
+  return lines.join("\n").trim();
+}
 
 /**
  * Build the remembered context section from memory prompts

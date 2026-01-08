@@ -69,7 +69,17 @@ configCmd
 
 configCmd
   .command('set <key> <value>')
-  .description('Set a configuration value (apiUrl, userId)')
+  .description('Set a configuration value')
+  .addHelpText('after', `
+Available keys:
+  apiUrl   API server URL (e.g., https://pippa.example.com)
+  userId   Your user identifier
+
+Examples:
+  pippa config set apiUrl https://pippa.example.com
+  pippa config set apiUrl http://localhost:3000
+  pippa config set userId my-user-id
+`)
   .action(setConfigValue)
 
 configCmd
