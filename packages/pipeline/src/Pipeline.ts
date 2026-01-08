@@ -100,6 +100,8 @@ export interface PipelineDependencies {
   memoryReflector?: MemoryReflector
   /** Whether L4 (Qdrant) vector store is enabled */
   l4Enabled?: boolean
+  /** Whether L5 (Mem0) memory is enabled */
+  l5MemoryEnabled?: boolean
   /** Enable query embeddings during preflight for semantic search */
   preflightEmbeddingsEnabled?: boolean
   /** Enable message embeddings during postflight for L4 storage */
@@ -1066,7 +1068,8 @@ export class Pipeline {
       queryEmbedding,
       ctx,
       input.userProfile,
-      input.displayName
+      input.displayName,
+      input.message // Pass user message for L5 Mem0 search
     )
 
     ctx.metrics.stageDurations.memory = Date.now() - stageStart
@@ -1389,7 +1392,21 @@ export class Pipeline {
         ctx
       )
 
+      // L5 Mem0 storage (fire and forget - Mem0 handles fact extraction)
+      // When L5 is enabled, this replaces entity extraction
+      this.deps.memory
+        .storeToMem0(userMessage, assistantMessage, ctx)
+        .then((result) => {
+          if (!result.ok) {
+            logger.warn({ error: result.error }, 'Mem0 storage failed')
+          }
+        })
+        .catch((err) => {
+          logger.warn({ err }, 'Mem0 storage error')
+        })
+
       // Entity extraction (fire and forget - don't block response)
+      // Skipped when L5 Mem0 is enabled (Mem0 handles fact extraction with infer=true)
       if (this.deps.entityExtractor) {
         this.deps.entityExtractor
           .extract(userMessage, assistantMessage, ctx.crisisCheck?.level ?? 1, ctx)
