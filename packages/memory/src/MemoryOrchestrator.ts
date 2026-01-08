@@ -17,6 +17,7 @@ import type {
   ISessionStore,
   IKnowledgeStore,
   IVectorStore,
+  IMem0Store,
   Message,
   AssembledContext,
   TraceContext,
@@ -25,6 +26,7 @@ import type {
   SessionEntities,
   Entity,
   UserProfile,
+  Mem0SearchResult,
 } from '@pippa/types'
 import { ok, err } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
@@ -40,6 +42,10 @@ export interface MemoryOrchestratorConfig {
   l3EntityLimit: number
   /** Enable L3 knowledge graph queries */
   enableL3Queries: boolean
+  /** Enable L5 Mem0 memory system (primary) */
+  enableL5Memory: boolean
+  /** Maximum memories to retrieve from L5 */
+  l5MemoryLimit: number
 }
 
 export interface MemoryRetrievalResult {
@@ -73,7 +79,8 @@ export class MemoryOrchestrator {
     private readonly l2: ISessionStore,
     private readonly l3: IKnowledgeStore,
     private readonly l4: IVectorStore,
-    config?: Partial<MemoryOrchestratorConfig>
+    config?: Partial<MemoryOrchestratorConfig>,
+    private readonly l5?: IMem0Store
   ) {
     this.config = {
       l2MessageLimit: 50,
@@ -81,6 +88,8 @@ export class MemoryOrchestrator {
       semanticScoreThreshold: 0.7,
       l3EntityLimit: 20,
       enableL3Queries: true,
+      enableL5Memory: false,
+      l5MemoryLimit: 10,
       ...config,
     }
   }
@@ -94,6 +103,7 @@ export class MemoryOrchestrator {
    *
    * @param preloadedProfile - Optional pre-loaded user profile to avoid redundant fetch
    * @param displayName - Optional user's display name for personalization
+   * @param queryText - Optional query text for L5 Mem0 semantic search
    */
   async retrieveContext(
     conversationId: string,
@@ -101,7 +111,8 @@ export class MemoryOrchestrator {
     queryEmbedding: number[] | null,
     ctx: TraceContext,
     preloadedProfile?: UserProfile | null,
-    displayName?: string
+    displayName?: string,
+    queryText?: string
   ): Promise<Result<MemoryRetrievalResult, MemoryError>> {
     return withSpan('MemoryOrchestrator.retrieveContext', async () => {
       const startTime = Date.now()
@@ -109,6 +120,7 @@ export class MemoryOrchestrator {
         conversationId,
         userId,
         requestId: ctx.requestId,
+        l5Enabled: this.config.enableL5Memory,
       })
 
       // Track cache stats locally to return in result
@@ -126,6 +138,16 @@ export class MemoryOrchestrator {
       if (preloadedProfile === undefined) {
         const profileResult = await this.l2.getUserProfile(userId, ctx)
         userProfile = profileResult.ok ? profileResult.value : null
+      }
+
+      // L5 Mem0 retrieval (primary memory system when enabled)
+      let mem0Memories: Mem0SearchResult[] | undefined
+      if (this.config.enableL5Memory && queryText) {
+        mem0Memories = await this.queryL5Memories(userId, queryText, ctx)
+        if (mem0Memories && mem0Memories.length > 0) {
+          cacheHits++
+          logger.debug({ count: mem0Memories.length }, 'L5 Mem0 memories retrieved')
+        }
       }
 
       // Get previous session summaries (only if L2 retrieval enabled)
@@ -161,8 +183,10 @@ export class MemoryOrchestrator {
           pipelineMetrics.memoryCacheHits.add(1, { tier: 'L2' })
           logger.debug({ count: l2Result.value.length }, 'L2 hit')
 
-          // Query L3 for related entities (non-blocking)
-          const relatedEntities = await this.queryL3Entities(userId, ctx)
+          // Query L3 for related entities (non-blocking, skip if L5 is primary)
+          const relatedEntities = this.config.enableL5Memory
+            ? undefined
+            : await this.queryL3Entities(userId, ctx)
 
           const context = this.assembleContext(
             l2Result.value,
@@ -171,7 +195,8 @@ export class MemoryOrchestrator {
             previousSessions,
             [],
             relatedEntities,
-            displayName
+            displayName,
+            mem0Memories
           )
 
           return ok({
@@ -189,9 +214,9 @@ export class MemoryOrchestrator {
         logger.debug('L2 retrieval disabled (ENABLE_L2_RETRIEVAL=false)')
       }
 
-      // STAGE 2: Semantic search in L4 (and optionally L3)
+      // STAGE 2: Semantic search in L4 (skip if L5 is primary)
       let semanticResults: MemoryRetrievalResult['semanticResults'] = undefined
-      if (queryEmbedding) {
+      if (queryEmbedding && !this.config.enableL5Memory) {
         const l4Result = await this.l4.search(
           queryEmbedding,
           {
@@ -226,7 +251,8 @@ export class MemoryOrchestrator {
             previousSessions,
             l4Result.value,
             relatedEntities,
-            displayName
+            displayName,
+            mem0Memories
           )
 
           return ok({
@@ -239,11 +265,13 @@ export class MemoryOrchestrator {
         }
       }
 
-      // No context found - return empty context
-      logger.debug('No context found in any tier')
+      // No context found in L2/L4 - return context with L5 memories if available
+      logger.debug('No context found in L2/L4, returning with L5 memories if available')
 
-      // Still query L3 for related entities even without messages
-      const relatedEntities = await this.queryL3Entities(userId, ctx)
+      // Still query L3 for related entities even without messages (skip if L5 is primary)
+      const relatedEntities = this.config.enableL5Memory
+        ? undefined
+        : await this.queryL3Entities(userId, ctx)
 
       const context = this.assembleContext(
         [],
@@ -252,7 +280,8 @@ export class MemoryOrchestrator {
         previousSessions,
         [],
         relatedEntities,
-        displayName
+        displayName,
+        mem0Memories
       )
 
       return ok({
@@ -353,7 +382,8 @@ export class MemoryOrchestrator {
     previousSessions: import('@pippa/types').SessionSummary[],
     semanticMatches: import('@pippa/types').SemanticMatch[],
     relatedEntities?: Entity[],
-    displayName?: string
+    displayName?: string,
+    mem0Memories?: Mem0SearchResult[]
   ): AssembledContext {
     const context: AssembledContext = {
       messages,
@@ -364,12 +394,13 @@ export class MemoryOrchestrator {
       previousSessions,
       semanticMatches,
       relatedEntities,
+      mem0Memories,
     }
 
     // Log context size in KB
     const sizeBytes = Buffer.byteLength(JSON.stringify(context), 'utf8')
     const sizeKB = (sizeBytes / 1024).toFixed(2)
-    getLogger().info({ sizeKB, messageCount: messages.length }, 'Context assembled')
+    getLogger().info({ sizeKB, messageCount: messages.length, mem0Count: mem0Memories?.length ?? 0 }, 'Context assembled')
 
     return context
   }
@@ -435,6 +466,100 @@ export class MemoryOrchestrator {
       logger.warn({ error }, 'L3 query failed, continuing without entities')
       return undefined
     }
+  }
+
+  /**
+   * Query L5 Mem0 for user's memories
+   */
+  private async queryL5Memories(
+    userId: string,
+    query: string,
+    ctx: TraceContext
+  ): Promise<Mem0SearchResult[] | undefined> {
+    if (!this.config.enableL5Memory || !this.l5) {
+      return undefined
+    }
+
+    const logger = getLogger().child({ userId, requestId: ctx.requestId })
+
+    try {
+      const result = await this.l5.searchMemory(query, {
+        userId,
+        limit: this.config.l5MemoryLimit,
+      }, ctx)
+
+      if (result.ok && result.value.length > 0) {
+        pipelineMetrics.memoryCacheHits.add(1, { tier: 'L5' })
+        logger.debug({ count: result.value.length }, 'L5 Mem0 memories found')
+        return result.value
+      }
+
+      return undefined
+    } catch (error) {
+      logger.warn({ error }, 'L5 Mem0 query failed, continuing without memories')
+      return undefined
+    }
+  }
+
+  /**
+   * Store messages to L5 Mem0 for fact extraction
+   * Call this in postflight after response is generated.
+   */
+  async storeToMem0(
+    userMessage: Message,
+    assistantMessage: Message,
+    ctx: TraceContext
+  ): Promise<Result<void, MemoryError>> {
+    if (!this.config.enableL5Memory || !this.l5) {
+      return ok(undefined)
+    }
+
+    return withSpan('MemoryOrchestrator.storeToMem0', async () => {
+      const logger = getLogger().child({
+        userId: userMessage.userId,
+        conversationId: userMessage.conversationId,
+        requestId: ctx.requestId,
+      })
+
+      try {
+        const result = await this.l5!.addMemory(
+          [
+            { role: 'user', content: userMessage.content },
+            { role: 'assistant', content: assistantMessage.content },
+          ],
+          {
+            userId: userMessage.userId,
+            runId: userMessage.conversationId,
+            // Mem0 always infers/extracts facts from messages
+          },
+          ctx
+        )
+
+        if (!result.ok) {
+          logger.warn({ error: result.error }, 'Failed to store to Mem0')
+          return err({
+            kind: 'PersistError',
+            message: 'Failed to store to Mem0',
+            context: { userId: userMessage.userId },
+            cause: result.error,
+          })
+        }
+
+        logger.debug(
+          { memoryCount: result.value.memoryIds.length, resultCount: result.value.results.length },
+          'Stored messages to Mem0'
+        )
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Mem0 storage failed')
+        return err({
+          kind: 'PersistError',
+          message: 'Mem0 storage failed',
+          context: { userId: userMessage.userId },
+          cause: error,
+        })
+      }
+    })
   }
 
   /**
