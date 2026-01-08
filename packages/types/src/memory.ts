@@ -914,3 +914,180 @@ export interface L3RetrievalResult {
   /** Approximate token count */
   tokenCount: number
 }
+
+// ============================================================================
+// L5 Mem0 Types - Primary Memory System
+// ============================================================================
+
+/**
+ * Message format for adding memories to Mem0
+ */
+export interface Mem0Message {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+/**
+ * Options for adding memories to Mem0
+ */
+export interface AddMemoryOptions {
+  /** User identifier (required) */
+  userId: string
+  /** Agent identifier (optional) */
+  agentId?: string
+  /** Run/session identifier (optional) */
+  runId?: string
+  /** Additional metadata to store */
+  metadata?: Record<string, unknown>
+  // Note: Mem0 API always infers - no 'infer' option needed
+}
+
+/**
+ * Single result from adding a memory (raw API response item)
+ */
+export interface Mem0AddResult {
+  /** Memory ID */
+  id: string
+  /** Memory content */
+  memory: string
+  /** Event type (ADD, UPDATE, DELETE) */
+  event: 'ADD' | 'UPDATE' | 'DELETE'
+  /** Optional metadata */
+  metadata?: Record<string, unknown>
+}
+
+/**
+ * Raw response from POST /memories (direct from mem0 library)
+ */
+export interface Mem0AddRawResponse {
+  /** Array of memory results */
+  results: Mem0AddResult[]
+  /** Optional relations (only if Neo4j configured) */
+  relations?: unknown[]
+}
+
+/**
+ * Normalized response from adding memories (our interface)
+ */
+export interface AddMemoryResponse {
+  /** IDs of created/updated memories */
+  memoryIds: string[]
+  /** Results with full details */
+  results: Mem0AddResult[]
+}
+
+/**
+ * Options for searching Mem0 memories
+ */
+export interface SearchMemoryOptions {
+  /** User identifier (required) */
+  userId: string
+  /** Agent identifier (optional) */
+  agentId?: string
+  /** Run/session identifier (optional) */
+  runId?: string
+  /** Filter by metadata fields */
+  filters?: Record<string, unknown>
+  /** Maximum results to return */
+  limit?: number
+  /** Minimum similarity score threshold (0-1) */
+  threshold?: number
+}
+
+/**
+ * A memory from Mem0
+ */
+export interface Mem0Memory {
+  /** Unique memory ID */
+  id: string
+  /** Memory content/text */
+  memory: string
+  /** Hash of the memory content */
+  hash: string
+  /** Associated user ID */
+  userId: string
+  /** Associated agent ID (if any) */
+  agentId?: string
+  /** Associated run ID (if any) */
+  runId?: string
+  /** Additional metadata */
+  metadata: Record<string, unknown>
+  /** Creation timestamp */
+  createdAt: string
+  /** Last update timestamp */
+  updatedAt: string
+}
+
+/**
+ * Memory with similarity score from Mem0 search
+ */
+export interface Mem0SearchResult extends Mem0Memory {
+  /** Similarity score (0-1) */
+  score: number
+}
+
+/**
+ * Options for getting Mem0 memories
+ */
+export interface GetMemoriesOptions {
+  /** Agent identifier (optional) */
+  agentId?: string
+  /** Run/session identifier (optional) */
+  runId?: string
+}
+
+/**
+ * L5 Mem0 Store interface
+ *
+ * Primary memory system providing memory operations via Mem0 API.
+ * Mem0 handles fact extraction, deduplication, and semantic search.
+ */
+export interface IMem0Store {
+  /**
+   * Add memories from a conversation.
+   * Mem0 extracts and deduplicates memories automatically with infer=true.
+   */
+  addMemory(
+    messages: Mem0Message[],
+    options: AddMemoryOptions,
+    ctx: TraceContext
+  ): Promise<Result<AddMemoryResponse, StoreError>>
+
+  /**
+   * Semantic search for relevant memories.
+   */
+  searchMemory(
+    query: string,
+    options: SearchMemoryOptions,
+    ctx: TraceContext
+  ): Promise<Result<Mem0SearchResult[], StoreError>>
+
+  /**
+   * Update an existing memory.
+   */
+  updateMemory(
+    id: string,
+    text: string,
+    metadata: Record<string, unknown> | undefined,
+    ctx: TraceContext
+  ): Promise<Result<Mem0Memory, StoreError>>
+
+  /**
+   * Delete a memory by ID.
+   */
+  deleteMemory(id: string, ctx: TraceContext): Promise<Result<void, StoreError>>
+
+  /**
+   * Get all memories for a user.
+   */
+  getMemories(
+    userId: string,
+    options: GetMemoriesOptions | undefined,
+    ctx: TraceContext
+  ): Promise<Result<Mem0Memory[], StoreError>>
+
+  /**
+   * Get a single memory by ID.
+   */
+  getMemory(id: string, ctx: TraceContext): Promise<Result<Mem0Memory | null, StoreError>>
+}

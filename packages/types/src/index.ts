@@ -74,6 +74,17 @@ export type {
   ScoredL3Entity,
   L3RetrievalOptions,
   L3RetrievalResult,
+  // L5 Mem0 types (primary memory system)
+  Mem0Message,
+  AddMemoryOptions,
+  AddMemoryResponse,
+  Mem0AddResult,
+  Mem0AddRawResponse,
+  SearchMemoryOptions,
+  Mem0Memory,
+  Mem0SearchResult,
+  GetMemoriesOptions,
+  IMem0Store,
 } from './memory.js'
 
 // Crisis types
