@@ -1,7 +1,20 @@
 // Agent tools
 export { logMood, agentTools } from "./definitions.js";
 
-// Memory tools for Claude to interact with Neo4j knowledge graph
+// Mem0 tools (L5 - primary memory system)
+export {
+  searchMemories,
+  listMemories,
+  rememberThis,
+  forgetThis,
+  mem0Tools,
+  getMem0Tools,
+  setMem0ToolStore,
+  setMem0ToolTraceContext,
+  clearMem0ToolTraceContext,
+} from "./mem0Tools.js";
+
+// Legacy L3/L4 memory tools (kept for hybrid mode)
 export {
   recallMemory,
   searchEntities,
