@@ -22,6 +22,7 @@
     "@pippa/crisis": "workspace:*",
     "@pippa/db": "workspace:*",
     "@pippa/evaluation": "workspace:*",
+    "@pippa/mem0": "workspace:*",
     "@pippa/memory": "workspace:*",
     "@pippa/observability": "workspace:*",
     "@pippa/pipeline": "workspace:*",

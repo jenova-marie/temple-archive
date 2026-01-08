@@ -77,10 +77,18 @@ import {
   loadMemoryPromptConfig,
 } from "@pippa/memory";
 import {
+  createMem0Client,
+  Mem0Store,
+  InMemoryMem0Store,
+  checkMem0Health,
+} from "@pippa/mem0";
+import type { IMem0Store } from "@pippa/types";
+import {
   setMemoryToolProviders,
   setBootstrapOrchestrator,
   setSystemPromptRefreshFn,
   setClearConversationFn,
+  setMem0ToolStore,
   type MemoryToolAccessLevel,
 } from "@pippa/tools";
 import {
@@ -257,11 +265,39 @@ export function createContainer(options: ContainerConfig = {}): Container {
     sessionStore = new InMemorySessionStore();
   }
 
+  // L5 Mem0 Store - primary memory system when MEM0_API_URL is set
+  // Controlled by ENABLE_L5_MEMORY env var (default: true when MEM0_API_URL is set)
+  let mem0Store: IMem0Store | undefined;
+  const l5MemoryEnabled = process.env.ENABLE_L5_MEMORY === "true" && !!process.env.MEM0_API_URL;
+
+  if (l5MemoryEnabled && !useStubs) {
+    logger.info({ url: process.env.MEM0_API_URL }, "Using Mem0Store (L5 primary memory)");
+    const mem0Client = createMem0Client({ url: process.env.MEM0_API_URL });
+    mem0Store = new Mem0Store(mem0Client);
+  } else if (l5MemoryEnabled && useStubs) {
+    logger.info("Using InMemoryMem0Store (L5 stub)");
+    mem0Store = new InMemoryMem0Store();
+  } else if (process.env.ENABLE_L5_MEMORY === "true" && !process.env.MEM0_API_URL) {
+    logger.warn("ENABLE_L5_MEMORY=true but MEM0_API_URL not set - L5 disabled");
+  } else {
+    logger.info("L5 Mem0 memory disabled (ENABLE_L5_MEMORY=false or not set)");
+  }
+
+  // Set up Mem0 tools if L5 is enabled
+  if (mem0Store) {
+    setMem0ToolStore(mem0Store);
+    logger.info("Mem0 tools enabled");
+  }
+
   // Create memory orchestrator
-  // ENABLE_L3_QUERIES controls Neo4j entity lookups during retrieval (default: true)
-  const l3QueriesEnabled = process.env.ENABLE_L3_QUERIES !== "false";
+  // ENABLE_L3_QUERIES controls Neo4j entity lookups during retrieval (default: true when L5 disabled)
+  // When L5 is enabled, L3 queries are disabled by default
+  const l3QueriesEnabled = l5MemoryEnabled
+    ? process.env.ENABLE_L3_QUERIES === "true"
+    : process.env.ENABLE_L3_QUERIES !== "false";
+
   if (!l3QueriesEnabled) {
-    logger.info("L3 Neo4j queries disabled (ENABLE_L3_QUERIES=false)");
+    logger.info("L3 Neo4j queries disabled");
   }
 
   const memory = new MemoryOrchestrator(
@@ -273,7 +309,10 @@ export function createContainer(options: ContainerConfig = {}): Container {
       l2MessageLimit: pipelineConfig.memory.l2MessageLimit,
       semanticSearchDays: pipelineConfig.memory.semanticSearchDays,
       enableL3Queries: l3QueriesEnabled,
+      enableL5Memory: l5MemoryEnabled,
+      l5MemoryLimit: parseInt(process.env.L5_MEMORY_LIMIT || "10", 10),
     },
+    mem0Store,
   );
 
   // Create crisis detection components
@@ -467,10 +506,12 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
   // Create entity extractor for knowledge graph
   // Controlled by ENABLE_ENTITY_EXTRACTION master switch and ENTITY_EXTRACTION_MODE for fine-tuning
-  const entityExtractionEnabled =
-    process.env.ENABLE_ENTITY_EXTRACTION !== "false";
+  // When L5 (Mem0) is enabled, entity extraction is disabled by default (Mem0 handles fact extraction)
+  const entityExtractionEnabled = l5MemoryEnabled
+    ? process.env.ENABLE_ENTITY_EXTRACTION === "true"
+    : process.env.ENABLE_ENTITY_EXTRACTION !== "false";
   let entityExtractor: EntityExtractor | undefined;
-  // If master switch is off, treat as mode=none
+  // If master switch is off or L5 handles extraction, treat as mode=none
   const extractionMode = entityExtractionEnabled
     ? ((process.env.ENTITY_EXTRACTION_MODE as ExtractionMode) || "all")
     : "none";
@@ -971,6 +1012,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     evaluator,
     embedding,
     l4Enabled: !!qdrantVectorStore,
+    l5MemoryEnabled,
     preflightEmbeddingsEnabled,
     postflightEmbeddingsEnabled,
     entityExtractor,
@@ -1121,6 +1163,20 @@ export function createContainer(options: ContainerConfig = {}): Container {
       );
     } else {
       logger.info("Skipping Qdrant init (using stub or not configured)");
+    }
+
+    // Check L5 Mem0 health if enabled
+    if (l5MemoryEnabled && mem0Store) {
+      logger.info("Checking Mem0 (L5) health...");
+      initTasks.push(
+        checkMem0Health().then((healthy) => {
+          if (healthy) {
+            logger.info("Mem0 (L5) health check passed");
+          } else {
+            logger.warn("Mem0 (L5) health check failed - L5 may not work correctly");
+          }
+        }),
+      );
     }
 
     // Fetch base identity from database
