@@ -21,9 +21,20 @@ import { getLogger } from "@pippa/observability";
 import {
   agentTools,
   getMemoryTools,
+  getMem0Tools,
   setMemoryToolTraceContext,
   clearMemoryToolTraceContext,
+  setMem0ToolTraceContext,
+  clearMem0ToolTraceContext,
 } from "@pippa/tools";
+
+/** Default model for agent processing - can be overridden via AGENT_MODEL env var */
+const DEFAULT_AGENT_MODEL = "claude-sonnet-4-20250514";
+
+/** Get the configured agent model (hot-reloadable via HOT_CONFIG) */
+function getAgentModel(): string {
+  return process.env.AGENT_MODEL || DEFAULT_AGENT_MODEL;
+}
 
 /**
  * Chat request body schema - matches existing recoverysky-api format
@@ -270,7 +281,7 @@ export function createChatRouter({
         if (emergencyResult.ok && emergencyResult.value.prependMessage) {
           // Stream emergency response using Vercel AI SDK
           const emergencyStream = streamText({
-            model: anthropic("claude-sonnet-4-20250514"),
+            model: anthropic(getAgentModel()),
             system:
               "You are Pippa. The user may be in crisis. Respond with care and compassion.",
             messages: [{ role: "user", content: lastUserMessage }],
@@ -306,23 +317,37 @@ export function createChatRouter({
       // Build tools object from enabled tool categories
       const deps = pipeline.getDeps();
       const memoryToolAccess = deps.memoryToolAccess || "off";
+      const l5MemoryEnabled = deps.l5MemoryEnabled || false;
       const toolsEnabled = process.env.ENABLE_TOOLS !== "false";
 
       // Set trace context for memory tools before streaming
-      if (memoryToolAccess !== "off") {
+      // If L5 is enabled, use Mem0 tools; otherwise use L3/L4 memory tools
+      if (l5MemoryEnabled) {
+        setMem0ToolTraceContext(traceContext);
+      } else if (memoryToolAccess !== "off") {
         setMemoryToolTraceContext(traceContext);
       }
 
+      // Build tools: L5 Mem0 tools take precedence over L3/L4 tools
+      const memoryTools = l5MemoryEnabled
+        ? getMem0Tools()
+        : memoryToolAccess !== "off"
+          ? getMemoryTools(memoryToolAccess)
+          : {};
+
       const tools = {
         ...(toolsEnabled ? agentTools : {}),
-        ...(memoryToolAccess !== "off" ? getMemoryTools(memoryToolAccess) : {}),
+        ...memoryTools,
       };
 
       // Track preflight duration for metrics
       const preflightDuration = Date.now() - startTime;
+      const agentModel = getAgentModel();
+
+      logger.info({ model: agentModel, preflightDuration }, "Starting agent stream");
 
       const result = streamText({
-        model: anthropic("claude-sonnet-4-20250514"),
+        model: anthropic(agentModel),
         system: systemPrompt,
         messages,
         tools,
@@ -425,7 +450,9 @@ export function createChatRouter({
         })
         .finally(() => {
           // Clean up memory tool trace context
-          if (memoryToolAccess !== "off") {
+          if (l5MemoryEnabled) {
+            clearMem0ToolTraceContext();
+          } else if (memoryToolAccess !== "off") {
             clearMemoryToolTraceContext();
           }
         });
