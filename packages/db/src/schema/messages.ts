@@ -1,12 +1,11 @@
 /**
  * Messages table schema
  *
- * Stores all messages in conversations with optional embeddings
- * for semantic search via pgvector.
+ * Stores all messages in conversations. Vector embeddings are stored
+ * separately in Qdrant (L4) for semantic search.
  */
 
 import { pgTable, text, timestamp, jsonb, index, foreignKey } from 'drizzle-orm/pg-core'
-import { vector } from 'drizzle-orm/pg-core'
 import { conversations } from './conversations.js'
 import { users } from './users.js'
 
@@ -18,7 +17,6 @@ export const messages = pgTable(
     userId: text('user_id').notNull(),
     role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
     content: text('content').notNull(),
-    embedding: vector('embedding', { dimensions: 1536 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     metadata: jsonb('metadata').default({}),
   },

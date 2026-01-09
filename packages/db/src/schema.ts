@@ -21,8 +21,8 @@ import {
   uuid,
   real,
   varchar,
+  vector,
 } from 'drizzle-orm/pg-core'
-import { vector } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 // ============================================================================
@@ -76,7 +76,6 @@ export const messages = pgTable(
     userId: text('user_id').notNull(),
     role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
     content: text('content').notNull(),
-    embedding: vector('embedding', { dimensions: 1536 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     metadata: jsonb('metadata').default({}),
   },
