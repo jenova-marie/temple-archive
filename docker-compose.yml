@@ -76,7 +76,7 @@ services:
 
       # RecoverySky API
       - MEETING_API_URL
-      - MEETING_API_TOKEN
+
     # healthcheck:
     #   test:
     #     [
