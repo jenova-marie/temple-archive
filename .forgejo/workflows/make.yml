@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 env:
-  ENV: "prod"
-  AWS_REGION: us-east-1
+  ENV: "cmd"
+  AWS_REGION: us-east-2
 
 jobs:
   docker-build-and-push:
