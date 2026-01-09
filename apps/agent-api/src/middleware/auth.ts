@@ -316,11 +316,11 @@ function createBypassAuthMiddleware() {
 
   const createDevUser = (req: Request): AuthenticatedUser => {
     // Allow X-User-Id header to override default user ID for CLI/testing
-    const userId = (req.headers["x-user-id"] as string) || "dev-user";
+    const userId = (req.headers["x-user-id"] as string) || "jenova";
     return {
       id: userId,
-      email: "dev@pippa.app",
-      name: "Development User",
+      email: "jenova-marie@proton.me",
+      name: "Jenova",
       roles: ["admin"],
       claims: { sub: userId } as ZitadelClaims,
     };

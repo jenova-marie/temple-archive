@@ -59,6 +59,58 @@ services:
       # L4: Qdrant (on bad-bitch-net)
       - QDRANT_URL=http://qdrant.rso
       - QDRANT_API_KEY
+      - QDRANT_COLLECTION_NAME
+      - QDRANT_SEARCH_MODE
+
+      # L5: Mem0 (primary memory when enabled)
+      - ENABLE_L5_MEMORY
+      - MEM0_API_URL
+      - L5_MEMORY_LIMIT
+
+      # Memory tier feature flags
+      - ENABLE_L2_RETRIEVAL
+      - ENABLE_L3_QUERIES
+      - ENABLE_ENTITY_EXTRACTION
+      - ENABLE_PREFLIGHT_EMBEDDINGS
+      - ENABLE_POSTFLIGHT_EMBEDDINGS
+      - EMBEDDING_BATCH_ENABLED
+      - USE_L3_EXTRACTION
+      - USE_L3_RETRIEVAL
+
+      # Memory tools and prompts
+      - ENABLE_TOOLS
+      - MEMORY_PROMPT_ENABLED
+      - MEMORY_PROMPT_RECENT_MESSAGES
+      - MEMORY_PROMPT_MAX_TTL_MINUTES
+      - MEMORY_REFLECTOR_ENABLED
+
+      # Query preprocessing
+      - QUERY_PREPROCESSING_MODE
+      - QUERY_PREPROCESSING_THRESHOLD
+
+      # Entity extraction config
+      - ENTITY_EXTRACTION_MODEL
+      - ENTITY_EXTRACTION_TYPES
+      - ENTITY_MIN_IMPORTANCE
+      - ENTITY_INFER_RELATIONSHIPS
+
+      # Context compaction
+      - COMPACTION_ENABLED
+      - COMPACTION_THRESHOLD
+      - COMPACTION_BATCH_SIZE
+      - COMPACTION_MODEL
+      - COMPACTION_MAX_TOKENS
+      - COMPACTION_TIMEOUT_MS
+
+      # Safety and evaluation
+      - ENABLE_CRISIS_DETECTION
+      - ENABLE_DEEP_CRISIS_EVAL
+      - ENABLE_SAFETY_VALIDATION
+      - ENABLE_RESPONSE_EVALUATION
+
+      # Runtime config
+      - HOT_CONFIG
+      - AGENT_MODEL
 
       # Observability
       - OTEL_EXPORTER_OTLP_ENDPOINT
