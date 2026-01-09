@@ -159,13 +159,7 @@ describe("PostgresSessionStore", () => {
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
-    it("stores message with embedding", async () => {
-      const embedding = [0.1, 0.2, 0.3];
-
-      const result = await store.storeMessage(message, embedding, ctx);
-
-      expect(result.ok).toBe(true);
-    });
+    // Note: "stores message with embedding" test removed - embeddings now stored in Qdrant L4 only
 
     it("returns error on database failure", async () => {
       mockDb.onConflictDoNothing.mockRejectedValue(new Error("Insert failed"));
@@ -362,54 +356,5 @@ describe("PostgresSessionStore", () => {
     });
   });
 
-  describe("semanticSearch", () => {
-    it("returns empty array when no matches found", async () => {
-      mockDb.execute.mockResolvedValue({ rows: [] });
-
-      const result = await store.semanticSearch("conv-1", [0.1, 0.2], {}, ctx);
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toHaveLength(0);
-      }
-    });
-
-    it("returns matches with similarity scores", async () => {
-      const now = new Date();
-      mockDb.execute.mockResolvedValue({
-        rows: [
-          {
-            message_id: "msg-1",
-            conversation_id: "conv-1",
-            user_id: "user-1",
-            role: "user",
-            content: "Similar message",
-            created_at: now,
-            metadata: {},
-            similarity: 0.95,
-          },
-        ],
-      });
-
-      const result = await store.semanticSearch("conv-1", [0.1, 0.2], {}, ctx);
-
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toHaveLength(1);
-        expect(result.value[0].similarity).toBe(0.95);
-        expect(result.value[0].content).toBe("Similar message");
-      }
-    });
-
-    it("returns error on database failure", async () => {
-      mockDb.execute.mockRejectedValue(new Error("Query failed"));
-
-      const result = await store.semanticSearch("conv-1", [0.1, 0.2], {}, ctx);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.kind).toBe("ConnectionError");
-      }
-    });
-  });
+  // Note: semanticSearch tests removed - vector search now handled by Qdrant (L4)
 });

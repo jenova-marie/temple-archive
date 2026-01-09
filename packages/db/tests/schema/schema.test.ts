@@ -157,10 +157,7 @@ describe("database schemas", () => {
       expect(tableColumns).toContain("content");
     });
 
-    it("has embedding field for vector search", () => {
-      const tableColumns = Object.keys(messages);
-      expect(tableColumns).toContain("embedding");
-    });
+    // Note: embedding field removed - vectors stored in Qdrant (L4)
 
     it("exports DbMessage type", () => {
       const _msg: DbMessage = {
@@ -169,7 +166,6 @@ describe("database schemas", () => {
         userId: "user-1",
         role: "user",
         content: "Hello",
-        embedding: null,
         createdAt: new Date(),
         metadata: {},
       };
