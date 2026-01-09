@@ -62,6 +62,12 @@ pnpm --filter @pippa/db db:migrate:local
 pnpm --filter @pippa/db db:studio:local
 ```
 
+**Important:** The db package has two schema locations that must stay in sync:
+- `packages/db/src/schema.ts` - Consolidated file used by Drizzle Kit for migrations
+- `packages/db/src/schema/*.ts` - Individual files used by runtime code
+
+When modifying table schemas, update **both** locations or migrations won't detect changes.
+
 ## Architecture Overview
 
 This is a **pnpm monorepo** for a personal AI companion. The system uses a **multi-tier memory architecture** and **pipeline-based message processing**.
