@@ -314,7 +314,8 @@ export class MemoryOrchestrator {
       })
 
       // L2: Persist to PostgreSQL (authoritative store)
-      const l2Result = await this.l2.storeMessage(message, embedding, ctx)
+      // Note: Pass null for embedding - vectors are stored in Qdrant (L4) only
+      const l2Result = await this.l2.storeMessage(message, null, ctx)
       if (!l2Result.ok) {
         logger.error({ error: l2Result.error }, 'L2 write failed')
         return err({
