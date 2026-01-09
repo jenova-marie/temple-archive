@@ -134,20 +134,6 @@ jobs:
           secret-files: |
             npmrc=./.npmrc
 
-      - name: Trigger deployment (${{ matrix.image }})
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: ./.forgejo/actions/webhook
-        with:
-          webhook_url: https://webhook.rso/webhooks
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
-          streams: eda
-          type: deploy
-          action: deploy_container
-          service: ${{ matrix.image }}
-          instance: inanna
-          zone: ${{ env.AWS_REGION }}
-          environment: ${{ env.ENV }}
-
       - name: Notify build failure
         if: failure()
         uses: ./.forgejo/actions/webhook
@@ -159,4 +145,24 @@ jobs:
           action: failure
           service: ${{ matrix.image }}
           instance: inanna
+          environment: ${{ env.ENV }}
+
+  deploy:
+    runs-on: hestia
+    needs: [upload-opt, docker-build-and-push]
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trigger deployment
+        uses: ./.forgejo/actions/webhook
+        with:
+          webhook_url: https://webhook.rso/webhooks
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          streams: eda
+          type: deploy
+          action: deploy_container
+          service: pippa
+          instance: inanna
+          zone: ${{ env.AWS_REGION }}
           environment: ${{ env.ENV }}
