@@ -2,12 +2,14 @@
 
 Pippa is a personal AI companion - forked from RecoverySky Agent but customized as Jenova's private AI friend. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
 
-**Last Updated:** 2025/12/20
+**Last Updated:** 2026/01/08
 
 ## Features
 
 - **Vercel AI SDK Compatible**: Native support for `useChat` hooks with UIMessage format
-- **Multi-Tier Memory System**: L1 (Redis) + L2 (PostgreSQL) + L3 (Neo4j) + L4 (Qdrant) for contextual conversations
+- **Multi-Tier Memory System**: L1 (Redis) + L2 (PostgreSQL) + L3 (Neo4j) + L4 (Qdrant) + **L5 (Mem0)** for contextual conversations
+- **L5 Mem0 Memory**: Intelligent fact extraction, deduplication, and semantic retrieval as primary memory system
+- **Phase-Shifted Memory Prompts**: Pre-generated memory context from previous requests, injected into current request
 - **Active Knowledge Graph**: Neo4j-powered entity extraction with memory tools Claude can use during conversations
 - **Real-Time Crisis Detection**: Pre-flight keyword matching (<10ms) + LLM deep evaluation with webhook alerting
 - **Safety Validation**: PII detection, medical advice filtering, enabling language detection
@@ -17,7 +19,8 @@ Pippa is a personal AI companion - forked from RecoverySky Agent but customized 
 - **Meeting Discovery**: Integration with RecoverySky Meeting API for finding AA/NA meetings
 - **Literature Search**: Semantic search through recovery literature (AA, NA, CMA, Refuge Recovery)
 - **Context Compaction**: Automatic summarization of older messages to manage context length
-- **CLI Tool**: Interactive command-line interface with streaming support
+- **CLI Tool**: Interactive command-line interface with streaming support and memory diagnostics
+- **CI/CD Pipeline**: Forgejo Actions with Docker build and ECR deployment
 
 ## Quick Start
 
@@ -136,21 +139,21 @@ curl http://localhost:3333/health/metrics
 |          | NORMAL                   | Emergency      |      |
 |          v                          | Response       |      |
 |  +---------------+                  +----------------+      |
-|  | 2. Memory     |                                          |
-|  |   Retrieval   |   L1 -> L2 -> L3 -> L4                  |
+|  | 2. Memory     |   L5 (Mem0) OR L1 -> L2 -> L3 -> L4    |
+|  |   Retrieval   |   + Memory Prompts from Redis          |
 |  +-------+-------+                                          |
 |          |                                                  |
 |          v                                                  |
 |  +------------------+                                       |
-|  | 2.5 Memory       |   Build context from Neo4j           |
-|  |     Context      |   (if MEMORY_CONTEXT_MODE > 0)       |
+|  | 2.5 Memory       |   Build context from L5/Neo4j        |
+|  |     Context      |   + inject memory prompts            |
 |  +--------+---------+                                       |
 |           |                                                 |
 |           v                                                 |
 |  +---------------+                                          |
 |  | 3. Agent      |   Claude (via Vercel AI SDK)            |
 |  |   Processing  |   Tools: findMeetings, searchLiterature,|
-|  |               |          recallMemory, saveNote, etc.   |
+|  |               |          Mem0 tools, memory tools, etc. |
 |  +-------+-------+                                          |
 |          |                                                  |
 |          +---------------------+                            |
@@ -164,7 +167,9 @@ curl http://localhost:3333/health/metrics
 |          v                     |                            |
 |  +---------------+             |                            |
 |  | 6. Persist    |<------------+                            |
-|  |   + Extract   |   Entity extraction -> Neo4j            |
+|  |   + Extract   |   L5: Mem0 storage (infer=true)         |
+|  |               |   L3: Entity extraction -> Neo4j        |
+|  |               |   Generate memory prompts -> Redis      |
 |  +---------------+                                          |
 +------------------------------------------------------------+
      |
@@ -179,17 +184,22 @@ pippa/
 ├── packages/
 │   ├── types/           # Shared TypeScript interfaces
 │   ├── observability/   # Logging, tracing, metrics (wonder-logger)
+│   ├── config/          # YAML config loader with env var interpolation
 │   ├── db/              # Drizzle ORM, PostgreSQL session store
-│   ├── memory/          # Multi-tier memory orchestration
+│   ├── memory/          # Multi-tier memory orchestration (L1-L4)
+│   ├── mem0/            # L5 Mem0 integration
 │   ├── crisis/          # Crisis detection patterns & handlers
 │   ├── safety/          # Response safety validation
 │   ├── tools/           # Vercel AI SDK tool definitions
 │   ├── agent/           # System prompt builder, agent provider
 │   ├── evaluation/      # Response quality evaluation
 │   ├── pipeline/        # Main orchestrator
-│   └── cli/             # Command-line interface
+│   ├── cli/             # Command-line interface
+│   └── shared/          # Shared utilities
 ├── apps/
-│   └── api/             # Express API server
+│   ├── agent-api/       # Express API server (main)
+│   ├── web-api/         # Voice transcription API
+│   └── web-app/         # React frontend
 ├── scripts/
 │   └── init-db.sql      # PostgreSQL schema
 └── docker-compose.yml   # Local development services
@@ -203,6 +213,9 @@ pippa/
 | L2 | PostgreSQL + Drizzle | Session history, profiles | 10-50ms | PostgresSessionStore ✅ |
 | L3 | Neo4j | Entity knowledge graph | 20-100ms | Neo4jKnowledgeStore ✅ |
 | L4 | Qdrant | Semantic similarity | 5-20ms | QdrantVectorStore ✅ |
+| **L5** | **Mem0** | **Primary memory - fact extraction & retrieval** | **10-50ms** | **Mem0Store ✅** |
+
+When L5 is enabled (`ENABLE_L5_MEMORY=true`), it becomes the primary memory system. L3/L4 entity extraction and embeddings are disabled by default but can be force-enabled for hybrid use.
 
 ### Redis L1 Features
 - Session state caching with configurable TTL (4hr default)
@@ -225,6 +238,45 @@ pippa/
 - **Literature search** - semantic search through recovery literature collection
 - Automatic collection creation with HNSW indexing
 - Batch indexing for bulk operations
+
+### Mem0 L5 Features (Primary Memory)
+- **Automatic fact extraction** from conversations using Mem0's inference engine
+- **Deduplication and conflict resolution** - similar memories are merged automatically
+- **Semantic search** for user memories with relevance scoring
+- Memories injected into system prompt for contextual awareness
+- Mem0 tools available for agent use (searchMemories, addMemory, etc.)
+
+#### L5 Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_L5_MEMORY` | `false` | Master switch for Mem0 L5 |
+| `MEM0_API_URL` | - | Mem0 FastAPI service URL (e.g., `http://localhost:8000`) |
+| `L5_MEMORY_LIMIT` | `10` | Max memories to retrieve per request |
+
+When L5 is enabled, these features are auto-disabled (set to `true` to force enable):
+- `ENABLE_L3_QUERIES` - Neo4j entity lookups
+- `ENABLE_ENTITY_EXTRACTION` - LLM entity extraction to Neo4j
+- `ENABLE_PREFLIGHT_EMBEDDINGS` - Query embeddings for L4 semantic search
+- `ENABLE_POSTFLIGHT_EMBEDDINGS` - Message embeddings for L4 storage
+
+## Phase-Shifted Memory Prompts
+
+Memory prompts are pre-generated during postflight and stored in Redis L1 with per-key TTL. On the next request, these prompts are retrieved during preflight and injected into the system prompt.
+
+### How It Works
+1. **Postflight**: After a response, the `MemoryPromptGenerator` analyzes recent messages
+2. **Generation**: Claude Haiku generates a narrativized memory context with topic-based TTL
+3. **Storage**: Prompts stored in Redis with individual TTLs (high-relevance topics last longer)
+4. **Preflight**: On next request, all non-expired prompts are retrieved and injected
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MEMORY_PROMPT_ENABLED` | `false` | Enable phase-shifted memory prompts |
+| `MEMORY_PROMPT_RECENT_MESSAGES` | `1` | Number of recent messages to analyze |
+| `MEMORY_PROMPT_MAX_TTL_MINUTES` | `60` | Maximum TTL for memory prompts |
 
 ## Literature Search
 
@@ -275,22 +327,26 @@ Automatic summarization of older messages to manage context window size:
 
 ## Dynamic System Prompts
 
-The agent's base identity can be loaded from the database instead of being hardcoded:
+System prompts can be loaded from disk or database with priority ordering:
+
+1. **Disk first**: Check `apps/agent-api/src/prompts/{name}.md`
+2. **Database fallback**: Query `system_prompts` table for active prompt
+3. **Hardcoded default**: Use embedded fallback if neither found
 
 ```sql
--- Insert a custom base identity prompt
+-- Insert a custom base identity prompt (database option)
 INSERT INTO system_prompts (id, name, content, active, created, updated)
 VALUES (
   'prompt_001',
   'pippa',
-  'You are Sky, a compassionate recovery companion...',
+  'You are Pippa, a compassionate AI companion...',
   true,
   NOW(),
   NOW()
 );
 ```
 
-On startup, the container fetches the active `pippa` prompt from the `system_prompts` table (via `@recoverysky-org/common`). If not found, falls back to the hardcoded default.
+For development, create markdown files in `apps/agent-api/src/prompts/` for faster iteration without database changes.
 
 ## Active Memory System
 
@@ -417,6 +473,17 @@ NEO4J_DATABASE_PER_USER=false # Enable database-per-user mode (Dozer/Enterprise)
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=              # Optional: for Qdrant Cloud
 
+# L5: Mem0
+ENABLE_L5_MEMORY=false       # Enable Mem0 as primary memory
+MEM0_API_URL=http://localhost:8000  # Mem0 FastAPI endpoint
+L5_MEMORY_LIMIT=10           # Max memories to retrieve
+
+# Feature Flags (auto-disabled when L5 enabled)
+ENABLE_L3_QUERIES=true       # Neo4j entity lookups
+ENABLE_ENTITY_EXTRACTION=true # LLM entity extraction
+ENABLE_PREFLIGHT_EMBEDDINGS=true  # Query embeddings for L4
+ENABLE_POSTFLIGHT_EMBEDDINGS=true # Message embeddings for L4
+
 # Observability
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=recoverysky-agent
@@ -452,6 +519,14 @@ COMPACTION_TIMEOUT_MS=15000  # Timeout for LLM call (ms)
 
 # User Caching
 USER_CACHE_TTL_MINUTES=60    # TTL for user/profile cache in Redis
+
+# Memory Prompts (phase-shifted memory)
+MEMORY_PROMPT_ENABLED=false  # Enable phase-shifted memory prompts
+MEMORY_PROMPT_RECENT_MESSAGES=1   # Messages to analyze per request
+MEMORY_PROMPT_MAX_TTL_MINUTES=60  # Maximum TTL for prompts
+
+# Agent Model
+AGENT_MODEL=claude-sonnet-4-20250514  # Model for agent processing
 ```
 
 ## Docker Services
@@ -516,16 +591,17 @@ The project maintains comprehensive unit test coverage using Vitest with mock-ba
 | @pippa/types | 33 | Result types, domain errors |
 | @pippa/observability | 48 | Logging, tracing, metrics |
 | @pippa/crisis | 126 | Detection patterns, handlers, evaluators |
-| @pippa/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator |
+| @pippa/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator, memory prompts |
+| @pippa/mem0 | ~30 | Mem0Store, client, transforms, InMemoryMem0Store |
 | @pippa/db | 20 | Schema, PostgresSessionStore |
 | @pippa/agent | 50 | VercelAIAgentProvider, prompt builder |
 | @pippa/safety | 13 | PII, medical, enabling detectors |
 | @pippa/evaluation | 14 | LLMEvaluator, scoring |
-| @pippa/tools | 37 | Recovery tools, meeting client, memory tools |
+| @pippa/tools | 37 | Recovery tools, meeting client, memory tools, Mem0 tools |
 | @pippa/cli | ~20 | Commands, chat, health |
-| **Total** | **470+** | |
+| **Total** | **500+** | |
 
-All tests use mocks for external dependencies (Redis, PostgreSQL, Neo4j, Qdrant, AI providers).
+All tests use mocks for external dependencies (Redis, PostgreSQL, Neo4j, Qdrant, Mem0, AI providers).
 
 ### Type Check
 
@@ -617,10 +693,33 @@ pnpm typecheck
 - [x] Context compaction for long conversations
 - [x] Fire-and-forget summarization via Haiku
 
-### Phase 11: Future Enhancements
-- [ ] CI/CD pipeline
+### Phase 11: L5 Mem0 Memory ✅
+- [x] @pippa/mem0 package with Mem0Store implementation
+- [x] Mem0 HTTP client with health checks
+- [x] InMemoryMem0Store for testing
+- [x] Integration with MemoryOrchestrator
+- [x] L5 memories injected into system prompt
+- [x] Mem0 tools for agent (searchMemories, addMemory)
+- [x] Auto-disable L3/L4 features when L5 enabled
+- [x] Postflight memory storage with inference
+
+### Phase 12: Phase-Shifted Memory Prompts ✅
+- [x] MemoryPromptStore with Redis + per-key TTL
+- [x] MemoryPromptGenerator with topic-based TTL assignment
+- [x] Integration into pipeline preflight/postflight
+- [x] Memory prompts section in system prompt builder
+- [x] CLI diagnostics for memory prompts
+
+### Phase 13: CI/CD & Infrastructure ✅
+- [x] Forgejo Actions workflow
+- [x] Docker build with multi-stage optimization
+- [x] ECR deployment workflow
+- [x] Configurable AGENT_MODEL env var
+
+### Phase 14: Future Enhancements
 - [ ] Load testing
 - [ ] API documentation (OpenAPI)
+- [ ] Hybrid L3/L4/L5 memory mode
 
 ## License
 

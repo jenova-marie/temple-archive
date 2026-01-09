@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last Updated:** 2025/12/20
+**Last Updated:** 2026/01/08
 
 ## About Pippa
 
@@ -22,7 +22,6 @@ pnpm build:all
 
 # Start dev server (uses tsx watch)
 pnpm dev
-
 
 # Run tests
 pnpm test
@@ -70,9 +69,10 @@ This is a **pnpm monorepo** for a personal AI companion. The system uses a **mul
 ### Package Dependency Graph
 
 ```
-apps/api
+apps/agent-api
     └── @pippa/pipeline
             ├── @pippa/memory ─── @pippa/db
+            ├── @pippa/mem0 (L5)
             ├── @pippa/crisis
             ├── @pippa/safety
             ├── @pippa/tools
@@ -80,6 +80,9 @@ apps/api
             └── @pippa/evaluation
                     └── @pippa/observability
                             └── @pippa/types
+
+apps/web-api (voice transcription API)
+apps/web-app (React frontend)
 ```
 
 ### Core Packages
@@ -88,8 +91,10 @@ apps/api
 |---------|---------|
 | `types` | Shared interfaces, Result type, domain errors |
 | `observability` | Logging (Pino), tracing (OpenTelemetry), metrics via wonder-logger |
+| `config` | YAML config loader with env var interpolation and Zod validation |
 | `db` | Drizzle ORM schema, PostgreSQL session store |
 | `memory` | Multi-tier memory orchestration (L1-L4), entity extraction, bootstrap system |
+| `mem0` | L5 Mem0 integration - fact extraction, deduplication, retrieval |
 | `crisis` | Keyword-based crisis detection (<10ms), deep LLM evaluation, webhook alerting |
 | `safety` | PII detection, medical advice filtering, enabling language detection |
 | `tools` | Vercel AI SDK tool definitions (findMeetings, memory tools, literature search) |
@@ -97,6 +102,7 @@ apps/api
 | `evaluation` | LLM-based response quality scoring |
 | `pipeline` | Main orchestrator coordinating all stages |
 | `cli` | Command-line interface for API interaction |
+| `shared` | Shared utilities |
 
 ### Pipeline Flow
 
@@ -124,7 +130,7 @@ All tiers have real implementations plus in-memory stubs for testing.
 
 ### Dependency Injection
 
-All external services are injected via `apps/api/src/container.ts`. Key environment variables:
+All external services are injected via `apps/agent-api/src/container.ts`. Key environment variables:
 
 - `REDIS_URL` → Real Redis L1 cache
 - `DATABASE_URL` → Real PostgreSQL L2 session store
@@ -177,7 +183,7 @@ All external dependencies use interfaces for testability:
 - `ISafetyValidator`, `IEvaluator`
 - `IContextStore`, `ISessionStore`, `IKnowledgeStore`, `IVectorStore`
 
-Swap implementations via `apps/api/src/container.ts`.
+Swap implementations via `apps/agent-api/src/container.ts`.
 
 ### Observability
 
@@ -254,8 +260,25 @@ const result = await repo.findActive('pippa')
 
 1. Create `packages/<name>/` with `package.json`, `tsconfig.json`, `src/index.ts`
 2. Add reference to root `tsconfig.json`
-3. Add workspace dependency: `pnpm --filter @pippa/<consumer> add @pippa/<name>`
-4. Export via `src/index.ts` and ensure `.js` extensions on local imports
+3. Add to `pnpm-workspace.yaml` if not already covered by `packages/*` glob
+4. Add workspace dependency: `pnpm --filter @pippa/<consumer> add @pippa/<name>`
+5. Export via `src/index.ts` and ensure `.js` extensions on local imports
+
+## Feature Flags
+
+Many features can be toggled via environment variables. When L5 is enabled, some L3/L4 features are auto-disabled:
+
+| Flag | Default | When L5 Enabled | Purpose |
+|------|---------|-----------------|---------|
+| `ENABLE_L5_MEMORY` | false | - | Master switch for Mem0 L5 |
+| `ENABLE_L3_QUERIES` | true | false | Neo4j entity lookups |
+| `ENABLE_ENTITY_EXTRACTION` | true | false | LLM entity extraction to Neo4j |
+| `ENABLE_PREFLIGHT_EMBEDDINGS` | true | false | Query embeddings for semantic search |
+| `ENABLE_POSTFLIGHT_EMBEDDINGS` | true | false | Message embeddings for L4 storage |
+| `ENABLE_CRISIS_DETECTION` | true | true | Keyword crisis detection |
+| `ENABLE_DEEP_CRISIS_EVAL` | true | true | LLM-based crisis analysis |
+| `ENABLE_SAFETY_VALIDATION` | true | true | PII/medical/enabling detection |
+| `ENABLE_RESPONSE_EVALUATION` | true | true | LLM response quality scoring |
 
 ## Iris MCP
 
