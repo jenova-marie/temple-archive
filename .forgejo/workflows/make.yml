@@ -14,9 +14,8 @@ env:
   AWS_REGION: us-east-2
 
 jobs:
-  docker-build-and-push:
+  upload-opt:
     runs-on: hestia
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +46,26 @@ jobs:
 
           # Cleanup
           eval $(ssh-agent -k)
+
+  docker-build-and-push:
+    runs-on: hestia
+    strategy:
+      matrix:
+        include:
+          - image: pippa-agent
+            target: agent-api
+            build-args: ""
+          - image: pippa-api
+            target: web-api
+            build-args: ""
+          - image: pippa-app
+            target: web-app
+            build-args: "AGENT_API_PORT=61664"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Check for build relevant file changes
         id: build_filter
@@ -88,96 +107,35 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # =========================================================================
-      # Agent API
-      # =========================================================================
-      - name: Extract metadata (agent-api)
+      - name: Extract metadata (${{ matrix.image }})
         if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-agent-api
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent
+          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.image }}
           tags: |
             type=raw,value=${{ env.ENV }}
             type=raw,value=latest
 
-      - name: Build and Push agent-api image
+      - name: Build and Push ${{ matrix.image }} image
         if: steps.build_filter.outputs.build_required == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          target: agent-api
+          target: ${{ matrix.target }}
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta-agent-api.outputs.tags }}
-          labels: ${{ steps.meta-agent-api.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build-args }}
+          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.image }}:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.image }}:cache,mode=max
           secret-files: |
             npmrc=./.npmrc
 
-      # =========================================================================
-      # Web API
-      # =========================================================================
-      - name: Extract metadata (web-api)
+      - name: Trigger deployment (${{ matrix.image }})
         if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-web-api
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-api
-          tags: |
-            type=raw,value=${{ env.ENV }}
-            type=raw,value=latest
-
-      - name: Build and Push web-api image
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          target: web-api
-          platforms: linux/arm64
-          push: true
-          tags: ${{ steps.meta-web-api.outputs.tags }}
-          labels: ${{ steps.meta-web-api.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-api:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-api:cache,mode=max
-          secret-files: |
-            npmrc=./.npmrc
-
-      # =========================================================================
-      # Web App (frontend)
-      # =========================================================================
-      - name: Extract metadata (web-app)
-        if: steps.build_filter.outputs.build_required == 'true'
-        id: meta-web-app
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-app
-          tags: |
-            type=raw,value=${{ env.ENV }}
-            type=raw,value=latest
-
-      - name: Build and Push web-app image
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          target: web-app
-          platforms: linux/arm64
-          push: true
-          tags: ${{ steps.meta-web-app.outputs.tags }}
-          labels: ${{ steps.meta-web-app.outputs.labels }}
-          build-args: |
-            AGENT_API_PORT=61664
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-app:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-app:cache,mode=max
-          secret-files: |
-            npmrc=./.npmrc
-
-      - name: Trigger image deployment (includes config deployment)
         uses: ./.forgejo/actions/webhook
         with:
           webhook_url: https://webhook.rso/webhooks
@@ -185,7 +143,7 @@ jobs:
           streams: eda
           type: deploy
           action: deploy_container
-          service: pippa
+          service: ${{ matrix.image }}
           instance: inanna
           zone: ${{ env.AWS_REGION }}
           environment: ${{ env.ENV }}
@@ -199,6 +157,6 @@ jobs:
           streams: ci
           type: build
           action: failure
-          service: webhook
+          service: ${{ matrix.image }}
           instance: inanna
           environment: ${{ env.ENV }}
