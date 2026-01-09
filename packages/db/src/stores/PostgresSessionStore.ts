@@ -10,6 +10,7 @@
 import type {
   ISessionStore,
   Message,
+  MessageTurn,
   UserProfile,
   SessionSummary,
   StoreError,
@@ -17,10 +18,11 @@ import type {
 } from '@pippa/types'
 import { ok, err, type Result } from '@pippa/types'
 import { getLogger, withSpan } from '@pippa/observability'
-import { eq, desc, asc, and, lte, gt } from 'drizzle-orm'
+import { eq, desc, asc, and, lte, gt, or } from 'drizzle-orm'
 import type { DatabaseClient } from '../client.js'
 import {
   messages,
+  messageTurns,
   userProfiles,
   sessionSummaries,
   conversations,
@@ -439,6 +441,135 @@ export class PostgresSessionStore implements ISessionStore {
           kind: 'ConnectionError',
           message: 'Failed to get messages around ID',
           context: { conversationId, messageId },
+          cause: error,
+        })
+      }
+    })
+  }
+
+  /**
+   * Store a message turn (links user/assistant message pair)
+   */
+  async storeTurn(
+    turn: MessageTurn,
+    ctx: TraceContext
+  ): Promise<Result<void, StoreError>> {
+    return withSpan('PostgresSessionStore.storeTurn', async () => {
+      const logger = getLogger().child({
+        turnId: turn.turnId,
+        conversationId: turn.conversationId,
+        requestId: ctx.requestId,
+      })
+
+      try {
+        await this.db.insert(messageTurns).values({
+          turnId: turn.turnId,
+          conversationId: turn.conversationId,
+          userMessageId: turn.userMessageId,
+          assistantMessageId: turn.assistantMessageId,
+          sequenceNumber: turn.sequenceNumber,
+          createdAt: new Date(turn.createdAt),
+        })
+
+        logger.debug({ sequenceNumber: turn.sequenceNumber }, 'Turn stored in L2')
+        return ok(undefined)
+      } catch (error) {
+        logger.error({ error }, 'Failed to store turn')
+        return err({
+          kind: 'ConnectionError',
+          message: 'Failed to store turn',
+          context: { turnId: turn.turnId },
+          cause: error,
+        })
+      }
+    })
+  }
+
+  /**
+   * Get a turn by ID
+   */
+  async getTurn(
+    turnId: string,
+    ctx: TraceContext
+  ): Promise<Result<MessageTurn | null, StoreError>> {
+    return withSpan('PostgresSessionStore.getTurn', async () => {
+      const logger = getLogger().child({ turnId, requestId: ctx.requestId })
+
+      try {
+        const rows = await this.db
+          .select()
+          .from(messageTurns)
+          .where(eq(messageTurns.turnId, turnId))
+          .limit(1)
+
+        if (rows.length === 0) {
+          return ok(null)
+        }
+
+        const row = rows[0]
+        logger.debug('Turn retrieved from L2')
+        return ok({
+          turnId: row.turnId,
+          conversationId: row.conversationId,
+          userMessageId: row.userMessageId,
+          assistantMessageId: row.assistantMessageId,
+          sequenceNumber: row.sequenceNumber,
+          createdAt: row.createdAt.getTime(),
+        })
+      } catch (error) {
+        logger.error({ error }, 'Failed to get turn')
+        return err({
+          kind: 'ConnectionError',
+          message: 'Failed to get turn',
+          context: { turnId },
+          cause: error,
+        })
+      }
+    })
+  }
+
+  /**
+   * Get turn containing a specific message (user or assistant)
+   */
+  async getTurnByMessageId(
+    messageId: string,
+    ctx: TraceContext
+  ): Promise<Result<MessageTurn | null, StoreError>> {
+    return withSpan('PostgresSessionStore.getTurnByMessageId', async () => {
+      const logger = getLogger().child({ messageId, requestId: ctx.requestId })
+
+      try {
+        const rows = await this.db
+          .select()
+          .from(messageTurns)
+          .where(
+            or(
+              eq(messageTurns.userMessageId, messageId),
+              eq(messageTurns.assistantMessageId, messageId)
+            )
+          )
+          .limit(1)
+
+        if (rows.length === 0) {
+          return ok(null)
+        }
+
+        const row = rows[0]
+        logger.debug('Turn found by message ID')
+        return ok({
+          turnId: row.turnId,
+          conversationId: row.conversationId,
+          userMessageId: row.userMessageId,
+          assistantMessageId: row.assistantMessageId,
+          sequenceNumber: row.sequenceNumber,
+          createdAt: row.createdAt.getTime(),
+        })
+      } catch (error) {
+        logger.error({ error }, 'Failed to get turn by message ID')
+        return err({
+          kind: 'ConnectionError',
+          message: 'Failed to get turn by message ID',
+          context: { messageId },
           cause: error,
         })
       }

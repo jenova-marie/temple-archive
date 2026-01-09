@@ -28,6 +28,7 @@ export type {
   SessionState,
   SessionSummary,
   SemanticMatch,
+  MessageTurn,
   StoreErrorKind,
   StoreError,
   IContextStore,

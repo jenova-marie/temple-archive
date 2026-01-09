@@ -22,6 +22,7 @@ interface SessionData {
 
 export class InMemoryContextStore implements IContextStore {
   private sessions: Map<string, SessionData> = new Map()
+  private counters: Map<string, number> = new Map()
   private readonly ttlMs: number
 
   constructor(options: { ttlMs?: number } = {}) {
@@ -192,10 +193,25 @@ export class InMemoryContextStore implements IContextStore {
   }
 
   /**
+   * Atomically increment a counter and return the new value
+   */
+  async incrementCounter(key: string, ctx: TraceContext): Promise<Result<number, StoreError>> {
+    return withSpan('InMemoryContextStore.incrementCounter', async () => {
+      const logger = getLogger().child({ key, requestId: ctx.requestId })
+      const current = this.counters.get(key) ?? 0
+      const newValue = current + 1
+      this.counters.set(key, newValue)
+      logger.debug({ newValue }, 'Counter incremented')
+      return ok(newValue)
+    })
+  }
+
+  /**
    * Clear all sessions (for testing)
    */
   clear(): void {
     this.sessions.clear()
+    this.counters.clear()
   }
 
   /**

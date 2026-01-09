@@ -126,6 +126,25 @@ export interface SemanticMatch {
   }
 }
 
+/**
+ * Links a user message with its assistant response (a conversational turn)
+ * Enables easy traversal of conversation history
+ */
+export interface MessageTurn {
+  /** Unique turn identifier */
+  turnId: string
+  /** Conversation this turn belongs to */
+  conversationId: string
+  /** User message ID */
+  userMessageId: string
+  /** Assistant response ID */
+  assistantMessageId: string
+  /** Sequential order within conversation (1, 2, 3...) */
+  sequenceNumber: number
+  /** When the turn was created */
+  createdAt: number
+}
+
 // ============================================================================
 // Provider Interfaces
 // ============================================================================
@@ -165,6 +184,8 @@ export interface IContextStore {
   getRecentMessages(sessionId: string, limit: number, ctx: TraceContext): Promise<Result<Message[], StoreError>>
   /** Store a message */
   storeMessage(message: Message, ctx: TraceContext): Promise<Result<void, StoreError>>
+  /** Atomically increment a counter and return new value */
+  incrementCounter(key: string, ctx: TraceContext): Promise<Result<number, StoreError>>
 }
 
 /**
@@ -184,6 +205,12 @@ export interface ISessionStore {
   getSessionSummaries(conversationId: string, limit: number, ctx: TraceContext): Promise<Result<SessionSummary[], StoreError>>
   /** Store session summary */
   storeSummary(summary: Omit<SessionSummary, 'summaryId' | 'createdAt'>, ctx: TraceContext): Promise<Result<string, StoreError>>
+  /** Store message turn (links user/assistant pair) */
+  storeTurn(turn: MessageTurn, ctx: TraceContext): Promise<Result<void, StoreError>>
+  /** Get turn by ID */
+  getTurn(turnId: string, ctx: TraceContext): Promise<Result<MessageTurn | null, StoreError>>
+  /** Get turn containing a specific message */
+  getTurnByMessageId(messageId: string, ctx: TraceContext): Promise<Result<MessageTurn | null, StoreError>>
 }
 
 // ============================================================================

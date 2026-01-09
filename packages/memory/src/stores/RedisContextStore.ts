@@ -338,4 +338,23 @@ export class RedisContextStore implements IContextStore {
       }
     })
   }
+
+  /**
+   * Atomically increment a counter and return the new value
+   * Used for sequence numbers (e.g., exchange sequence in a conversation)
+   */
+  async incrementCounter(key: string, ctx: TraceContext): Promise<Result<number, StoreError>> {
+    return withSpan('RedisContextStore.incrementCounter', async () => {
+      const logger = getLogger().child({ key, requestId: ctx.requestId })
+
+      try {
+        const newValue = await this.redis.incr(key)
+        logger.debug({ newValue }, 'Counter incremented')
+        return ok(newValue)
+      } catch (error) {
+        logger.error({ error }, 'Failed to increment counter')
+        return err(mapRedisError(error))
+      }
+    })
+  }
 }

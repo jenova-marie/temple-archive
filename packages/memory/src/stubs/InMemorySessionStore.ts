@@ -5,6 +5,7 @@
 import type {
   ISessionStore,
   Message,
+  MessageTurn,
   UserProfile,
   SessionSummary,
   StoreError,
@@ -22,6 +23,7 @@ export class InMemorySessionStore implements ISessionStore {
   private messages: Map<string, StoredMessage[]> = new Map();
   private profiles: Map<string, UserProfile> = new Map();
   private summaries: Map<string, SessionSummary[]> = new Map();
+  private turns: Map<string, MessageTurn> = new Map();
 
   async getConversationHistory(
     conversationId: string,
@@ -164,6 +166,48 @@ export class InMemorySessionStore implements ISessionStore {
     });
   }
 
+  async storeTurn(
+    turn: MessageTurn,
+    ctx: TraceContext,
+  ): Promise<Result<void, StoreError>> {
+    return withSpan("InMemorySessionStore.storeTurn", async () => {
+      const logger = getLogger().child({
+        turnId: turn.turnId,
+        requestId: ctx.requestId,
+      });
+      this.turns.set(turn.turnId, turn);
+      logger.debug("Turn stored in L2");
+      return ok(undefined);
+    });
+  }
+
+  async getTurn(
+    turnId: string,
+    _ctx: TraceContext,
+  ): Promise<Result<MessageTurn | null, StoreError>> {
+    return withSpan("InMemorySessionStore.getTurn", async () => {
+      const turn = this.turns.get(turnId) ?? null;
+      return ok(turn);
+    });
+  }
+
+  async getTurnByMessageId(
+    messageId: string,
+    _ctx: TraceContext,
+  ): Promise<Result<MessageTurn | null, StoreError>> {
+    return withSpan("InMemorySessionStore.getTurnByMessageId", async () => {
+      for (const turn of this.turns.values()) {
+        if (
+          turn.userMessageId === messageId ||
+          turn.assistantMessageId === messageId
+        ) {
+          return ok(turn);
+        }
+      }
+      return ok(null);
+    });
+  }
+
   /**
    * Clear all data (for testing)
    */
@@ -171,5 +215,6 @@ export class InMemorySessionStore implements ISessionStore {
     this.messages.clear();
     this.profiles.clear();
     this.summaries.clear();
+    this.turns.clear();
   }
 }

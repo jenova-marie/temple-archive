@@ -15,6 +15,12 @@ export {
 export { messages, type DbMessage, type NewDbMessage } from './messages.js'
 
 export {
+  messageTurns,
+  type DbMessageTurn,
+  type NewDbMessageTurn,
+} from './messageTurns.js'
+
+export {
   sessionSummaries,
   type DbSessionSummary,
   type NewDbSessionSummary,

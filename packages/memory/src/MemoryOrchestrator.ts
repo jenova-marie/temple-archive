@@ -19,6 +19,7 @@ import type {
   IVectorStore,
   IMem0Store,
   Message,
+  MessageTurn,
   AssembledContext,
   TraceContext,
   Result,
@@ -503,13 +504,72 @@ export class MemoryOrchestrator {
   }
 
   /**
+   * Get the next turn sequence number for a conversation.
+   * Uses Redis INCR for atomic counter operations.
+   */
+  async getNextTurnSequence(
+    conversationId: string,
+    ctx: TraceContext
+  ): Promise<Result<number, MemoryError>> {
+    return withSpan('MemoryOrchestrator.getNextTurnSequence', async () => {
+      const key = `turn:seq:${conversationId}`
+      const result = await this.l1.incrementCounter(key, ctx)
+
+      if (!result.ok) {
+        return err({
+          kind: 'PersistError',
+          message: 'Failed to get turn sequence',
+          context: { conversationId },
+          cause: result.error,
+        })
+      }
+
+      return ok(result.value)
+    })
+  }
+
+  /**
+   * Store a message turn (links user/assistant pair) to L2.
+   */
+  async storeTurn(
+    turn: MessageTurn,
+    ctx: TraceContext
+  ): Promise<Result<void, MemoryError>> {
+    return withSpan('MemoryOrchestrator.storeTurn', async () => {
+      const logger = getLogger().child({
+        turnId: turn.turnId,
+        conversationId: turn.conversationId,
+        requestId: ctx.requestId,
+      })
+
+      const result = await this.l2.storeTurn(turn, ctx)
+
+      if (!result.ok) {
+        logger.error({ error: result.error }, 'Failed to store turn')
+        return err({
+          kind: 'PersistError',
+          message: 'Failed to store turn',
+          context: { turnId: turn.turnId },
+          cause: result.error,
+        })
+      }
+
+      logger.debug({ sequenceNumber: turn.sequenceNumber }, 'Turn stored')
+      return ok(undefined)
+    })
+  }
+
+  /**
    * Store messages to L5 Mem0 for fact extraction
    * Call this in postflight after response is generated.
+   *
+   * @param turnId - Optional turn ID to link extracted memories to the turn
    */
   async storeToMem0(
     userMessage: Message,
     assistantMessage: Message,
-    ctx: TraceContext
+    ctx: TraceContext,
+    turnId?: string
   ): Promise<Result<void, MemoryError>> {
     if (!this.config.enableL5Memory || !this.l5) {
       return ok(undefined)
@@ -519,10 +579,19 @@ export class MemoryOrchestrator {
       const logger = getLogger().child({
         userId: userMessage.userId,
         conversationId: userMessage.conversationId,
+        turnId,
         requestId: ctx.requestId,
       })
 
       try {
+        // Include turnId in metadata if provided, otherwise fall back to message IDs
+        const metadata = turnId
+          ? { turnId }
+          : {
+              userMessageId: userMessage.id,
+              assistantMessageId: assistantMessage.id,
+            }
+
         const result = await this.l5!.addMemory(
           [
             { role: 'user', content: userMessage.content },
@@ -531,7 +600,7 @@ export class MemoryOrchestrator {
           {
             userId: userMessage.userId,
             runId: userMessage.conversationId,
-            // Mem0 always infers/extracts facts from messages
+            metadata,
           },
           ctx
         )
@@ -547,7 +616,7 @@ export class MemoryOrchestrator {
         }
 
         logger.debug(
-          { memoryCount: result.value.memoryIds.length, resultCount: result.value.results.length },
+          { memoryCount: result.value.memoryIds.length, resultCount: result.value.results.length, turnId },
           'Stored messages to Mem0'
         )
         return ok(undefined)

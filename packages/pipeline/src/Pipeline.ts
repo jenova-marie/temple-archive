@@ -1362,6 +1362,13 @@ export class Pipeline {
     }
 
     try {
+      // Generate turn ID and sequence number for linking user/assistant pair
+      const turnId = `turn_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      const seqResult = await this.deps.memory.getNextTurnSequence(ctx.input.conversationId, ctx)
+      const sequenceNumber = seqResult.ok ? seqResult.value : 1
+
+      logger.debug({ turnId, sequenceNumber }, 'Generated turn for message pair')
+
       // Generate embeddings for L4 storage (only if postflight embeddings enabled)
       let userEmbedding: number[] | null = null
       let assistantEmbedding: number[] | null = null
@@ -1382,6 +1389,24 @@ export class Pipeline {
         this.deps.memory.storeMessage(assistantMessage, assistantEmbedding, ctx),
       ])
 
+      // Store turn record linking the message pair
+      const turn = {
+        turnId,
+        conversationId: ctx.input.conversationId,
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        sequenceNumber,
+        createdAt: Date.now(),
+      }
+
+      this.deps.memory.storeTurn(turn, ctx).then((result) => {
+        if (!result.ok) {
+          logger.warn({ error: result.error }, 'Turn storage failed')
+        }
+      }).catch((err) => {
+        logger.warn({ err }, 'Turn storage error')
+      })
+
       // Update session state
       await this.deps.memory.updateSessionState(
         ctx.input.conversationId,
@@ -1393,9 +1418,9 @@ export class Pipeline {
       )
 
       // L5 Mem0 storage (fire and forget - Mem0 handles fact extraction)
-      // When L5 is enabled, this replaces entity extraction
+      // Pass turnId to link extracted memories to the turn
       this.deps.memory
-        .storeToMem0(userMessage, assistantMessage, ctx)
+        .storeToMem0(userMessage, assistantMessage, ctx, turnId)
         .then((result) => {
           if (!result.ok) {
             logger.warn({ error: result.error }, 'Mem0 storage failed')
