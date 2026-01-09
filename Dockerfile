@@ -77,6 +77,9 @@ ENV AGENT_API_PORT=${AGENT_API_PORT}
 COPY packages/ ./packages/
 COPY apps/ ./apps/
 
+# Copy build.env to .env for Vite to pick up during build
+RUN cp apps/web-app/build.env apps/web-app/.env
+
 # Build shared package first, then web app
 RUN pnpm --filter @pippa/shared build && \
     pnpm --filter @pippa/web-app build
