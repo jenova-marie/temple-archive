@@ -169,19 +169,13 @@ export interface IContextStore {
 
 /**
  * L2 Session Store interface (PostgreSQL)
+ * Note: Vector embeddings are stored in Qdrant (L4), not here
  */
 export interface ISessionStore {
   /** Get conversation history */
   getConversationHistory(conversationId: string, limit: number, ctx: TraceContext): Promise<Result<Message[], StoreError>>
-  /** Store message with optional embedding */
+  /** Store message (embeddings stored separately in Qdrant L4) */
   storeMessage(message: Message, embedding: number[] | null, ctx: TraceContext): Promise<Result<void, StoreError>>
-  /** Semantic search in conversation */
-  semanticSearch(
-    conversationId: string,
-    queryEmbedding: number[],
-    options: { limit?: number; daysBack?: number },
-    ctx: TraceContext
-  ): Promise<Result<Array<Message & { similarity: number }>, StoreError>>
   /** Get user profile */
   getUserProfile(userId: string, ctx: TraceContext): Promise<Result<UserProfile | null, StoreError>>
   /** Update user profile */

@@ -67,52 +67,12 @@ export class InMemorySessionStore implements ISessionStore {
       convMessages.push(storedMessage);
       this.messages.set(message.conversationId, convMessages);
 
-      logger.debug({ hasEmbedding: !!embedding }, "Message stored in L2");
+      logger.debug("Message stored in L2");
       return ok(undefined);
     });
   }
 
-  async semanticSearch(
-    conversationId: string,
-    queryEmbedding: number[],
-    options: { limit?: number; daysBack?: number },
-    ctx: TraceContext,
-  ): Promise<Result<Array<Message & { similarity: number }>, StoreError>> {
-    return withSpan("InMemorySessionStore.semanticSearch", async () => {
-      const logger = getLogger().child({
-        conversationId,
-        requestId: ctx.requestId,
-      });
-      const { limit = 10, daysBack = 90 } = options;
-
-      const convMessages = this.messages.get(conversationId) ?? [];
-      const cutoff = Date.now() - daysBack * 24 * 60 * 60 * 1000;
-
-      // Filter messages with embeddings and within time range
-      const candidates = convMessages.filter(
-        (m) => m.embedding && m.timestamp > cutoff,
-      );
-
-      // Calculate cosine similarity
-      const scored = candidates.map((msg) => {
-        const similarity = this.cosineSimilarity(
-          queryEmbedding,
-          msg.embedding!,
-        );
-        return { ...msg, similarity };
-      });
-
-      // Sort by similarity and take top N
-      scored.sort((a, b) => b.similarity - a.similarity);
-      const results = scored.slice(0, limit);
-
-      logger.debug(
-        { count: results.length },
-        "Semantic search completed in L2",
-      );
-      return ok(results);
-    });
-  }
+  // Note: semanticSearch removed - vector search now handled by Qdrant (L4)
 
   async getUserProfile(
     userId: string,
@@ -202,23 +162,6 @@ export class InMemorySessionStore implements ISessionStore {
       logger.debug({ summaryId }, "Session summary stored in L2");
       return ok(summaryId);
     });
-  }
-
-  private cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) return 0;
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
-    }
-
-    if (normA === 0 || normB === 0) return 0;
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
   /**

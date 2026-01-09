@@ -17,7 +17,7 @@ import type {
 } from '@pippa/types'
 import { ok, err, type Result } from '@pippa/types'
 import { getLogger, withSpan } from '@pippa/observability'
-import { eq, desc, asc, and, lte, gt, sql } from 'drizzle-orm'
+import { eq, desc, asc, and, lte, gt } from 'drizzle-orm'
 import type { DatabaseClient } from '../client.js'
 import {
   messages,
@@ -77,7 +77,7 @@ export class PostgresSessionStore implements ISessionStore {
 
   async storeMessage(
     message: Message,
-    embedding: number[] | null,
+    _embedding: number[] | null, // Kept for interface compatibility; embeddings stored in Qdrant L4
     ctx: TraceContext
   ): Promise<Result<void, StoreError>> {
     return withSpan('PostgresSessionStore.storeMessage', async () => {
@@ -99,19 +99,18 @@ export class PostgresSessionStore implements ISessionStore {
           })
           .onConflictDoNothing()
 
-        // Insert the message
+        // Insert the message (embeddings stored in Qdrant L4, not here)
         await this.db.insert(messages).values({
           messageId: message.id,
           conversationId: message.conversationId,
           userId: message.userId,
           role: message.role,
           content: message.content,
-          embedding: embedding,
           createdAt: new Date(message.timestamp),
           metadata: message.metadata ?? {},
         })
 
-        logger.debug({ role: message.role, hasEmbedding: !!embedding }, 'Message stored in L2')
+        logger.debug({ role: message.role }, 'Message stored in L2')
         return ok(undefined)
       } catch (error) {
         logger.error({ error }, 'Failed to store message')
@@ -125,69 +124,7 @@ export class PostgresSessionStore implements ISessionStore {
     })
   }
 
-  async semanticSearch(
-    conversationId: string,
-    queryEmbedding: number[],
-    options: { limit?: number; daysBack?: number },
-    ctx: TraceContext
-  ): Promise<Result<Array<Message & { similarity: number }>, StoreError>> {
-    return withSpan('PostgresSessionStore.semanticSearch', async () => {
-      const logger = getLogger().child({ conversationId, requestId: ctx.requestId })
-      const { limit = 10, daysBack = 90 } = options
-
-      try {
-        const cutoffDate = new Date()
-        cutoffDate.setDate(cutoffDate.getDate() - daysBack)
-
-        // Format embedding for pgvector
-        const embeddingStr = `[${queryEmbedding.join(',')}]`
-
-        // Use pgvector cosine distance: 1 - (embedding <=> query) for similarity score
-        const rows = await this.db.execute(sql`
-          SELECT
-            message_id,
-            conversation_id,
-            user_id,
-            role,
-            content,
-            created_at,
-            metadata,
-            1 - (embedding <=> ${embeddingStr}::vector) as similarity
-          FROM messages
-          WHERE conversation_id = ${conversationId}
-            AND embedding IS NOT NULL
-            AND created_at >= ${cutoffDate}
-          ORDER BY embedding <=> ${embeddingStr}::vector
-          LIMIT ${limit}
-        `)
-
-        const results = (rows.rows as any[]).map((row) => ({
-          ...this.rowToMessage({
-            messageId: row.message_id,
-            conversationId: row.conversation_id,
-            userId: row.user_id,
-            role: row.role,
-            content: row.content,
-            createdAt: row.created_at,
-            metadata: row.metadata,
-            embedding: null,
-          }),
-          similarity: Number(row.similarity),
-        }))
-
-        logger.debug({ count: results.length }, 'Semantic search completed in L2')
-        return ok(results)
-      } catch (error) {
-        logger.error({ error }, 'Semantic search failed')
-        return err({
-          kind: 'ConnectionError',
-          message: 'Semantic search failed',
-          context: { conversationId },
-          cause: error,
-        })
-      }
-    })
-  }
+  // Note: semanticSearch removed - vector search now handled by Qdrant (L4)
 
   async getUserProfile(
     userId: string,
@@ -519,7 +456,6 @@ export class PostgresSessionStore implements ISessionStore {
     content: string
     createdAt: Date
     metadata: unknown
-    embedding: number[] | null
   }): Message {
     return {
       id: row.messageId,
