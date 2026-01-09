@@ -81,6 +81,9 @@ vi.mock('@pippa/memory', () => ({
   DeepMemoryService: vi.fn().mockImplementation(() => ({})),
   loadL3ContextConfig: vi.fn().mockReturnValue({}),
   MemoryReflector: vi.fn().mockImplementation(() => ({})),
+  MemoryPromptStore: vi.fn().mockImplementation(() => ({})),
+  MemoryPromptGenerator: vi.fn().mockImplementation(() => ({})),
+  loadMemoryPromptConfig: vi.fn().mockReturnValue({ enabled: false }),
 }))
 
 vi.mock('@pippa/tools', () => ({
@@ -88,6 +91,7 @@ vi.mock('@pippa/tools', () => ({
   setBootstrapOrchestrator: vi.fn(),
   setSystemPromptRefreshFn: vi.fn(),
   setClearConversationFn: vi.fn(),
+  setMem0ToolStore: vi.fn(),
 }))
 
 vi.mock('@pippa/db', () => ({
