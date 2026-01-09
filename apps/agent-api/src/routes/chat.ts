@@ -207,11 +207,70 @@ export function createChatRouter({
         return;
       }
 
-      // Convert to model messages format for Vercel AI SDK
-      const messages = convertToModelMessages(rawMessages as UIMessage[]);
-
       // Use provided conversation_id or generate new UUID for new conversations
       const conversationId = conversation_id || randomUUID();
+
+      // Build conversation history for LLM
+      // When L2 retrieval is enabled, fetch history from PostgreSQL instead of using client-sent messages
+      const l2RetrievalEnabled = process.env.ENABLE_L2_RETRIEVAL !== "false";
+      let messagesForLLM: UIMessage[];
+
+      if (l2RetrievalEnabled && conversation_id) {
+        // Create temporary trace context for history fetch
+        const historyTraceCtx: TraceContext = {
+          traceId: (req.headers["x-trace-id"] as string) || generateId(),
+          spanId: generateId(),
+          requestId,
+          userId,
+          sessionId: conversationId,
+          startTime,
+        };
+
+        // Fetch conversation history from L2 (PostgreSQL)
+        const historyResult = await pipeline
+          .getDeps()
+          .memory.getConversationHistory(conversationId, 50, historyTraceCtx);
+
+        if (historyResult.ok && historyResult.value.length > 0) {
+          // Convert fetched messages to UIMessage format (requires parts array)
+          const fetchedMessages: UIMessage[] = historyResult.value.map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            parts: [{ type: "text" as const, text: msg.content }],
+          }));
+
+          // Append the incoming user message(s) - only take user messages from client
+          const incomingUserMessages = rawMessages.filter((m) => m.role === "user");
+          const incomingConverted: UIMessage[] = incomingUserMessages.map((m) => ({
+            id: m.id || generateId(),
+            role: m.role as "user" | "assistant" | "system",
+            parts: [{ type: "text" as const, text: m.content || (m.parts?.find((p) => p.type === "text")?.text ?? "") }],
+          }));
+          messagesForLLM = [...fetchedMessages, ...incomingConverted];
+
+          logger.debug(
+            {
+              fetchedCount: fetchedMessages.length,
+              incomingCount: incomingUserMessages.length,
+              totalCount: messagesForLLM.length,
+            },
+            "Built conversation history from L2 + incoming messages",
+          );
+        } else {
+          // No history found, use client-sent messages (first message in conversation)
+          messagesForLLM = rawMessages as UIMessage[];
+          logger.debug("No L2 history found, using client-sent messages");
+        }
+      } else {
+        // L2 retrieval disabled or no conversation_id - use client-sent messages
+        messagesForLLM = rawMessages as UIMessage[];
+        if (!l2RetrievalEnabled) {
+          logger.debug("L2 retrieval disabled, using client-sent messages");
+        }
+      }
+
+      // Convert to model messages format for Vercel AI SDK
+      const messages = convertToModelMessages(messagesForLLM);
 
       // Create trace context
       const traceContext: TraceContext = {

@@ -35,6 +35,19 @@ export function useMeetingGuideRuntime() {
         guide: selectedGuideId,
         conversation_id: conversationId,
       },
+      // Only send the latest user message - server fetches history from PostgreSQL
+      // This reduces payload size and makes the server the source of truth
+      prepareSendMessagesRequest: ({ messages }) => {
+        // Find the last user message to send
+        const lastUserMessage = messages.filter((m) => m.role === "user").slice(-1);
+        return {
+          body: {
+            messages: lastUserMessage,
+            guide: selectedGuideId,
+            conversation_id: conversationId,
+          },
+        };
+      },
     });
   }, [user?.access_token, selectedGuideId, conversationId]);
 

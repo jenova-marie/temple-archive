@@ -504,6 +504,39 @@ export class MemoryOrchestrator {
   }
 
   /**
+   * Get conversation history from L2 (PostgreSQL).
+   * Used when server fetches history instead of receiving it from client.
+   */
+  async getConversationHistory(
+    conversationId: string,
+    limit: number,
+    ctx: TraceContext
+  ): Promise<Result<Message[], MemoryError>> {
+    return withSpan('MemoryOrchestrator.getConversationHistory', async () => {
+      const logger = getLogger().child({
+        conversationId,
+        limit,
+        requestId: ctx.requestId,
+      })
+
+      const result = await this.l2.getConversationHistory(conversationId, limit, ctx)
+
+      if (!result.ok) {
+        logger.error({ error: result.error }, 'Failed to fetch conversation history')
+        return err({
+          kind: 'RetrievalError',
+          message: 'Failed to fetch conversation history from L2',
+          context: { conversationId },
+          cause: result.error,
+        })
+      }
+
+      logger.debug({ count: result.value.length }, 'Fetched conversation history from L2')
+      return ok(result.value)
+    })
+  }
+
+  /**
    * Get the next turn sequence number for a conversation.
    * Uses Redis INCR for atomic counter operations.
    */
