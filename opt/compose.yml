@@ -47,7 +47,7 @@ services:
       - REDIS_URL=${REDIS_URL}
 
       # L2: PostgreSQL (on bad-bitch-net)
-      - DATABASE_URL=postgresql://${USER}:${PASSWORD}@db.rso:5432/${DATABASE}
+      - DATABASE_URL
 
       # L3: Neo4j (on bad-bitch-net)
       - NEO4J_URI=neo4j://neo4j.rso:7687
