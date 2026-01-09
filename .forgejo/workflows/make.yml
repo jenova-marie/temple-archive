@@ -3,7 +3,7 @@ name: Build & Push Docker Images to AWS ECR
 on:
   push:
     branches:
-      - prod
+      - cmd
 
 permissions:
   id-token: write # This is required for requesting the JWT
