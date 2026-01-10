@@ -1993,6 +1993,18 @@ export class Pipeline {
         }
 
         // STAGE 3: Persist messages
+        // DEFENSIVE: Validate responseText is not empty before persisting
+        // This is a safety net - empty responses should be caught earlier in chat.ts
+        if (!responseText || responseText.trim() === '') {
+          const error = new Error(
+            `Empty responseText in postProcess. ` +
+            `ConversationId: ${input.conversationId}. ` +
+            `This should have been caught earlier in chat.ts.`
+          )
+          error.name = 'EmptyResponseError'
+          throw error
+        }
+
         const userMessage: Message = {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           conversationId: input.conversationId,
