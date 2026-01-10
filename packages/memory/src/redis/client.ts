@@ -61,6 +61,8 @@ export function createRedisClient(config: RedisClientConfig = {}): Redis {
     enableReadyCheck: mergedConfig.enableReadyCheck,
     lazyConnect: mergedConfig.lazyConnect,
     commandTimeout: mergedConfig.commandTimeout,
+    // TCP keepalive - send keepalive packets every 30 seconds to prevent idle disconnects
+    keepAlive: 30000,
     // Auth options (only set if provided, URL credentials take precedence)
     ...(password && { password }),
     ...(username && { username }),
