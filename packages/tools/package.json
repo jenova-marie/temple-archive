@@ -19,10 +19,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@pippa/types": "workspace:*",
-    "@pippa/observability": "workspace:*",
+    "@ai-sdk/mcp": "^1.0.5",
     "@pippa/db": "workspace:*",
     "@pippa/memory": "workspace:*",
+    "@pippa/observability": "workspace:*",
+    "@pippa/types": "workspace:*",
     "ai": "^5.0.108",
     "zod": "^4.2.1"
   },

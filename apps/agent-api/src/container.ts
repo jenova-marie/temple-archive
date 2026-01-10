@@ -90,6 +90,12 @@ import {
   setClearConversationFn,
   setMem0ToolStore,
   type MemoryToolAccessLevel,
+  // MCP tools
+  MCPToolManager,
+  setMcpToolManager,
+  shutdownMcpTools,
+  loadMcpConfig,
+  isMcpEnabled,
 } from "@pippa/tools";
 import {
   createDatabaseClient,
@@ -718,6 +724,21 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info("Memory tools disabled (MEMORY_TOOL_ACCESS=off)");
   }
 
+  // MCP (Model Context Protocol) tools
+  // Controlled by ENABLE_MCP env var (default: false)
+  // MCP servers are connected in init() since it's async
+  let mcpManager: MCPToolManager | undefined;
+  const mcpConfigs = isMcpEnabled() && !useStubs ? loadMcpConfig() : [];
+  if (isMcpEnabled() && !useStubs && mcpConfigs.length > 0) {
+    mcpManager = new MCPToolManager();
+    logger.info(
+      { configCount: mcpConfigs.length },
+      "MCP manager created, servers will connect during init"
+    );
+  } else if (isMcpEnabled() && useStubs) {
+    logger.info("MCP tools disabled (USE_STUBS=true)");
+  }
+
   // Bootstrap Orchestrator for conversation memory priming
   // Controlled by MEMORY_BOOTSTRAP_ENABLED env var (default: false)
   let bootstrapOrchestrator: IBootstrapOrchestrator | undefined;
@@ -1210,6 +1231,34 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
     await Promise.all(initTasks);
 
+    // Connect to MCP servers (if configured)
+    if (mcpManager && mcpConfigs.length > 0) {
+      logger.info("Connecting to MCP servers...");
+      for (const config of mcpConfigs) {
+        try {
+          await mcpManager.addServer(config);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          logger.error(
+            { name: config.name, error: errorMessage },
+            "Failed to connect to MCP server"
+          );
+          // Continue with other servers even if one fails
+        }
+      }
+
+      if (mcpManager.serverCount > 0) {
+        setMcpToolManager(mcpManager);
+        logger.info(
+          { serverCount: mcpManager.serverCount, servers: mcpManager.serverNames },
+          "MCP tools enabled"
+        );
+      } else {
+        logger.warn("MCP enabled but no servers connected");
+      }
+    }
+
     // Initialize MiniLM provider and start embedding batch job
     if (miniLMProvider && embeddingBatchJob) {
       logger.info("Initializing MiniLM embedding model...");
@@ -1236,6 +1285,12 @@ export function createContainer(options: ContainerConfig = {}): Container {
     if (embeddingBatchJob && embeddingBatchJob.isRunning()) {
       logger.info("Stopping embedding batch job...");
       embeddingBatchJob.stop();
+    }
+
+    // Shutdown MCP connections (kills child processes)
+    if (mcpManager) {
+      logger.info("Shutting down MCP connections...");
+      await shutdownMcpTools();
     }
 
     logger.info("Container shutdown complete");

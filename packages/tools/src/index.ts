@@ -48,3 +48,20 @@ export {
   clearSystemPromptRefreshFn,
   clearSystemToolFunctions,
 } from "./systemPromptTools.js";
+
+// MCP (Model Context Protocol) tools
+export {
+  MCPToolManager,
+  type MCPServerConfig,
+  type MCPConfigFile,
+  setMcpToolManager,
+  getMcpTools,
+  getMcpToolsPrefixed,
+  hasMcpTools,
+  getMcpServerCount,
+  getMcpServerNames,
+  shutdownMcpTools,
+  getMcpManager,
+  loadMcpConfig,
+  isMcpEnabled,
+} from "./mcp/index.js";
