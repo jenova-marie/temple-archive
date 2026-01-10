@@ -1,5 +1,10 @@
 {
   "mcpServers": {
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["fetch-mcp"]
+    },
     "sequentialthinking": {
       "type": "stdio",
       "command": "npx",
@@ -7,6 +12,7 @@
       "env": {}
     },
     "open-meteo": {
+      "type": "stdio",
       "command": "node",
       "args": [
         "/Users/jenova/projects/jenova-marie/pippa-mcp/open-meteo-mcp/dist/index.js"
