@@ -26,6 +26,7 @@ import {
   clearMemoryToolTraceContext,
   setMem0ToolTraceContext,
   clearMem0ToolTraceContext,
+  getMcpTools,
 } from "@pippa/tools";
 
 /** Default model for agent processing - can be overridden via AGENT_MODEL env var */
@@ -72,6 +73,56 @@ const chatBodySchema = z
     agent: z.string().optional(),
   })
   .passthrough();
+
+/**
+ * Validate that all messages have non-empty content.
+ * Throws an error with detailed context if any message is empty.
+ * This is fail-fast behavior to surface data issues rather than masking them.
+ */
+function validateMessagesNotEmpty(
+  messages: UIMessage[],
+  source: "L2" | "incoming" | "client",
+  conversationId: string,
+): void {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const content = extractMessageContent(msg);
+
+    if (!content || content.trim() === "") {
+      const error = new Error(
+        `Empty message detected at index ${i} (source: ${source}). ` +
+          `Message ID: ${msg.id}, Role: ${msg.role}, Conversation: ${conversationId}. ` +
+          `This indicates a data integrity issue - messages should never have empty content. ` +
+          `Check the database for this message or investigate how it was stored.`,
+      );
+      error.name = "EmptyMessageError";
+      throw error;
+    }
+  }
+}
+
+/**
+ * Extract text content from a single message (handles both parts and content formats)
+ */
+function extractMessageContent(msg: UIMessage): string | null {
+  // Check parts array first (UIMessage format)
+  if (msg.parts && Array.isArray(msg.parts)) {
+    const textParts = msg.parts
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          part.type === "text" && typeof part.text === "string",
+      )
+      .map((part) => part.text);
+    if (textParts.length > 0) {
+      return textParts.join("\n");
+    }
+  }
+  // Fallback to content field if present
+  if ("content" in msg && typeof msg.content === "string") {
+    return msg.content;
+  }
+  return null;
+}
 
 /**
  * Extract text content from the last user message
@@ -239,6 +290,9 @@ export function createChatRouter({
             parts: [{ type: "text" as const, text: msg.content }],
           }));
 
+          // Validate L2 messages - fail fast if any are empty
+          validateMessagesNotEmpty(fetchedMessages, "L2", conversationId);
+
           // Append the incoming user message(s) - only take user messages from client
           const incomingUserMessages = rawMessages.filter((m) => m.role === "user");
           const incomingConverted: UIMessage[] = incomingUserMessages.map((m) => ({
@@ -246,6 +300,10 @@ export function createChatRouter({
             role: m.role as "user" | "assistant" | "system",
             parts: [{ type: "text" as const, text: m.content || (m.parts?.find((p) => p.type === "text")?.text ?? "") }],
           }));
+
+          // Validate incoming messages - fail fast if any are empty
+          validateMessagesNotEmpty(incomingConverted, "incoming", conversationId);
+
           messagesForLLM = [...fetchedMessages, ...incomingConverted];
 
           logger.debug(
@@ -259,11 +317,13 @@ export function createChatRouter({
         } else {
           // No history found, use client-sent messages (first message in conversation)
           messagesForLLM = rawMessages as UIMessage[];
+          validateMessagesNotEmpty(messagesForLLM, "client", conversationId);
           logger.debug("No L2 history found, using client-sent messages");
         }
       } else {
         // L2 retrieval disabled or no conversation_id - use client-sent messages
         messagesForLLM = rawMessages as UIMessage[];
+        validateMessagesNotEmpty(messagesForLLM, "client", conversationId);
         if (!l2RetrievalEnabled) {
           logger.debug("L2 retrieval disabled, using client-sent messages");
         }
@@ -394,9 +454,13 @@ export function createChatRouter({
           ? getMemoryTools(memoryToolAccess)
           : {};
 
+      // Get MCP tools (external MCP servers like fetch, filesystem, etc.)
+      const mcpTools = getMcpTools();
+
       const tools = {
         ...(toolsEnabled ? agentTools : {}),
         ...memoryTools,
+        ...mcpTools,
       };
 
       // Track preflight duration for metrics
@@ -412,13 +476,16 @@ export function createChatRouter({
         tools,
         stopWhen: stepCountIs(5),
         maxOutputTokens: 4096,
-        onStepFinish: ({ toolCalls, finishReason }) => {
+        onStepFinish: ({ toolCalls, finishReason, text }) => {
           logger.debug(
             {
               toolCalls: toolCalls?.map(
                 (t) => (t as { toolName?: string }).toolName,
               ),
               finishReason,
+              // DEBUG: Track text output per step to diagnose empty message bug
+              stepTextLength: text?.length ?? 0,
+              stepTextEmpty: !text || text.trim() === "",
             },
             "Agent step finished",
           );
@@ -487,6 +554,30 @@ export function createChatRouter({
       result.text
         .then(async (responseText) => {
           const duration = Date.now() - startTime;
+
+          // DEBUG: Log responseText details to diagnose empty message bug
+          logger.debug(
+            {
+              requestId,
+              responseTextLength: responseText.length,
+              responseTextEmpty: !responseText || responseText.trim() === "",
+              responseTextPreview: responseText.slice(0, 100),
+            },
+            "Stream completed - responseText received",
+          );
+
+          // FAIL-FAST: Throw if responseText is empty
+          // This prevents storing empty assistant messages in L2
+          if (!responseText || responseText.trim() === "") {
+            const error = new Error(
+              `Empty responseText from stream. ` +
+                `ConversationId: ${conversationId}, RequestId: ${requestId}. ` +
+                `This indicates the stream produced no text output (possibly tool-calls only).`,
+            );
+            error.name = "EmptyResponseError";
+            throw error;
+          }
+
           logger.info(
             { requestId, duration },
             "Stream completed, starting post-process",
