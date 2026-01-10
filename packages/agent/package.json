@@ -21,7 +21,7 @@
     "@pippa/types": "workspace:*",
     "@pippa/observability": "workspace:*",
     "@ai-sdk/anthropic": "^2.0.53",
-    "ai": "^5.0.106"
+    "ai": "^5.0.116"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

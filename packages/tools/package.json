@@ -24,7 +24,7 @@
     "@pippa/memory": "workspace:*",
     "@pippa/observability": "workspace:*",
     "@pippa/types": "workspace:*",
-    "ai": "^5.0.108",
+    "ai": "^5.0.116",
     "zod": "^4.2.1"
   },
   "devDependencies": {

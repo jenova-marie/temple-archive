@@ -29,7 +29,7 @@
     "@pippa/safety": "workspace:*",
     "@pippa/tools": "workspace:*",
     "@pippa/types": "workspace:*",
-    "ai": "^5.0.108",
+    "ai": "^5.0.116",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
