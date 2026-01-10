@@ -630,8 +630,8 @@ importers:
   packages/tools:
     dependencies:
       '@ai-sdk/mcp':
-        specifier: ^1.0.5
-        version: 1.0.5(zod@4.2.1)
+        specifier: ^0.0.13
+        version: 0.0.13(zod@4.2.1)
       '@pippa/db':
         specifier: workspace:*
         version: link:../db
@@ -687,8 +687,8 @@ packages:
     peerDependencies:
       zod: 4.2.1
 
-  '@ai-sdk/mcp@1.0.5':
-    resolution: {integrity: sha512-ViLrt9ybjtwSubMBhnV3Wjaq+ZITx1UlFU5mnLAgWj2HAxoEIwpZGRAqdD/ojJlV950wEM/OCha/1rtGdUy/bw==}
+  '@ai-sdk/mcp@0.0.13':
+    resolution: {integrity: sha512-MdxlUvbCty9GZUrmtK8aFdfxWw0KPhMNC2L4skkFYftsIRZLs8RnrEIynZ2aP20TVODcsnKvJhcjPFIsCHImYQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.2.1
@@ -699,8 +699,8 @@ packages:
     peerDependencies:
       zod: 4.2.1
 
-  '@ai-sdk/provider-utils@4.0.4':
-    resolution: {integrity: sha512-VxhX0B/dWGbpNHxrKCWUAJKXIXV015J4e7qYjdIU9lLWeptk0KMLGcqkB4wFxff5Njqur8dt8wRi1MN9lZtDqg==}
+  '@ai-sdk/provider-utils@3.0.20':
+    resolution: {integrity: sha512-iXHVe0apM2zUEzauqJwqmpC37A5rihrStAih5Ks+JE32iTe4LZ58y17UGBjpQQTCRw9YxMeo2UFLxLpBluyvLQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.2.1
@@ -709,8 +709,8 @@ packages:
     resolution: {integrity: sha512-6o7Y2SeO9vFKB8lArHXehNuusnpddKPk7xqL7T2/b+OvXMRIXUO1rR4wcv1hAFUAT9avGZshty3Wlua/XA7TvA==}
     engines: {node: '>=18'}
 
-  '@ai-sdk/provider@3.0.2':
-    resolution: {integrity: sha512-HrEmNt/BH/hkQ7zpi2o6N3k1ZR1QTb7z85WYhYygiTxOQuaml4CMtHCWRbric5WPU+RNsYI7r1EpyVQMKO1pYw==}
+  '@ai-sdk/provider@2.0.1':
+    resolution: {integrity: sha512-KCUwswvsC5VsW2PWFqF8eJgSCu5Ysj7m1TxiHTVA6g7k360bk0RNQENT8KTMAYEs+8fWPD3Uu4dEmzGHc+jGng==}
     engines: {node: '>=18'}
 
   '@ai-sdk/react@2.0.118':
@@ -6426,10 +6426,10 @@ snapshots:
       '@vercel/oidc': 3.0.5
       zod: 4.2.1
 
-  '@ai-sdk/mcp@1.0.5(zod@4.2.1)':
+  '@ai-sdk/mcp@0.0.13(zod@4.2.1)':
     dependencies:
-      '@ai-sdk/provider': 3.0.2
-      '@ai-sdk/provider-utils': 4.0.4(zod@4.2.1)
+      '@ai-sdk/provider': 2.0.1
+      '@ai-sdk/provider-utils': 3.0.20(zod@4.2.1)
       pkce-challenge: 5.0.1
       zod: 4.2.1
 
@@ -6440,9 +6440,9 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 4.2.1
 
-  '@ai-sdk/provider-utils@4.0.4(zod@4.2.1)':
+  '@ai-sdk/provider-utils@3.0.20(zod@4.2.1)':
     dependencies:
-      '@ai-sdk/provider': 3.0.2
+      '@ai-sdk/provider': 2.0.1
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
       zod: 4.2.1
@@ -6451,7 +6451,7 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/provider@3.0.2':
+  '@ai-sdk/provider@2.0.1':
     dependencies:
       json-schema: 0.4.0
 

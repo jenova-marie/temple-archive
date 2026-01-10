@@ -1,5 +1,11 @@
 {
   "mcpServers": {
+    "sequentialthinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {}
+    },
     "open-meteo": {
       "command": "node",
       "args": [

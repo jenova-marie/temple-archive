@@ -6,7 +6,13 @@
 
 // Manager
 export { MCPToolManager } from "./MCPToolManager.js";
-export type { MCPServerConfig, MCPConfigFile } from "./MCPToolManager.js";
+export type {
+  MCPServerConfig,
+  MCPServerConfigStdio,
+  MCPServerConfigHttp,
+  MCPServerConfigRaw,
+  MCPConfigFile,
+} from "./MCPToolManager.js";
 
 // Provider
 export {

@@ -284,25 +284,42 @@ export function createChatRouter({
 
         if (historyResult.ok && historyResult.value.length > 0) {
           // Convert fetched messages to UIMessage format (requires parts array)
-          const fetchedMessages: UIMessage[] = historyResult.value.map((msg) => ({
-            id: msg.id,
-            role: msg.role,
-            parts: [{ type: "text" as const, text: msg.content }],
-          }));
+          const fetchedMessages: UIMessage[] = historyResult.value.map(
+            (msg) => ({
+              id: msg.id,
+              role: msg.role,
+              parts: [{ type: "text" as const, text: msg.content }],
+            }),
+          );
 
           // Validate L2 messages - fail fast if any are empty
           validateMessagesNotEmpty(fetchedMessages, "L2", conversationId);
 
           // Append the incoming user message(s) - only take user messages from client
-          const incomingUserMessages = rawMessages.filter((m) => m.role === "user");
-          const incomingConverted: UIMessage[] = incomingUserMessages.map((m) => ({
-            id: m.id || generateId(),
-            role: m.role as "user" | "assistant" | "system",
-            parts: [{ type: "text" as const, text: m.content || (m.parts?.find((p) => p.type === "text")?.text ?? "") }],
-          }));
+          const incomingUserMessages = rawMessages.filter(
+            (m) => m.role === "user",
+          );
+          const incomingConverted: UIMessage[] = incomingUserMessages.map(
+            (m) => ({
+              id: m.id || generateId(),
+              role: m.role as "user" | "assistant" | "system",
+              parts: [
+                {
+                  type: "text" as const,
+                  text:
+                    m.content ||
+                    (m.parts?.find((p) => p.type === "text")?.text ?? ""),
+                },
+              ],
+            }),
+          );
 
           // Validate incoming messages - fail fast if any are empty
-          validateMessagesNotEmpty(incomingConverted, "incoming", conversationId);
+          validateMessagesNotEmpty(
+            incomingConverted,
+            "incoming",
+            conversationId,
+          );
 
           messagesForLLM = [...fetchedMessages, ...incomingConverted];
 
@@ -456,11 +473,10 @@ export function createChatRouter({
 
       // Get MCP tools (external MCP servers like fetch, filesystem, etc.)
       const mcpTools = getMcpTools();
-      const mcpToolNames = Object.keys(mcpTools);
-      if (mcpToolNames.length > 0) {
+      if (Object.keys(mcpTools).length > 0) {
         logger.debug(
-          { count: mcpToolNames.length, tools: mcpToolNames },
-          "MCP tools available"
+          { count: Object.keys(mcpTools).length },
+          "MCP tools available",
         );
       }
 
@@ -474,33 +490,53 @@ export function createChatRouter({
       const preflightDuration = Date.now() - startTime;
       const agentModel = getAgentModel();
 
-      logger.info({ model: agentModel, preflightDuration }, "Starting agent stream");
+      logger.info(
+        { model: agentModel, preflightDuration },
+        "Starting agent stream",
+      );
 
       const result = streamText({
         model: anthropic(agentModel),
         system: systemPrompt,
         messages,
         tools,
-        stopWhen: stepCountIs(5),
-        maxOutputTokens: 4096,
+        stopWhen: stepCountIs(20), // Increased from 5 to allow for sequential thinking tool calls
+        maxOutputTokens: 20480,
         onStepFinish: ({ toolCalls, finishReason, text }) => {
-          logger.debug(
-            {
-              toolCalls: toolCalls?.map(
-                (t) => (t as { toolName?: string }).toolName,
-              ),
-              finishReason,
-              // DEBUG: Track text output per step to diagnose empty message bug
-              stepTextLength: text?.length ?? 0,
-              stepTextEmpty: !text || text.trim() === "",
-            },
-            "Agent step finished",
-          );
+          // Log at INFO level when tool calls happen so we can see MCP tool usage
+          if (toolCalls && toolCalls.length > 0) {
+            logger.info(
+              {
+                toolCalls: toolCalls.map((t) => ({
+                  name: (t as { toolName?: string }).toolName,
+                  argsKeys: Object.keys(
+                    (t as { args?: Record<string, unknown> }).args || {},
+                  ),
+                })),
+                finishReason,
+              },
+              "Agent step with tool calls",
+            );
+          } else {
+            logger.debug(
+              {
+                finishReason,
+                stepTextLength: text?.length ?? 0,
+                stepTextEmpty: !text || text.trim() === "",
+              },
+              "Agent step finished (no tool calls)",
+            );
+          }
         },
       });
 
       // Use native UI Message Stream with metrics metadata
-      const { memoryStats, previousPostProcess, semanticSearch, memoryPrompts } = preflightResult.value;
+      const {
+        memoryStats,
+        previousPostProcess,
+        semanticSearch,
+        memoryPrompts,
+      } = preflightResult.value;
       pipeUIMessageStreamToResponse({
         response: res,
         status: 200,
@@ -547,7 +583,10 @@ export function createChatRouter({
                   // Phase-shifted memory prompts (from previous postflight)
                   memoryPrompts: {
                     count: memoryPrompts.length,
-                    totalChars: memoryPrompts.reduce((sum, p) => sum + p.length, 0),
+                    totalChars: memoryPrompts.reduce(
+                      (sum, p) => sum + p.length,
+                      0,
+                    ),
                   },
                 },
               };
@@ -617,12 +656,11 @@ export function createChatRouter({
       // Properly extract error details for logging
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      const errorStack =
-        error instanceof Error ? error.stack : undefined;
+      const errorStack = error instanceof Error ? error.stack : undefined;
 
       logger.error(
         { errorMessage, errorStack, errorType: error?.constructor?.name },
-        "Unexpected error in chat endpoint"
+        "Unexpected error in chat endpoint",
       );
 
       if (!res.headersSent) {

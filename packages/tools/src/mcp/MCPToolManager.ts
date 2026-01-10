@@ -5,7 +5,7 @@
  * Supports stdio transport for spawning local MCP server processes.
  */
 
-import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
+import { experimental_createMCPClient as createMCPClient, type experimental_MCPClient as MCPClient } from "@ai-sdk/mcp";
 import { Experimental_StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
 import { getLogger } from "@pippa/observability";
 
@@ -14,12 +14,14 @@ import { getLogger } from "@pippa/observability";
 type MCPToolSet = Record<string, unknown>;
 
 /**
- * Configuration for an MCP server
+ * Configuration for a stdio-based MCP server (spawns a child process)
  */
-export interface MCPServerConfig {
+export interface MCPServerConfigStdio {
   /** Unique name for this server */
   name: string;
-  /** Command to run (e.g., "npx") */
+  /** Transport type (default: stdio if command is present) */
+  type?: "stdio";
+  /** Command to run (e.g., "npx", "node") */
   command: string;
   /** Arguments for the command */
   args?: string[];
@@ -32,10 +34,48 @@ export interface MCPServerConfig {
 }
 
 /**
+ * Configuration for an HTTP/SSE-based MCP server (connects to a URL)
+ */
+export interface MCPServerConfigHttp {
+  /** Unique name for this server */
+  name: string;
+  /** Transport type */
+  type: "http" | "sse";
+  /** URL to connect to */
+  url: string;
+  /** Whether this server is enabled */
+  enabled?: boolean;
+}
+
+/**
+ * Union type for all MCP server configurations
+ */
+export type MCPServerConfig = MCPServerConfigStdio | MCPServerConfigHttp;
+
+/**
+ * Raw server config from mcp.json (before adding name)
+ */
+export type MCPServerConfigRaw = Omit<MCPServerConfigStdio, "name"> | Omit<MCPServerConfigHttp, "name">;
+
+/**
  * MCP JSON config file format (matches Claude Desktop format)
  */
 export interface MCPConfigFile {
-  mcpServers: Record<string, Omit<MCPServerConfig, "name">>;
+  mcpServers: Record<string, MCPServerConfigRaw>;
+}
+
+/**
+ * Type guard to check if config is stdio-based
+ */
+function isStdioConfig(config: MCPServerConfig): config is MCPServerConfigStdio {
+  return "command" in config && typeof config.command === "string";
+}
+
+/**
+ * Type guard to check if config is http-based
+ */
+function isHttpConfig(config: MCPServerConfig): config is MCPServerConfigHttp {
+  return "url" in config && typeof config.url === "string";
 }
 
 interface MCPClientEntry {
@@ -64,22 +104,40 @@ export class MCPToolManager {
       return;
     }
 
+    // Determine transport type and log appropriately
+    const transportType = isHttpConfig(config) ? config.type : "stdio";
+    const transportInfo = isHttpConfig(config)
+      ? { url: config.url }
+      : { command: config.command, args: config.args };
+
     this.logger.info(
-      { name: config.name, command: config.command, args: config.args },
+      { name: config.name, transport: transportType, ...transportInfo },
       "Connecting to MCP server"
     );
 
     try {
-      // Create stdio transport for spawning the MCP server process
-      const transport = new Experimental_StdioMCPTransport({
-        command: config.command,
-        args: config.args,
-        env: config.env,
-        cwd: config.cwd,
-      });
+      let client: MCPClient;
 
-      // Create MCP client with the transport
-      const client = await createMCPClient({ transport });
+      if (isHttpConfig(config)) {
+        // HTTP/SSE transport - connect to URL
+        client = await createMCPClient({
+          transport: {
+            type: config.type === "http" ? "sse" : config.type, // Use SSE for http type
+            url: config.url,
+          },
+        });
+      } else if (isStdioConfig(config)) {
+        // Stdio transport - spawn child process
+        const transport = new Experimental_StdioMCPTransport({
+          command: config.command,
+          args: config.args,
+          env: config.env,
+          cwd: config.cwd,
+        });
+        client = await createMCPClient({ transport });
+      } else {
+        throw new Error(`Invalid MCP server config: missing command or url`);
+      }
 
       // Get tools from the server
       const tools = await client.tools();
@@ -89,7 +147,7 @@ export class MCPToolManager {
 
       const toolNames = Object.keys(tools);
       this.logger.info(
-        { name: config.name, toolCount: toolNames.length, tools: toolNames },
+        { name: config.name, transport: transportType, toolCount: toolNames.length, tools: toolNames },
         "MCP server connected"
       );
     } catch (error) {
@@ -154,11 +212,22 @@ export class MCPToolManager {
   getToolsUnprefixed(): MCPToolSet {
     const allTools: MCPToolSet = {};
 
-    for (const entry of this.clients.values()) {
+    for (const [serverName, entry] of this.clients) {
       for (const [toolName, tool] of Object.entries(entry.tools)) {
+        if (allTools[toolName]) {
+          this.logger.warn(
+            { toolName, serverName, existingServer: "previous" },
+            "Tool name collision - later server's tool will overwrite"
+          );
+        }
         allTools[toolName] = tool;
       }
     }
+
+    this.logger.debug(
+      { toolCount: Object.keys(allTools).length, serverCount: this.clients.size },
+      "Aggregated unprefixed tools"
+    );
 
     return allTools;
   }
@@ -191,7 +260,7 @@ export class MCPToolManager {
 
     for (const [name, entry] of this.clients) {
       closePromises.push(
-        entry.client.close().catch((error) => {
+        entry.client.close().catch((error: unknown) => {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
           this.logger.warn(

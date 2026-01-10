@@ -95,15 +95,41 @@ export function loadMcpConfig(): MCPServerConfig[] {
     }
 
     // Convert config format to MCPServerConfig array
+    // Handle both stdio (command-based) and http (url-based) servers
     const servers: MCPServerConfig[] = Object.entries(config.mcpServers).map(
-      ([name, serverConfig]) => ({
-        name,
-        command: serverConfig.command,
-        args: serverConfig.args,
-        env: serverConfig.env,
-        cwd: serverConfig.cwd,
-        enabled: serverConfig.enabled ?? true,
-      })
+      ([name, serverConfig]): MCPServerConfig => {
+        // Check if this is an HTTP/SSE server (has url) or stdio server (has command)
+        if ("url" in serverConfig && serverConfig.url) {
+          return {
+            name,
+            type: (serverConfig as { type?: "http" | "sse" }).type ?? "http",
+            url: serverConfig.url as string,
+            enabled: serverConfig.enabled ?? true,
+          };
+        } else if ("command" in serverConfig && serverConfig.command) {
+          return {
+            name,
+            type: "stdio",
+            command: serverConfig.command as string,
+            args: serverConfig.args,
+            env: serverConfig.env,
+            cwd: serverConfig.cwd,
+            enabled: serverConfig.enabled ?? true,
+          };
+        } else {
+          // Invalid config - log warning and mark as disabled
+          logger.warn(
+            { name, config: serverConfig },
+            "Invalid MCP server config: missing command or url"
+          );
+          return {
+            name,
+            type: "stdio",
+            command: "",
+            enabled: false,
+          };
+        }
+      }
     );
 
     // Filter to only enabled servers

@@ -53,6 +53,8 @@ export {
 export {
   MCPToolManager,
   type MCPServerConfig,
+  type MCPServerConfigStdio,
+  type MCPServerConfigHttp,
   type MCPConfigFile,
   setMcpToolManager,
   getMcpTools,
