@@ -72,11 +72,18 @@ function hasWorkspaces(pkgPath: string): boolean {
 export function loadMcpConfig(): MCPServerConfig[] {
   const logger = getLogger().child({ component: "MCP" });
 
+  logger.debug({ cwd: process.cwd() }, "Loading MCP config");
+
   const configPath = findMcpConfigFile();
   if (!configPath) {
-    logger.debug("No MCP config file found");
+    logger.warn(
+      { cwd: process.cwd(), MCP_CONFIG_PATH: process.env.MCP_CONFIG_PATH },
+      "No MCP config file found - looked in config/mcp.json from monorepo root"
+    );
     return [];
   }
+
+  logger.info({ path: configPath }, "Found MCP config file");
 
   try {
     const content = readFileSync(configPath, "utf8");

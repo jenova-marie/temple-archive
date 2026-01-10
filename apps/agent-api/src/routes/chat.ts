@@ -456,6 +456,13 @@ export function createChatRouter({
 
       // Get MCP tools (external MCP servers like fetch, filesystem, etc.)
       const mcpTools = getMcpTools();
+      const mcpToolNames = Object.keys(mcpTools);
+      if (mcpToolNames.length > 0) {
+        logger.debug(
+          { count: mcpToolNames.length, tools: mcpToolNames },
+          "MCP tools available"
+        );
+      }
 
       const tools = {
         ...(toolsEnabled ? agentTools : {}),

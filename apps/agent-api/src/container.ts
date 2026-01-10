@@ -728,15 +728,31 @@ export function createContainer(options: ContainerConfig = {}): Container {
   // Controlled by ENABLE_MCP env var (default: false)
   // MCP servers are connected in init() since it's async
   let mcpManager: MCPToolManager | undefined;
-  const mcpConfigs = isMcpEnabled() && !useStubs ? loadMcpConfig() : [];
-  if (isMcpEnabled() && !useStubs && mcpConfigs.length > 0) {
+  const mcpEnabled = isMcpEnabled();
+  const mcpConfigs = mcpEnabled && !useStubs ? loadMcpConfig() : [];
+
+  logger.info(
+    {
+      ENABLE_MCP: process.env.ENABLE_MCP,
+      mcpEnabled,
+      configCount: mcpConfigs.length,
+      servers: mcpConfigs.map((c) => c.name),
+    },
+    "MCP configuration check"
+  );
+
+  if (mcpEnabled && !useStubs && mcpConfigs.length > 0) {
     mcpManager = new MCPToolManager();
     logger.info(
-      { configCount: mcpConfigs.length },
+      { configCount: mcpConfigs.length, servers: mcpConfigs.map((c) => c.name) },
       "MCP manager created, servers will connect during init"
     );
-  } else if (isMcpEnabled() && useStubs) {
+  } else if (mcpEnabled && useStubs) {
     logger.info("MCP tools disabled (USE_STUBS=true)");
+  } else if (mcpEnabled && mcpConfigs.length === 0) {
+    logger.warn("MCP enabled but no servers configured in mcp.json");
+  } else {
+    logger.info("MCP disabled (ENABLE_MCP not set to 'true')");
   }
 
   // Bootstrap Orchestrator for conversation memory priming
