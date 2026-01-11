@@ -49,20 +49,7 @@ jobs:
           eval $(ssh-agent -k)
 
   docker-build-and-push:
-    runs-on: hestia
-    strategy:
-      matrix:
-        include:
-          - image: pippa-agent
-            target: agent-api
-            build-args: ""
-          - image: pippa-api
-            target: web-api
-            build-args: ""
-          - image: pippa-app
-            target: web-app
-            build-args: "AGENT_API_PORT=61664"
-
+    runs-on: builder
     steps:
       - uses: actions/checkout@v4
         with:
@@ -108,32 +95,20 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Extract metadata (${{ matrix.image }})
+      - name: Build and push all images
         if: steps.build_filter.outputs.build_required == 'true'
-        id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/bake-action@v4
         with:
-          images: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.image }}
-          tags: |
-            type=raw,value=${{ env.ENV }}
-            type=raw,value=latest
-
-      - name: Build and Push ${{ matrix.image }} image
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          target: ${{ matrix.target }}
-          platforms: linux/arm64
+          files: ./docker-bake.hcl
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ matrix.build-args }}
-          cache-from: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.image }}:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ matrix.image }}:cache,mode=max
-          secret-files: |
-            npmrc=./.npmrc
+          set: |
+            *.cache-from=type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache
+            *.cache-to=type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache,mode=max
+            *.secret=id=npmrc,src=./.npmrc
+        env:
+          REGISTRY: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/
+          TAG: ${{ env.ENV }}
+          AGENT_API_PORT: "61664"
 
       - name: Notify build failure
         if: failure()
@@ -144,12 +119,12 @@ jobs:
           streams: ci
           type: build
           action: failure
-          service: ${{ matrix.image }}
-          instance: inanna
+          service: pippa
+          instance: seshat
           environment: ${{ env.ENV }}
 
   deploy:
-    runs-on: hestia
+    runs-on: builder
     needs: [upload-opt, docker-build-and-push]
     if: success()
     steps:
@@ -164,6 +139,6 @@ jobs:
           type: deploy
           action: deploy_container
           service: pippa
-          instance: inanna
+          instance: seshat
           zone: ${{ env.AWS_REGION }}
           environment: ${{ env.ENV }}

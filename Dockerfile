@@ -47,9 +47,9 @@ COPY apps/web-api/package.json ./apps/web-api/
 COPY apps/web-app/package.json ./apps/web-app/
 
 # Install dependencies with cache mount and npmrc secret for private registry
+# Secret is mounted at /root/.npmrc only during this RUN, not stored in layer
 RUN --mount=type=cache,target=/root/.pnpm-store \
     --mount=type=secret,id=npmrc,target=/root/.npmrc \
-    cp /root/.npmrc /app/.npmrc && \
     pnpm install --frozen-lockfile
 
 # =============================================================================
@@ -116,13 +116,10 @@ COPY --from=builder /app/packages/config/package.json ./packages/config/
 COPY --from=builder /app/packages/mem0/package.json ./packages/mem0/
 COPY --from=builder /app/apps/agent-api/package.json ./apps/agent-api/
 
-# Copy npmrc for production install
-COPY --from=deps /app/.npmrc ./
-
-# Install production dependencies with cache mount
+# Install production dependencies with cache mount and npmrc secret
 RUN --mount=type=cache,target=/root/.pnpm-store \
-    pnpm install --prod --frozen-lockfile && \
-    rm -f .npmrc
+    --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    pnpm install --prod --frozen-lockfile
 
 # Copy built artifacts
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
@@ -179,13 +176,10 @@ COPY --from=builder /app/packages/db/package.json ./packages/db/
 COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/apps/web-api/package.json ./apps/web-api/
 
-# Copy npmrc for production install
-COPY --from=deps /app/.npmrc ./
-
-# Install production dependencies with cache mount
+# Install production dependencies with cache mount and npmrc secret
 RUN --mount=type=cache,target=/root/.pnpm-store \
-    pnpm install --prod --frozen-lockfile && \
-    rm -f .npmrc
+    --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    pnpm install --prod --frozen-lockfile
 
 # Copy built artifacts
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
