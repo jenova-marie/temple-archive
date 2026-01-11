@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 env:
-  ENV: "cmd"
-  AWS_REGION: us-east-2
+  ENV: "prod"
+  AWS_REGION: us-east-1
 
 jobs:
   upload-opt:
