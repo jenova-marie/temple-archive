@@ -11,8 +11,16 @@ import { getLogger } from "@pippa/observability";
 import type { MCPServerConfig, MCPConfigFile } from "./MCPToolManager.js";
 
 /**
- * Find the MCP config file by walking up from cwd to find the monorepo root.
- * Looks for config/mcp.json in the root directory.
+ * Production config path for containerized deployments
+ */
+const PROD_CONFIG_PATH = "/opt/containers/pippa/mcp.json";
+
+/**
+ * Find the MCP config file.
+ * Priority:
+ * 1. MCP_CONFIG_PATH environment variable override
+ * 2. Production path: /opt/containers/pippa/mcp.json
+ * 3. Development path: opt/mcp.json from monorepo root
  */
 function findMcpConfigFile(): string | null {
   // Check for explicit path override
@@ -28,11 +36,16 @@ function findMcpConfigFile(): string | null {
     return null;
   }
 
-  // Walk up from cwd to find monorepo root
+  // Check production path first
+  if (existsSync(PROD_CONFIG_PATH)) {
+    return PROD_CONFIG_PATH;
+  }
+
+  // Walk up from cwd to find monorepo root for development
   let dir = process.cwd();
 
   for (let i = 0; i < 10; i++) {
-    const configPath = join(dir, "config", "mcp.json");
+    const configPath = join(dir, "opt", "mcp.json");
     const pnpmWorkspacePath = join(dir, "pnpm-workspace.yaml");
     const pkgPath = join(dir, "package.json");
 
@@ -78,7 +91,7 @@ export function loadMcpConfig(): MCPServerConfig[] {
   if (!configPath) {
     logger.warn(
       { cwd: process.cwd(), MCP_CONFIG_PATH: process.env.MCP_CONFIG_PATH },
-      "No MCP config file found - looked in config/mcp.json from monorepo root"
+      "No MCP config file found - looked in opt/mcp.json from monorepo root and /opt/containers/pippa/mcp.json"
     );
     return [];
   }
