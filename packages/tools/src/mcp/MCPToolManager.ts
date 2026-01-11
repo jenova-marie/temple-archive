@@ -8,6 +8,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { tool, type Tool } from "ai";
 import { z } from "zod";
@@ -246,32 +247,64 @@ export class MCPToolManager {
     );
 
     try {
-      // Create MCP client
-      const client = new Client(
-        { name: "pippa-agent", version: "1.0.0" },
-        { capabilities: {} }
-      );
-
-      // Create transport based on config type
-      let transport: SSEClientTransport | StdioClientTransport;
+      let client: Client;
+      let actualTransport: string = transportType;
 
       if (isHttpConfig(config)) {
-        // HTTP/SSE transport - connect to URL
-        transport = new SSEClientTransport(new URL(config.url));
+        // For HTTP servers, try Streamable HTTP first (newer protocol), then fall back to SSE
+        const url = new URL(config.url);
+
+        // Try Streamable HTTP first
+        try {
+          this.logger.debug(
+            { name: config.name, url: config.url },
+            "Trying Streamable HTTP transport"
+          );
+          client = new Client(
+            { name: "pippa-agent", version: "1.0.0" },
+            { capabilities: {} }
+          );
+          const transport = new StreamableHTTPClientTransport(url);
+          await client.connect(transport);
+          actualTransport = "streamable-http";
+          this.logger.debug(
+            { name: config.name },
+            "Connected via Streamable HTTP"
+          );
+        } catch (streamableError) {
+          // Streamable HTTP failed, try SSE as fallback
+          this.logger.debug(
+            { name: config.name, error: streamableError instanceof Error ? streamableError.message : String(streamableError) },
+            "Streamable HTTP failed, trying SSE transport"
+          );
+          client = new Client(
+            { name: "pippa-agent", version: "1.0.0" },
+            { capabilities: {} }
+          );
+          const sseTransport = new SSEClientTransport(url);
+          await client.connect(sseTransport);
+          actualTransport = "sse";
+          this.logger.debug(
+            { name: config.name },
+            "Connected via SSE"
+          );
+        }
       } else if (isStdioConfig(config)) {
         // Stdio transport - spawn child process
-        transport = new StdioClientTransport({
+        client = new Client(
+          { name: "pippa-agent", version: "1.0.0" },
+          { capabilities: {} }
+        );
+        const transport = new StdioClientTransport({
           command: config.command,
           args: config.args,
           env: config.env,
           cwd: config.cwd,
         });
+        await client.connect(transport);
       } else {
         throw new Error(`Invalid MCP server config: missing command or url`);
       }
-
-      // Connect to the server
-      await client.connect(transport);
 
       // Get tools from the server
       const toolsResult = await client.listTools();
@@ -282,7 +315,7 @@ export class MCPToolManager {
 
       const toolNames = tools.map(t => t.name);
       this.logger.info(
-        { name: config.name, transport: transportType, toolCount: tools.length, tools: toolNames },
+        { name: config.name, transport: actualTransport, toolCount: tools.length, tools: toolNames },
         "MCP server connected"
       );
     } catch (error) {
