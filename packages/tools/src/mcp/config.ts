@@ -3,79 +3,59 @@
  *
  * Loads MCP server configuration from mcp.json file.
  * Supports config file path override via MCP_CONFIG_PATH environment variable.
+ *
+ * Priority:
+ * 1. MCP_CONFIG_PATH environment variable (explicit override)
+ * 2. {CONTAINER_ROOT}/mcp.local.json (local overrides, not committed)
+ * 3. {CONTAINER_ROOT}/mcp.json (default config)
+ *
+ * Use CONTAINER_ROOT to control the base path:
+ *   - Default: /container (production/Docker)
+ *   - Override: CONTAINER_ROOT=./opt pnpm dev (development)
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
 import { getLogger } from "@pippa/observability";
+import { containerPath, ContainerPaths } from "@pippa/shared/server";
 import type { MCPServerConfig, MCPConfigFile } from "./MCPToolManager.js";
-
-/**
- * Production config path for containerized deployments
- */
-const PROD_CONFIG_PATH = "/opt/containers/pippa/mcp.json";
 
 /**
  * Find the MCP config file.
  * Priority:
  * 1. MCP_CONFIG_PATH environment variable override
- * 2. Production path: /opt/containers/pippa/mcp.json
- * 3. Development path: opt/mcp.json from monorepo root
+ * 2. {CONTAINER_ROOT}/mcp.local.json (local development overrides)
+ * 3. {CONTAINER_ROOT}/mcp.json (default)
  */
 function findMcpConfigFile(): string | null {
+  const logger = getLogger().child({ component: "MCP" });
+
   // Check for explicit path override
   const overridePath = process.env.MCP_CONFIG_PATH;
   if (overridePath) {
     if (existsSync(overridePath)) {
       return overridePath;
     }
-    getLogger().warn(
+    logger.warn(
       { path: overridePath },
       "MCP_CONFIG_PATH specified but file not found"
     );
     return null;
   }
 
-  // Check production path first
-  if (existsSync(PROD_CONFIG_PATH)) {
-    return PROD_CONFIG_PATH;
+  // Check for local config first (mcp.local.json - for development overrides)
+  const localConfigPath = containerPath("mcp.local.json");
+  if (existsSync(localConfigPath)) {
+    logger.debug({ path: localConfigPath }, "Found local MCP config override");
+    return localConfigPath;
   }
 
-  // Walk up from cwd to find monorepo root for development
-  let dir = process.cwd();
-
-  for (let i = 0; i < 10; i++) {
-    const configPath = join(dir, "opt", "mcp.json");
-    const pnpmWorkspacePath = join(dir, "pnpm-workspace.yaml");
-    const pkgPath = join(dir, "package.json");
-
-    // Check for monorepo root markers
-    const isMonorepoRoot =
-      existsSync(pnpmWorkspacePath) ||
-      (existsSync(pkgPath) && hasWorkspaces(pkgPath));
-
-    if (isMonorepoRoot && existsSync(configPath)) {
-      return configPath;
-    }
-
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+  // Check for default config (mcp.json)
+  const defaultConfigPath = containerPath(ContainerPaths.MCP_CONFIG);
+  if (existsSync(defaultConfigPath)) {
+    return defaultConfigPath;
   }
 
   return null;
-}
-
-/**
- * Check if package.json has workspaces field (npm/yarn monorepo)
- */
-function hasWorkspaces(pkgPath: string): boolean {
-  try {
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-    return Boolean(pkg.workspaces);
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -89,9 +69,18 @@ export function loadMcpConfig(): MCPServerConfig[] {
 
   const configPath = findMcpConfigFile();
   if (!configPath) {
+    const containerRoot = process.env.CONTAINER_ROOT || "/container";
     logger.warn(
-      { cwd: process.cwd(), MCP_CONFIG_PATH: process.env.MCP_CONFIG_PATH },
-      "No MCP config file found - looked in opt/mcp.json from monorepo root and /opt/containers/pippa/mcp.json"
+      {
+        cwd: process.cwd(),
+        containerRoot,
+        MCP_CONFIG_PATH: process.env.MCP_CONFIG_PATH,
+        lookedIn: [
+          `${containerRoot}/mcp.local.json`,
+          `${containerRoot}/mcp.json`,
+        ],
+      },
+      "No MCP config file found"
     );
     return [];
   }
