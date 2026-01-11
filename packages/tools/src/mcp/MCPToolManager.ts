@@ -2,16 +2,21 @@
  * MCP Tool Manager
  *
  * Manages connections to MCP (Model Context Protocol) servers and aggregates their tools.
- * Supports stdio transport for spawning local MCP server processes.
+ * Uses the official @modelcontextprotocol/sdk for transport handling.
+ * Converts MCP tools to Vercel AI SDK compatible format.
  */
 
-import { experimental_createMCPClient as createMCPClient, type experimental_MCPClient as MCPClient } from "@ai-sdk/mcp";
-import { Experimental_StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { tool, type Tool } from "ai";
+import { z } from "zod";
 import { getLogger } from "@pippa/observability";
 
-// MCP tools have a slightly different type than ToolSet, so we use a flexible record type
-// that's compatible with streamText's tools parameter
-type MCPToolSet = Record<string, unknown>;
+// Type for Vercel AI SDK tools - use the generic Tool type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AITool = Tool<any, any>;
+type AIToolSet = Record<string, AITool>;
 
 /**
  * Configuration for a stdio-based MCP server (spawns a child process)
@@ -82,10 +87,131 @@ function isHttpConfig(config: MCPServerConfig): config is MCPServerConfigHttp {
   return "url" in config && typeof config.url === "string";
 }
 
+/**
+ * MCP Tool definition from the server
+ */
+interface MCPTool {
+  name: string;
+  description?: string;
+  inputSchema: {
+    type: "object";
+    properties?: Record<string, unknown>;
+    required?: string[];
+    [key: string]: unknown;
+  };
+}
+
 interface MCPClientEntry {
-  client: MCPClient;
+  client: Client;
   config: MCPServerConfig;
-  tools: MCPToolSet;
+  tools: MCPTool[];
+}
+
+/**
+ * Convert JSON Schema to Zod schema
+ * Handles common JSON Schema types and nested structures
+ */
+function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodTypeAny {
+  const type = schema.type as string | undefined;
+  const description = schema.description as string | undefined;
+
+  let zodSchema: z.ZodTypeAny;
+
+  switch (type) {
+    case "string": {
+      let strSchema = z.string();
+      if (schema.enum) {
+        const enumValues = schema.enum as string[];
+        if (enumValues.length > 0) {
+          zodSchema = z.enum(enumValues as [string, ...string[]]);
+          break;
+        }
+      }
+      if (schema.minLength) strSchema = strSchema.min(schema.minLength as number);
+      if (schema.maxLength) strSchema = strSchema.max(schema.maxLength as number);
+      if (schema.pattern) strSchema = strSchema.regex(new RegExp(schema.pattern as string));
+      zodSchema = strSchema;
+      break;
+    }
+    case "number":
+    case "integer": {
+      let numSchema = type === "integer" ? z.number().int() : z.number();
+      if (schema.minimum !== undefined) numSchema = numSchema.min(schema.minimum as number);
+      if (schema.maximum !== undefined) numSchema = numSchema.max(schema.maximum as number);
+      zodSchema = numSchema;
+      break;
+    }
+    case "boolean":
+      zodSchema = z.boolean();
+      break;
+    case "array": {
+      const items = schema.items as Record<string, unknown> | undefined;
+      zodSchema = items ? z.array(jsonSchemaToZod(items)) : z.array(z.unknown());
+      break;
+    }
+    case "object": {
+      const properties = schema.properties as Record<string, Record<string, unknown>> | undefined;
+      const required = schema.required as string[] | undefined;
+
+      if (properties) {
+        const shape: Record<string, z.ZodTypeAny> = {};
+        for (const [key, propSchema] of Object.entries(properties)) {
+          let propZod = jsonSchemaToZod(propSchema);
+          if (!required?.includes(key)) {
+            propZod = propZod.optional();
+          }
+          shape[key] = propZod;
+        }
+        zodSchema = z.object(shape);
+      } else {
+        zodSchema = z.record(z.string(), z.unknown());
+      }
+      break;
+    }
+    case "null":
+      zodSchema = z.null();
+      break;
+    default:
+      // Handle union types (anyOf, oneOf)
+      if (schema.anyOf || schema.oneOf) {
+        const variants = (schema.anyOf || schema.oneOf) as Record<string, unknown>[];
+        if (variants.length >= 2) {
+          const [first, second, ...rest] = variants.map(v => jsonSchemaToZod(v));
+          zodSchema = z.union([first, second, ...rest]);
+        } else if (variants.length === 1) {
+          zodSchema = jsonSchemaToZod(variants[0]);
+        } else {
+          zodSchema = z.unknown();
+        }
+      } else {
+        zodSchema = z.unknown();
+      }
+  }
+
+  if (description) {
+    zodSchema = zodSchema.describe(description);
+  }
+
+  return zodSchema;
+}
+
+/**
+ * Convert MCP tool input schema to Zod schema
+ */
+function mcpSchemaToZod(inputSchema: MCPTool["inputSchema"]): z.ZodObject<Record<string, z.ZodTypeAny>> {
+  const properties = inputSchema.properties || {};
+  const required = inputSchema.required || [];
+
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const [key, propSchema] of Object.entries(properties)) {
+    let propZod = jsonSchemaToZod(propSchema as Record<string, unknown>);
+    if (!required.includes(key)) {
+      propZod = propZod.optional();
+    }
+    shape[key] = propZod;
+  }
+
+  return z.object(shape);
 }
 
 /**
@@ -120,38 +246,43 @@ export class MCPToolManager {
     );
 
     try {
-      let client: MCPClient;
+      // Create MCP client
+      const client = new Client(
+        { name: "pippa-agent", version: "1.0.0" },
+        { capabilities: {} }
+      );
+
+      // Create transport based on config type
+      let transport: SSEClientTransport | StdioClientTransport;
 
       if (isHttpConfig(config)) {
         // HTTP/SSE transport - connect to URL
-        client = await createMCPClient({
-          transport: {
-            type: config.type === "http" ? "sse" : config.type, // Use SSE for http type
-            url: config.url,
-          },
-        });
+        transport = new SSEClientTransport(new URL(config.url));
       } else if (isStdioConfig(config)) {
         // Stdio transport - spawn child process
-        const transport = new Experimental_StdioMCPTransport({
+        transport = new StdioClientTransport({
           command: config.command,
           args: config.args,
           env: config.env,
           cwd: config.cwd,
         });
-        client = await createMCPClient({ transport });
       } else {
         throw new Error(`Invalid MCP server config: missing command or url`);
       }
 
+      // Connect to the server
+      await client.connect(transport);
+
       // Get tools from the server
-      const tools = await client.tools();
+      const toolsResult = await client.listTools();
+      const tools = toolsResult.tools as MCPTool[];
 
       // Store the client and its tools
       this.clients.set(config.name, { client, config, tools });
 
-      const toolNames = Object.keys(tools);
+      const toolNames = tools.map(t => t.name);
       this.logger.info(
-        { name: config.name, transport: transportType, toolCount: toolNames.length, tools: toolNames },
+        { name: config.name, transport: transportType, toolCount: tools.length, tools: toolNames },
         "MCP server connected"
       );
     } catch (error) {
@@ -192,18 +323,72 @@ export class MCPToolManager {
   }
 
   /**
-   * Get all tools from all connected MCP servers.
-   * Tool names are prefixed with server name to avoid collisions.
+   * Create a Vercel AI SDK tool from an MCP tool definition
    */
-  getTools(): MCPToolSet {
-    const allTools: MCPToolSet = {};
+  private createAITool(serverName: string, mcpTool: MCPTool, client: Client): AITool {
+    const inputSchema = mcpSchemaToZod(mcpTool.inputSchema);
+
+    return tool({
+      description: mcpTool.description || `Tool from ${serverName}`,
+      inputSchema,
+      execute: async (args: Record<string, unknown>) => {
+        this.logger.debug(
+          { server: serverName, tool: mcpTool.name, args },
+          "Executing MCP tool"
+        );
+
+        try {
+          const result = await client.callTool({
+            name: mcpTool.name,
+            arguments: args,
+          });
+
+          // Extract text content from the result
+          if ("content" in result && Array.isArray(result.content)) {
+            const textContent = result.content
+              .filter((c): c is { type: "text"; text: string } => c.type === "text")
+              .map(c => c.text)
+              .join("\n");
+
+            if (textContent) {
+              return textContent;
+            }
+
+            // Return the full result if no text content
+            return JSON.stringify(result.content);
+          }
+
+          // Return structured content if available
+          if ("structuredContent" in result && result.structuredContent) {
+            return result.structuredContent;
+          }
+
+          return result;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          this.logger.error(
+            { server: serverName, tool: mcpTool.name, error: errorMessage },
+            "MCP tool execution failed"
+          );
+          throw error;
+        }
+      },
+    });
+  }
+
+  /**
+   * Get all tools from all connected MCP servers.
+   * Tool names are prefixed with "mcp__<server>__" to avoid collisions.
+   */
+  getTools(): AIToolSet {
+    const allTools: AIToolSet = {};
 
     for (const [serverName, entry] of this.clients) {
-      for (const [toolName, tool] of Object.entries(entry.tools)) {
+      for (const mcpTool of entry.tools) {
         // Prefix tool names with server name to avoid collisions
-        // e.g., "fetch.fetch_url" or just use the tool name if unique
-        const prefixedName = `${serverName}_${toolName}`;
-        allTools[prefixedName] = tool;
+        // Format: mcp__<server>__<tool>
+        const prefixedName = `mcp__${serverName}__${mcpTool.name}`;
+        allTools[prefixedName] = this.createAITool(serverName, mcpTool, entry.client);
       }
     }
 
@@ -213,18 +398,18 @@ export class MCPToolManager {
   /**
    * Get tools without server name prefix (use when you only have one server)
    */
-  getToolsUnprefixed(): MCPToolSet {
-    const allTools: MCPToolSet = {};
+  getToolsUnprefixed(): AIToolSet {
+    const allTools: AIToolSet = {};
 
     for (const [serverName, entry] of this.clients) {
-      for (const [toolName, tool] of Object.entries(entry.tools)) {
-        if (allTools[toolName]) {
+      for (const mcpTool of entry.tools) {
+        if (allTools[mcpTool.name]) {
           this.logger.warn(
-            { toolName, serverName, existingServer: "previous" },
+            { toolName: mcpTool.name, serverName, existingServer: "previous" },
             "Tool name collision - later server's tool will overwrite"
           );
         }
-        allTools[toolName] = tool;
+        allTools[mcpTool.name] = this.createAITool(serverName, mcpTool, entry.client);
       }
     }
 
@@ -263,7 +448,7 @@ export class MCPToolManager {
         descriptions.push({
           name,
           description,
-          tools: Object.keys(entry.tools),
+          tools: entry.tools.map(t => t.name),
         });
       }
     }

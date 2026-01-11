@@ -19,7 +19,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^0.0.13",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@pippa/db": "workspace:*",
     "@pippa/memory": "workspace:*",
     "@pippa/observability": "workspace:*",
