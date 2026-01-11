@@ -16,7 +16,7 @@ env:
 
 jobs:
   upload-opt:
-    runs-on: hestia
+    runs-on: builder
     steps:
       - uses: actions/checkout@v4
         with:
