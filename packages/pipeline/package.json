@@ -26,6 +26,7 @@
     "@pippa/memory": "workspace:*",
     "@pippa/observability": "workspace:*",
     "@pippa/safety": "workspace:*",
+    "@pippa/shared": "workspace:^",
     "@pippa/tools": "workspace:*",
     "@pippa/types": "workspace:*"
   },

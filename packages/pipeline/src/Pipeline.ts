@@ -9,8 +9,8 @@
  * 5. Response + persist
  */
 
-import { readFileSync, existsSync } from 'fs'
-import { join, dirname } from 'path'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 
 import type {
   PipelineConfig,
@@ -34,84 +34,189 @@ import type {
   PipelineDiagnostics,
   SafetyValidationResult,
   EvaluationResult,
-} from '@pippa/types'
-import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext, QueryPreprocessor, type QueryPreprocessingMode, type MemoryPromptStore, type MemoryPromptGenerator  } from '@pippa/memory'
-import { buildSystemPrompt } from '@pippa/agent'
-import { agentTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, getMcpServerDescriptions, type MemoryToolAccessLevel } from '@pippa/tools'
+} from "@pippa/types";
+import { ok, err, getDefaultPipelineConfig } from "@pippa/types";
+import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+import {
+  MemoryOrchestrator,
+  type EntityExtractor,
+  type IMemoryContextProvider,
+  type IBootstrapOrchestrator,
+  type IContextCompactor,
+  type MemoryReflector,
+  type ReflectionContext,
+  QueryPreprocessor,
+  type QueryPreprocessingMode,
+  type MemoryPromptStore,
+  type MemoryPromptGenerator,
+} from "@pippa/memory";
+import { buildSystemPrompt } from "@pippa/agent";
+import {
+  agentTools,
+  getMemoryTools,
+  setMemoryToolTraceContext,
+  clearMemoryToolTraceContext,
+  refreshSystemPrompt,
+  clearConversation,
+  setGetConversationIdFn,
+  getMcpServerDescriptions,
+  type MemoryToolAccessLevel,
+} from "@pippa/tools";
+import { getLocale } from "./localeLoader.js";
+
+/** Cached monorepo root for output directory */
+let cachedMonorepoRoot: string | null = null;
+
+/**
+ * Find the monorepo root by walking up from cwd looking for pnpm-workspace.yaml
+ */
+function findMonorepoRoot(): string {
+  if (cachedMonorepoRoot) {
+    return cachedMonorepoRoot;
+  }
+
+  let dir = process.cwd();
+
+  for (let i = 0; i < 10; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
+      cachedMonorepoRoot = dir;
+      return dir;
+    }
+
+    const pkgPath = join(dir, "package.json");
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+        if (pkg.workspaces) {
+          cachedMonorepoRoot = dir;
+          return dir;
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  cachedMonorepoRoot = process.cwd();
+  return cachedMonorepoRoot;
+}
+
+/**
+ * Write operational data to the output directory for debugging.
+ * Creates the output/ directory if it doesn't exist.
+ *
+ * @param filename - Name of the file (e.g., "system-prompt.md")
+ * @param content - Content to write
+ */
+function writeOutput(filename: string, content: string): void {
+  try {
+    const outputDir = join(findMonorepoRoot(), "output");
+
+    // Create output directory if it doesn't exist
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true });
+    }
+
+    const filePath = join(outputDir, filename);
+    writeFileSync(filePath, content, "utf8");
+  } catch {
+    // Silently fail - this is debug output, shouldn't break the pipeline
+  }
+}
 
 /**
  * Memory tool names for filtering tool calls during post-processing.
  * These tools explicitly save memories, so Memory Reflector should avoid duplicating.
  */
-const MEMORY_TOOL_NAMES = ['saveNote', 'logObservation', 'updateEntity', 'createRelationship']
+const MEMORY_TOOL_NAMES = [
+  "saveNote",
+  "logObservation",
+  "updateEntity",
+  "createRelationship",
+];
 
 /**
  * Filter tool calls to only include memory-related tools.
  * Used by Memory Reflector to know what was explicitly saved.
  */
 export function getMemoryToolCalls(toolCalls: ToolCall[]): ToolCall[] {
-  return toolCalls.filter(tc => MEMORY_TOOL_NAMES.includes(tc.name))
+  return toolCalls.filter((tc) => MEMORY_TOOL_NAMES.includes(tc.name));
 }
 
 export interface PipelineError {
-  kind: 'CrisisError' | 'MemoryError' | 'AgentError' | 'SafetyError' | 'ValidationError' | 'TimeoutError' | 'UnexpectedError'
-  message: string
-  stage?: string
-  context: Record<string, unknown>
-  cause?: unknown
+  kind:
+    | "CrisisError"
+    | "MemoryError"
+    | "AgentError"
+    | "SafetyError"
+    | "ValidationError"
+    | "TimeoutError"
+    | "UnexpectedError";
+  message: string;
+  stage?: string;
+  context: Record<string, unknown>;
+  cause?: unknown;
 }
 
 /**
  * Chunk types for streaming pipeline responses
  */
 export type PipelineStreamChunk =
-  | { type: 'text'; content: string }
-  | { type: 'error'; error: string; kind?: string }
-  | { type: 'done'; result: PipelineResult }
+  | { type: "text"; content: string }
+  | { type: "error"; error: string; kind?: string }
+  | { type: "done"; result: PipelineResult };
 
 export interface PipelineDependencies {
-  crisisDetector: ICrisisDetector
-  crisisHandler: ICrisisHandler
-  crisisEvaluator?: ICrisisEvaluator
-  memory: MemoryOrchestrator
-  agent: IAgentProvider
-  safety: ISafetyValidator
-  evaluator: IEvaluator
-  embedding?: IEmbeddingProvider
+  crisisDetector: ICrisisDetector;
+  crisisHandler: ICrisisHandler;
+  crisisEvaluator?: ICrisisEvaluator;
+  memory: MemoryOrchestrator;
+  agent: IAgentProvider;
+  safety: ISafetyValidator;
+  evaluator: IEvaluator;
+  embedding?: IEmbeddingProvider;
   /** Entity extractor for knowledge graph (optional) */
-  entityExtractor?: EntityExtractor
+  entityExtractor?: EntityExtractor;
   /** Memory context provider for pre-agent memory injection (optional) */
-  memoryContextBuilder?: IMemoryContextProvider
+  memoryContextBuilder?: IMemoryContextProvider;
   /** Memory tool access level (default: 'off') */
-  memoryToolAccess?: MemoryToolAccessLevel
+  memoryToolAccess?: MemoryToolAccessLevel;
   /** Bootstrap orchestrator for conversation memory priming (optional) */
-  bootstrapOrchestrator?: IBootstrapOrchestrator
+  bootstrapOrchestrator?: IBootstrapOrchestrator;
   /** Base identity prompt fetched from database (optional, falls back to default) */
-  baseIdentity?: string
+  baseIdentity?: string;
   /** Function to lookup a system prompt by name (optional, for custom guides) */
-  getSystemPrompt?: (name: string) => Promise<{ id: string; name: string; content: string } | null>
+  getSystemPrompt?: (
+    name: string,
+  ) => Promise<{ id: string; name: string; content: string } | null>;
   /** Function to get the default system prompt fresh from database */
-  getDefaultSystemPrompt?: () => Promise<{ id: string; name: string; content: string } | null>
+  getDefaultSystemPrompt?: () => Promise<{
+    id: string;
+    name: string;
+    content: string;
+  } | null>;
   /** Context compactor for summarizing older messages (optional) */
-  contextCompactor?: IContextCompactor
+  contextCompactor?: IContextCompactor;
   /** Memory reflector for automatic insight extraction (optional) */
-  memoryReflector?: MemoryReflector
+  memoryReflector?: MemoryReflector;
   /** Whether L4 (Qdrant) vector store is enabled */
-  l4Enabled?: boolean
+  l4Enabled?: boolean;
   /** Whether L5 (Mem0) memory is enabled */
-  l5MemoryEnabled?: boolean
+  l5MemoryEnabled?: boolean;
   /** Enable query embeddings during preflight for semantic search */
-  preflightEmbeddingsEnabled?: boolean
+  preflightEmbeddingsEnabled?: boolean;
   /** Enable message embeddings during postflight for L4 storage */
-  postflightEmbeddingsEnabled?: boolean
+  postflightEmbeddingsEnabled?: boolean;
   /** Anthropic client for query preprocessing (optional, needed for Haiku mode) */
-  anthropic?: import('@anthropic-ai/sdk').default | null
+  anthropic?: import("@anthropic-ai/sdk").default | null;
   /** Memory prompt store for reading/writing memory prompts (optional) */
-  memoryPromptStore?: MemoryPromptStore
+  memoryPromptStore?: MemoryPromptStore;
   /** Memory prompt generator for postflight memory retrieval (optional) */
-  memoryPromptGenerator?: MemoryPromptGenerator
+  memoryPromptGenerator?: MemoryPromptGenerator;
 }
 
 /**
@@ -120,24 +225,24 @@ export interface PipelineDependencies {
 export interface TierReadStats {
   /** L1 Redis session cache */
   l1: {
-    hit: boolean
-    messageCount: number
-  }
+    hit: boolean;
+    messageCount: number;
+  };
   /** L2 PostgreSQL persistent store */
   l2: {
-    queried: boolean
-    messageCount: number
-  }
+    queried: boolean;
+    messageCount: number;
+  };
   /** L3 Neo4j knowledge graph */
   l3: {
-    queried: boolean
-    entityCount: number
-  }
+    queried: boolean;
+    entityCount: number;
+  };
   /** L4 Qdrant vector search */
   l4: {
-    queried: boolean
-    matchCount: number
-  }
+    queried: boolean;
+    matchCount: number;
+  };
 }
 
 /**
@@ -145,13 +250,13 @@ export interface TierReadStats {
  */
 export interface TierWriteStats {
   /** L1 Redis: messages cached */
-  l1: { messageCount: number }
+  l1: { messageCount: number };
   /** L2 PostgreSQL: messages persisted */
-  l2: { messageCount: number }
+  l2: { messageCount: number };
   /** L3 Neo4j: entities added/updated */
-  l3: { entitiesAdded: number; entitiesUpdated: number }
+  l3: { entitiesAdded: number; entitiesUpdated: number };
   /** L4 Qdrant: embeddings stored */
-  l4: { embeddingsStored: number }
+  l4: { embeddingsStored: number };
 }
 
 /**
@@ -159,17 +264,17 @@ export interface TierWriteStats {
  */
 export interface PostProcessStats {
   /** Timestamp when post-process completed */
-  timestamp: number
+  timestamp: number;
   /** Duration of post-process in ms */
-  durationMs: number
+  durationMs: number;
   /** Write operations per tier */
-  writes: TierWriteStats
+  writes: TierWriteStats;
   /** Safety validation result */
-  safety: { passed: boolean; violationCount: number }
+  safety: { passed: boolean; violationCount: number };
   /** Evaluation score (if enabled) */
-  evaluation: { score: number | null }
+  evaluation: { score: number | null };
   /** Entity extraction (if enabled) */
-  entityExtraction: { extracted: number; relationships: number }
+  entityExtraction: { extracted: number; relationships: number };
 }
 
 /**
@@ -180,14 +285,14 @@ export interface PostProcessStats {
  */
 export interface MemoryDiagnostics {
   /** Total cache hits across tiers */
-  cacheHits: number
+  cacheHits: number;
   /** Total cache misses across tiers */
-  cacheMisses: number
+  cacheMisses: number;
   /** Read operations per tier */
-  l1: TierReadStats['l1']
-  l2: TierReadStats['l2']
-  l3: TierReadStats['l3']
-  l4: TierReadStats['l4']
+  l1: TierReadStats["l1"];
+  l2: TierReadStats["l2"];
+  l3: TierReadStats["l3"];
+  l4: TierReadStats["l4"];
 }
 
 /**
@@ -198,60 +303,60 @@ export interface MemoryDiagnostics {
  */
 export interface SemanticSearchDiagnostics {
   /** The original query text */
-  query: string
+  query: string;
   /** The preprocessed query that was embedded (may differ from query) */
-  preprocessedQuery: string
+  preprocessedQuery: string;
   /** Whether search was performed */
-  searched: boolean
+  searched: boolean;
   /** Semantic matches from L4 */
   results: Array<{
     /** Similarity score (0-1) */
-    score: number
+    score: number;
     /** Matched content (truncated for display) */
-    content: string
+    content: string;
     /** Role of the message (user/assistant) */
-    role?: string
+    role?: string;
     /** Timestamp of the matched message */
-    timestamp?: number
-  }>
+    timestamp?: number;
+  }>;
 }
 
 export interface PreflightResult {
   /** Built system prompt with context */
-  systemPrompt: string
+  systemPrompt: string;
   /** Tool definitions for the model */
-  tools: ToolDefinition[]
+  tools: ToolDefinition[];
   /** Assembled context from memory */
-  context: PipelineContext['memory']
+  context: PipelineContext["memory"];
   /** Crisis check result */
-  crisisCheck: CrisisCheckResult
+  crisisCheck: CrisisCheckResult;
   /** Memory context string (if configured) */
-  memoryContext: string | null
+  memoryContext: string | null;
   /** Memory prompts from L1 cache (phase-shifted from postflight) */
-  memoryPrompts: string[]
+  memoryPrompts: string[];
   /** Memory retrieval stats (detailed diagnostics) */
-  memoryStats: MemoryDiagnostics
+  memoryStats: MemoryDiagnostics;
   /** Previous exchange's post-process stats (phase-shifted) */
-  previousPostProcess: PostProcessStats | null
+  previousPostProcess: PostProcessStats | null;
   /** L4 semantic search diagnostics */
-  semanticSearch?: SemanticSearchDiagnostics
+  semanticSearch?: SemanticSearchDiagnostics;
 }
 
 export class Pipeline {
-  private readonly deps: PipelineDependencies
-  private readonly pipelineConfig: PipelineConfig
-  private envFilePath: string | null = null
+  private readonly deps: PipelineDependencies;
+  private readonly pipelineConfig: PipelineConfig;
+  private envFilePath: string | null = null;
 
   constructor(deps: PipelineDependencies, config?: Partial<PipelineConfig>) {
-    this.deps = deps
-    this.pipelineConfig = { ...getDefaultPipelineConfig(), ...config }
+    this.deps = deps;
+    this.pipelineConfig = { ...getDefaultPipelineConfig(), ...config };
     // Find .env file path at construction time
-    this.envFilePath = this.findEnvFile()
+    this.envFilePath = this.findEnvFile();
   }
 
   /** Get the pipeline configuration */
   get config(): PipelineConfig {
-    return this.pipelineConfig
+    return this.pipelineConfig;
   }
 
   /**
@@ -259,37 +364,37 @@ export class Pipeline {
    * Monorepo root is identified by pnpm-workspace.yaml (pnpm) or package.json with workspaces (npm/yarn).
    */
   private findEnvFile(): string | null {
-    let dir = process.cwd()
+    let dir = process.cwd();
 
     for (let i = 0; i < 10; i++) {
-      const envPath = join(dir, '.env')
-      const pnpmWorkspacePath = join(dir, 'pnpm-workspace.yaml')
-      const pkgPath = join(dir, 'package.json')
+      const envPath = join(dir, ".env");
+      const pnpmWorkspacePath = join(dir, "pnpm-workspace.yaml");
+      const pkgPath = join(dir, "package.json");
 
       // Check for pnpm monorepo (pnpm-workspace.yaml)
       if (existsSync(pnpmWorkspacePath) && existsSync(envPath)) {
-        return envPath
+        return envPath;
       }
 
       // Check for npm/yarn monorepo (package.json with workspaces)
       if (existsSync(pkgPath)) {
         try {
-          const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+          const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
           if (pkg.workspaces && existsSync(envPath)) {
-            return envPath
+            return envPath;
           }
         } catch {
           // Ignore parse errors
         }
       }
 
-      const parent = dirname(dir)
-      if (parent === dir) break
-      dir = parent
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
     }
 
     // No monorepo root found - don't use fallback (avoids picking up wrong .env)
-    return null
+    return null;
   }
 
   /**
@@ -298,41 +403,49 @@ export class Pipeline {
    */
   private reloadEnvFile(): void {
     if (!this.envFilePath) {
-      return
+      return;
     }
 
     try {
-      const content = readFileSync(this.envFilePath, 'utf8')
-      let reloadedCount = 0
+      const content = readFileSync(this.envFilePath, "utf8");
+      let reloadedCount = 0;
 
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith('#')) continue
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
 
-        const eqIndex = trimmed.indexOf('=')
-        if (eqIndex === -1) continue
+        const eqIndex = trimmed.indexOf("=");
+        if (eqIndex === -1) continue;
 
-        const key = trimmed.slice(0, eqIndex).trim()
-        let value = trimmed.slice(eqIndex + 1).trim()
+        const key = trimmed.slice(0, eqIndex).trim();
+        let value = trimmed.slice(eqIndex + 1).trim();
 
         // Remove quotes if present
-        if ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1)
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
         }
 
         // Update process.env directly
         if (process.env[key] !== value) {
-          process.env[key] = value
-          reloadedCount++
+          process.env[key] = value;
+          reloadedCount++;
         }
       }
 
       if (reloadedCount > 0) {
-        getLogger().info({ reloadedCount, envFile: this.envFilePath }, 'Hot-reloaded .env file')
+        getLogger().info(
+          { reloadedCount, envFile: this.envFilePath },
+          "Hot-reloaded .env file",
+        );
       }
     } catch (err) {
-      getLogger().warn({ err, envFile: this.envFilePath }, 'Failed to hot-reload .env file')
+      getLogger().warn(
+        { err, envFile: this.envFilePath },
+        "Failed to hot-reload .env file",
+      );
     }
   }
 
@@ -341,10 +454,13 @@ export class Pipeline {
    * Call this at the start of preflight/process
    */
   maybeHotReload(): void {
-    const hotConfig = process.env.HOT_CONFIG
-    if (hotConfig === 'true') {
-      getLogger().debug({ envFilePath: this.envFilePath }, 'HOT_CONFIG enabled, reloading .env')
-      this.reloadEnvFile()
+    const hotConfig = process.env.HOT_CONFIG;
+    if (hotConfig === "true") {
+      getLogger().debug(
+        { envFilePath: this.envFilePath },
+        "HOT_CONFIG enabled, reloading .env",
+      );
+      this.reloadEnvFile();
     }
   }
 
@@ -353,17 +469,17 @@ export class Pipeline {
    */
   async process(
     input: PipelineInput,
-    traceCtx: TraceContext
+    traceCtx: TraceContext,
   ): Promise<Result<PipelineResult, PipelineError>> {
-    return withSpan('Pipeline.process', async () => {
-      const startTime = Date.now()
+    return withSpan("Pipeline.process", async () => {
+      const startTime = Date.now();
       const logger = getLogger().child({
         conversationId: input.conversationId,
         userId: input.userId,
         requestId: traceCtx.requestId,
-      })
+      });
 
-      logger.info('Starting pipeline processing')
+      logger.info("Starting pipeline processing");
 
       // Initialize pipeline context
       const ctx: PipelineContext = {
@@ -374,46 +490,46 @@ export class Pipeline {
           cacheHits: 0,
           cacheMisses: 0,
         },
-      }
+      };
 
       // Create user message
       const userMessage: Message = {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         conversationId: input.conversationId,
         userId: input.userId,
-        role: 'user',
+        role: "user",
         content: input.message,
         timestamp: Date.now(),
-      }
+      };
 
       try {
         // STAGE 1: Pre-flight crisis check (<10ms target)
-        const crisisResult = await this.runCrisisCheck(input.message, ctx)
+        const crisisResult = await this.runCrisisCheck(input.message, ctx);
         if (!crisisResult.ok) {
           return err({
-            kind: 'CrisisError',
-            message: 'Crisis detection failed',
-            stage: 'crisis_check',
+            kind: "CrisisError",
+            message: "Crisis detection failed",
+            stage: "crisis_check",
             context: { conversationId: input.conversationId },
             cause: crisisResult.error,
-          })
+          });
         }
 
-        ctx.crisisCheck = crisisResult.value
+        ctx.crisisCheck = crisisResult.value;
 
         // Handle emergency if triggered
         if (crisisResult.value.triggerEmergency) {
           logger.warn(
             { crisisLevel: crisisResult.value.level },
-            'Emergency crisis detected'
-          )
+            "Emergency crisis detected",
+          );
 
           const handlerResult = await this.deps.crisisHandler.handle(
             crisisResult.value,
             input.userId,
             input.conversationId,
-            ctx
-          )
+            ctx,
+          );
 
           if (handlerResult.ok && handlerResult.value.prependMessage) {
             // Emergency response - skip normal flow
@@ -421,13 +537,13 @@ export class Pipeline {
               id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
               conversationId: input.conversationId,
               userId: input.userId,
-              role: 'assistant',
+              role: "assistant",
               content: handlerResult.value.prependMessage,
               timestamp: Date.now(),
               metadata: {
                 crisisLevel: crisisResult.value.level,
               },
-            }
+            };
 
             return ok({
               response: assistantMessage.content,
@@ -440,37 +556,57 @@ export class Pipeline {
               },
               crisisLevel: crisisResult.value.level,
               emergencyTriggered: true,
-            })
+            });
           }
         }
 
         // STAGE 2: Memory retrieval
-        const memoryResult = await this.runMemoryRetrieval(input, ctx)
+        const memoryResult = await this.runMemoryRetrieval(input, ctx);
         if (!memoryResult.ok) {
-          logger.warn({ error: memoryResult.error }, 'Memory retrieval failed, continuing with empty context')
+          logger.warn(
+            { error: memoryResult.error },
+            "Memory retrieval failed, continuing with empty context",
+          );
         }
 
-        ctx.memory = memoryResult.ok ? memoryResult.value.context : {
-          messages: [],
-          userProfile: null,
-          sessionEntities: { people: [], places: [], events: [], emotions: [], medications: [] },
-          sessionState: { startTime: Date.now(), lastActivity: Date.now(), messageCount: 0, crisisLevel: 1 },
-          previousSessions: [],
-        }
+        ctx.memory = memoryResult.ok
+          ? memoryResult.value.context
+          : {
+              messages: [],
+              userProfile: null,
+              sessionEntities: {
+                people: [],
+                places: [],
+                events: [],
+                emotions: [],
+                medications: [],
+              },
+              sessionState: {
+                startTime: Date.now(),
+                lastActivity: Date.now(),
+                messageCount: 0,
+                crisisLevel: 1,
+              },
+              previousSessions: [],
+            };
 
         // Update cache stats from memory retrieval
         if (memoryResult.ok) {
-          ctx.metrics.cacheHits = memoryResult.value.cacheHits
-          ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
+          ctx.metrics.cacheHits = memoryResult.value.cacheHits;
+          ctx.metrics.cacheMisses = memoryResult.value.cacheMisses;
         }
 
         // Fire-and-forget context compaction (runs in parallel with agent processing)
-        if (this.deps.contextCompactor && memoryResult.ok && memoryResult.value.context) {
+        if (
+          this.deps.contextCompactor &&
+          memoryResult.ok &&
+          memoryResult.value.context
+        ) {
           this.deps.contextCompactor.maybeCompact(
             input.conversationId,
             memoryResult.value.context.messages,
-            ctx
-          )
+            ctx,
+          );
         }
 
         // STAGE 3: Agent processing + deep crisis evaluation (parallel)
@@ -481,32 +617,37 @@ export class Pipeline {
         const shouldRunDeepEval =
           this.deps.crisisEvaluator &&
           crisisResult.value.level < 7 &&
-          input.message.length > 20
+          input.message.length > 20;
 
         // Build conversation history for deep evaluation
-        const conversationHistory = ctx.memory?.messages
-          .slice(-3)
-          .map((m) => `${m.role}: ${m.content}`) ?? []
+        const conversationHistory =
+          ctx.memory?.messages
+            .slice(-3)
+            .map((m) => `${m.role}: ${m.content}`) ?? [];
 
         const [agentResult, deepCrisisResult] = await Promise.all([
           this.runAgentProcessing(input, ctx),
           shouldRunDeepEval
-            ? this.deps.crisisEvaluator!.evaluate(input.message, conversationHistory, ctx)
+            ? this.deps.crisisEvaluator!.evaluate(
+                input.message,
+                conversationHistory,
+                ctx,
+              )
             : Promise.resolve(null),
-        ])
+        ]);
 
         if (!agentResult.ok) {
           return err({
-            kind: 'AgentError',
-            message: 'Agent processing failed',
-            stage: 'agent',
+            kind: "AgentError",
+            message: "Agent processing failed",
+            stage: "agent",
             context: { conversationId: input.conversationId },
             cause: agentResult.error,
-          })
+          });
         }
 
         // Check if deep evaluation found a higher crisis level
-        let effectiveCrisisLevel = crisisResult.value.level
+        let effectiveCrisisLevel = crisisResult.value.level;
         if (
           deepCrisisResult &&
           deepCrisisResult.ok &&
@@ -517,10 +658,10 @@ export class Pipeline {
               fastLevel: crisisResult.value.level,
               deepLevel: deepCrisisResult.value.level,
             },
-            'Deep crisis evaluation detected elevated risk'
-          )
+            "Deep crisis evaluation detected elevated risk",
+          );
 
-          effectiveCrisisLevel = deepCrisisResult.value.level
+          effectiveCrisisLevel = deepCrisisResult.value.level;
 
           // Handle the escalated crisis
           if (deepCrisisResult.value.level >= 7) {
@@ -528,31 +669,40 @@ export class Pipeline {
               deepCrisisResult.value,
               input.userId,
               input.conversationId,
-              ctx
-            )
+              ctx,
+            );
           }
         }
 
         // STAGE 4 & 5: Safety validation and evaluation (parallel with timing)
-        const safetyStart = Date.now()
+        const safetyStart = Date.now();
         const [safetyResult, evaluationResult] = await Promise.all([
-          this.deps.safety.validate(agentResult.value.content, ctx.memory!, ctx),
-          this.deps.evaluator.evaluate(input.message, agentResult.value.content, ctx.memory!, ctx),
-        ])
+          this.deps.safety.validate(
+            agentResult.value.content,
+            ctx.memory!,
+            ctx,
+          ),
+          this.deps.evaluator.evaluate(
+            input.message,
+            agentResult.value.content,
+            ctx.memory!,
+            ctx,
+          ),
+        ]);
         // Note: Combined timing for parallel operations
-        ctx.metrics.stageDurations.safety = Date.now() - safetyStart
-        ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart
+        ctx.metrics.stageDurations.safety = Date.now() - safetyStart;
+        ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart;
 
         // Handle safety violations
-        let finalContent = agentResult.value.content
+        let finalContent = agentResult.value.content;
         if (safetyResult.ok && !safetyResult.value.passed) {
           logger.warn(
             { violations: safetyResult.value.violations },
-            'Safety violations detected'
-          )
+            "Safety violations detected",
+          );
 
           if (safetyResult.value.sanitizedOutput) {
-            finalContent = safetyResult.value.sanitizedOutput
+            finalContent = safetyResult.value.sanitizedOutput;
           }
         }
 
@@ -561,22 +711,30 @@ export class Pipeline {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           conversationId: input.conversationId,
           userId: input.userId,
-          role: 'assistant',
+          role: "assistant",
           content: finalContent,
           timestamp: Date.now(),
           metadata: {
             crisisLevel: effectiveCrisisLevel,
           },
-        }
+        };
 
         // Record total duration BEFORE persistence (measures user-facing latency)
-        const totalDuration = Date.now() - startTime
-        pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
+        const totalDuration = Date.now() - startTime;
+        pipelineMetrics.stageDuration.record(totalDuration, { stage: "total" });
 
         // STAGE 6: Persist messages (fire-and-forget - non-blocking)
-        this.persistMessages(userMessage, assistantMessage, agentResult.value.toolCalls, ctx).catch((err) => {
-          logger.error({ err, conversationId: input.conversationId }, 'Message persistence failed')
-        })
+        this.persistMessages(
+          userMessage,
+          assistantMessage,
+          agentResult.value.toolCalls,
+          ctx,
+        ).catch((err) => {
+          logger.error(
+            { err, conversationId: input.conversationId },
+            "Message persistence failed",
+          );
+        });
 
         logger.info(
           {
@@ -584,8 +742,8 @@ export class Pipeline {
             crisisLevel: effectiveCrisisLevel,
             tokensUsed: agentResult.value.usage,
           },
-          'Pipeline processing completed'
-        )
+          "Pipeline processing completed",
+        );
 
         // Build diagnostics
         const diagnostics = this.buildDiagnostics(
@@ -594,8 +752,8 @@ export class Pipeline {
           crisisResult.value,
           agentResult.value,
           safetyResult.ok ? safetyResult.value : undefined,
-          evaluationResult.ok ? evaluationResult.value : undefined
-        )
+          evaluationResult.ok ? evaluationResult.value : undefined,
+        );
 
         return ok({
           response: finalContent,
@@ -609,21 +767,23 @@ export class Pipeline {
               output: agentResult.value.usage.outputTokens,
             },
           },
-          safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
+          safetyViolations: safetyResult.ok
+            ? safetyResult.value.violations
+            : [],
           crisisLevel: effectiveCrisisLevel,
           emergencyTriggered: false,
           diagnostics,
-        })
+        });
       } catch (error) {
-        logger.error({ error }, 'Unexpected pipeline error')
+        logger.error({ error }, "Unexpected pipeline error");
         return err({
-          kind: 'UnexpectedError',
-          message: 'Unexpected error during pipeline processing',
+          kind: "UnexpectedError",
+          message: "Unexpected error during pipeline processing",
           context: { conversationId: input.conversationId },
           cause: error,
-        })
+        });
       }
-    })
+    });
   }
 
   /**
@@ -634,16 +794,16 @@ export class Pipeline {
    */
   async *processStream(
     input: PipelineInput,
-    traceCtx: TraceContext
+    traceCtx: TraceContext,
   ): AsyncGenerator<PipelineStreamChunk, void, unknown> {
-    const startTime = Date.now()
+    const startTime = Date.now();
     const logger = getLogger().child({
       conversationId: input.conversationId,
       userId: input.userId,
       requestId: traceCtx.requestId,
-    })
+    });
 
-    logger.info('Starting streaming pipeline processing')
+    logger.info("Starting streaming pipeline processing");
 
     // Initialize pipeline context
     const ctx: PipelineContext = {
@@ -654,45 +814,45 @@ export class Pipeline {
         cacheHits: 0,
         cacheMisses: 0,
       },
-    }
+    };
 
     // Create user message
     const userMessage: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       conversationId: input.conversationId,
       userId: input.userId,
-      role: 'user',
+      role: "user",
       content: input.message,
       timestamp: Date.now(),
-    }
+    };
 
     try {
       // STAGE 1: Pre-flight crisis check (<10ms target)
-      const crisisResult = await this.runCrisisCheck(input.message, ctx)
+      const crisisResult = await this.runCrisisCheck(input.message, ctx);
       if (!crisisResult.ok) {
         yield {
-          type: 'error',
-          error: 'Crisis detection failed',
-          kind: 'CrisisError',
-        }
-        return
+          type: "error",
+          error: "Crisis detection failed",
+          kind: "CrisisError",
+        };
+        return;
       }
 
-      ctx.crisisCheck = crisisResult.value
+      ctx.crisisCheck = crisisResult.value;
 
       // Handle emergency if triggered
       if (crisisResult.value.triggerEmergency) {
         logger.warn(
           { crisisLevel: crisisResult.value.level },
-          'Emergency crisis detected'
-        )
+          "Emergency crisis detected",
+        );
 
         const handlerResult = await this.deps.crisisHandler.handle(
           crisisResult.value,
           input.userId,
           input.conversationId,
-          ctx
-        )
+          ctx,
+        );
 
         if (handlerResult.ok && handlerResult.value.prependMessage) {
           // Emergency response - yield the message and return early
@@ -700,17 +860,17 @@ export class Pipeline {
             id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
             conversationId: input.conversationId,
             userId: input.userId,
-            role: 'assistant',
+            role: "assistant",
             content: handlerResult.value.prependMessage,
             timestamp: Date.now(),
             metadata: {
               crisisLevel: crisisResult.value.level,
             },
-          }
+          };
 
-          yield { type: 'text', content: handlerResult.value.prependMessage }
+          yield { type: "text", content: handlerResult.value.prependMessage };
           yield {
-            type: 'done',
+            type: "done",
             result: {
               response: assistantMessage.content,
               messages: { user: userMessage, assistant: assistantMessage },
@@ -723,77 +883,108 @@ export class Pipeline {
               crisisLevel: crisisResult.value.level,
               emergencyTriggered: true,
             },
-          }
-          return
+          };
+          return;
         }
       }
 
       // STAGE 2: Memory retrieval
-      const memoryResult = await this.runMemoryRetrieval(input, ctx)
+      const memoryResult = await this.runMemoryRetrieval(input, ctx);
       if (!memoryResult.ok) {
-        logger.warn({ error: memoryResult.error }, 'Memory retrieval failed, continuing with empty context')
+        logger.warn(
+          { error: memoryResult.error },
+          "Memory retrieval failed, continuing with empty context",
+        );
       }
 
-      ctx.memory = memoryResult.ok ? memoryResult.value.context : {
-        messages: [],
-        userProfile: null,
-        sessionEntities: { people: [], places: [], events: [], emotions: [], medications: [] },
-        sessionState: { startTime: Date.now(), lastActivity: Date.now(), messageCount: 0, crisisLevel: 1 },
-        previousSessions: [],
-      }
+      ctx.memory = memoryResult.ok
+        ? memoryResult.value.context
+        : {
+            messages: [],
+            userProfile: null,
+            sessionEntities: {
+              people: [],
+              places: [],
+              events: [],
+              emotions: [],
+              medications: [],
+            },
+            sessionState: {
+              startTime: Date.now(),
+              lastActivity: Date.now(),
+              messageCount: 0,
+              crisisLevel: 1,
+            },
+            previousSessions: [],
+          };
 
       // Update cache stats from memory retrieval
       if (memoryResult.ok) {
-        ctx.metrics.cacheHits = memoryResult.value.cacheHits
-        ctx.metrics.cacheMisses = memoryResult.value.cacheMisses
-        ctx.metrics.memoryTier = 'L2_POSTGRESQL'
+        ctx.metrics.cacheHits = memoryResult.value.cacheHits;
+        ctx.metrics.cacheMisses = memoryResult.value.cacheMisses;
+        ctx.metrics.memoryTier = "L2_POSTGRESQL";
       }
 
       // Fire-and-forget context compaction (runs in parallel with agent processing)
-      if (this.deps.contextCompactor && memoryResult.ok && memoryResult.value.context) {
+      if (
+        this.deps.contextCompactor &&
+        memoryResult.ok &&
+        memoryResult.value.context
+      ) {
         this.deps.contextCompactor.maybeCompact(
           input.conversationId,
           memoryResult.value.context.messages,
-          ctx
-        )
+          ctx,
+        );
       }
 
       // STAGE 3: Build agent input and stream response
-      const agentStageStart = Date.now()
+      const agentStageStart = Date.now();
 
       // Build memory context pre-agent (legacy, if configured)
       // Skip when memory prompts are enabled (phase-shifted architecture)
-      let memoryContext: string | null = null
+      let memoryContext: string | null = null;
       if (this.deps.memoryContextBuilder && !this.deps.memoryPromptStore) {
         try {
           memoryContext = await this.deps.memoryContextBuilder.buildContext(
             input.message,
             input.userId,
-            ctx
-          )
+            ctx,
+          );
         } catch (error) {
-          logger.warn({ error }, 'Memory context builder failed, continuing without')
+          logger.warn(
+            { error },
+            "Memory context builder failed, continuing without",
+          );
         }
       }
 
       // Read memory prompts from L1 (phase-shifted from postflight)
-      let memoryPrompts: string[] = []
+      let memoryPrompts: string[] = [];
       if (this.deps.memoryPromptStore) {
         const promptsResult = await this.deps.memoryPromptStore.getAll(
           input.userId,
-          input.conversationId
-        )
+          input.conversationId,
+        );
         if (promptsResult.ok) {
-          memoryPrompts = promptsResult.value
+          memoryPrompts = promptsResult.value;
           if (memoryPrompts.length > 0) {
-            logger.debug({ count: memoryPrompts.length }, 'Memory prompts retrieved from L1')
+            logger.debug(
+              { count: memoryPrompts.length },
+              "Memory prompts retrieved from L1",
+            );
           }
         } else {
-          logger.warn({ error: promptsResult.error }, 'Failed to retrieve memory prompts')
+          logger.warn(
+            { error: promptsResult.error },
+            "Failed to retrieve memory prompts",
+          );
         }
       }
 
-      const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
+      const hasMemoryTools =
+        this.deps.memoryToolAccess && this.deps.memoryToolAccess !== "off";
+      const locale = getLocale(input.localeCode);
 
       const systemPrompt = buildSystemPrompt({
         context: ctx.memory!,
@@ -803,20 +994,22 @@ export class Pipeline {
         hasMemoryTools,
         baseIdentity: this.deps.baseIdentity,
         mcpServerDescriptions: getMcpServerDescriptions(),
-      })
+        locale,
+        userTimezone: input.timezone,
+      });
 
-      const tools = this.convertToolsToDefinitions()
+      const tools = this.convertToolsToDefinitions();
 
       // Set trace context for memory tools
       if (hasMemoryTools) {
-        setMemoryToolTraceContext(ctx)
+        setMemoryToolTraceContext(ctx);
       }
 
       // Set conversation ID getter for system tools (clearConversation)
-      setGetConversationIdFn(() => ctx.sessionId || ctx.requestId)
+      setGetConversationIdFn(() => ctx.sessionId || ctx.requestId);
 
-      let fullContent = ''
-      let agentResponse: AgentResponse | undefined
+      let fullContent = "";
+      let agentResponse: AgentResponse | undefined;
 
       try {
         // Stream agent response
@@ -828,34 +1021,38 @@ export class Pipeline {
             systemPrompt,
             tools,
           },
-          ctx
-        )
+          ctx,
+        );
 
         // Yield text chunks as they arrive
         for await (const chunk of agentStream) {
-          if (chunk.type === 'text' && chunk.content) {
-            fullContent += chunk.content
-            yield { type: 'text', content: chunk.content }
-          } else if (chunk.type === 'error') {
-            yield { type: 'error', error: chunk.error ?? 'Unknown agent error', kind: 'AgentError' }
-            return
+          if (chunk.type === "text" && chunk.content) {
+            fullContent += chunk.content;
+            yield { type: "text", content: chunk.content };
+          } else if (chunk.type === "error") {
+            yield {
+              type: "error",
+              error: chunk.error ?? "Unknown agent error",
+              kind: "AgentError",
+            };
+            return;
           }
         }
 
         // Get the return value from the generator (AgentResponse)
         // Note: When the generator completes naturally, we need to get the return value
         // This happens after the for-await loop exhausts the generator
-        const generatorResult = await agentStream.next()
+        const generatorResult = await agentStream.next();
         if (generatorResult.done && generatorResult.value) {
-          agentResponse = generatorResult.value
+          agentResponse = generatorResult.value;
         }
       } finally {
         if (hasMemoryTools) {
-          clearMemoryToolTraceContext()
+          clearMemoryToolTraceContext();
         }
       }
 
-      ctx.metrics.stageDurations.agent = Date.now() - agentStageStart
+      ctx.metrics.stageDurations.agent = Date.now() - agentStageStart;
 
       // If we didn't get an agentResponse, create a minimal one from fullContent
       if (!agentResponse) {
@@ -863,36 +1060,46 @@ export class Pipeline {
           content: fullContent,
           toolCalls: [],
           usage: { inputTokens: 0, outputTokens: 0 },
-          model: 'unknown',
-          stopReason: 'end_turn',
-        }
+          model: "unknown",
+          stopReason: "end_turn",
+        };
       }
 
       // STAGE 4: Run deep crisis evaluation in parallel with safety/evaluation
       const shouldRunDeepEval =
         this.deps.crisisEvaluator &&
         crisisResult.value.level < 7 &&
-        input.message.length > 20
+        input.message.length > 20;
 
-      const conversationHistory = ctx.memory?.messages
-        .slice(-3)
-        .map((m) => `${m.role}: ${m.content}`) ?? []
+      const conversationHistory =
+        ctx.memory?.messages.slice(-3).map((m) => `${m.role}: ${m.content}`) ??
+        [];
 
       // STAGE 4 & 5: Safety validation, evaluation, and deep crisis (parallel)
-      const safetyStart = Date.now()
-      const [safetyResult, evaluationResult, deepCrisisResult] = await Promise.all([
-        this.deps.safety.validate(agentResponse.content, ctx.memory!, ctx),
-        this.deps.evaluator.evaluate(input.message, agentResponse.content, ctx.memory!, ctx),
-        shouldRunDeepEval
-          ? this.deps.crisisEvaluator!.evaluate(input.message, conversationHistory, ctx)
-          : Promise.resolve(null),
-      ])
+      const safetyStart = Date.now();
+      const [safetyResult, evaluationResult, deepCrisisResult] =
+        await Promise.all([
+          this.deps.safety.validate(agentResponse.content, ctx.memory!, ctx),
+          this.deps.evaluator.evaluate(
+            input.message,
+            agentResponse.content,
+            ctx.memory!,
+            ctx,
+          ),
+          shouldRunDeepEval
+            ? this.deps.crisisEvaluator!.evaluate(
+                input.message,
+                conversationHistory,
+                ctx,
+              )
+            : Promise.resolve(null),
+        ]);
 
-      ctx.metrics.stageDurations.safety = Date.now() - safetyStart
-      ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart
+      ctx.metrics.stageDurations.safety = Date.now() - safetyStart;
+      ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart;
 
       // Check if deep evaluation found a higher crisis level
-      let effectiveCrisisLevel = crisisResult.value.level
+      let effectiveCrisisLevel = crisisResult.value.level;
       if (
         deepCrisisResult &&
         deepCrisisResult.ok &&
@@ -903,31 +1110,31 @@ export class Pipeline {
             fastLevel: crisisResult.value.level,
             deepLevel: deepCrisisResult.value.level,
           },
-          'Deep crisis evaluation detected elevated risk'
-        )
+          "Deep crisis evaluation detected elevated risk",
+        );
 
-        effectiveCrisisLevel = deepCrisisResult.value.level
+        effectiveCrisisLevel = deepCrisisResult.value.level;
 
         if (deepCrisisResult.value.level >= 7) {
           await this.deps.crisisHandler.handle(
             deepCrisisResult.value,
             input.userId,
             input.conversationId,
-            ctx
-          )
+            ctx,
+          );
         }
       }
 
       // Handle safety violations
-      let finalContent = agentResponse.content
+      let finalContent = agentResponse.content;
       if (safetyResult.ok && !safetyResult.value.passed) {
         logger.warn(
           { violations: safetyResult.value.violations },
-          'Safety violations detected'
-        )
+          "Safety violations detected",
+        );
 
         if (safetyResult.value.sanitizedOutput) {
-          finalContent = safetyResult.value.sanitizedOutput
+          finalContent = safetyResult.value.sanitizedOutput;
         }
       }
 
@@ -936,22 +1143,30 @@ export class Pipeline {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         conversationId: input.conversationId,
         userId: input.userId,
-        role: 'assistant',
+        role: "assistant",
         content: finalContent,
         timestamp: Date.now(),
         metadata: {
           crisisLevel: effectiveCrisisLevel,
         },
-      }
+      };
 
       // Record total duration BEFORE persistence (measures user-facing latency)
-      const totalDuration = Date.now() - startTime
-      pipelineMetrics.stageDuration.record(totalDuration, { stage: 'total' })
+      const totalDuration = Date.now() - startTime;
+      pipelineMetrics.stageDuration.record(totalDuration, { stage: "total" });
 
       // STAGE 6: Persist messages (fire-and-forget - non-blocking)
-      this.persistMessages(userMessage, assistantMessage, agentResponse.toolCalls, ctx).catch((err) => {
-        logger.error({ err, conversationId: input.conversationId }, 'Message persistence failed')
-      })
+      this.persistMessages(
+        userMessage,
+        assistantMessage,
+        agentResponse.toolCalls,
+        ctx,
+      ).catch((err) => {
+        logger.error(
+          { err, conversationId: input.conversationId },
+          "Message persistence failed",
+        );
+      });
 
       logger.info(
         {
@@ -959,8 +1174,8 @@ export class Pipeline {
           crisisLevel: effectiveCrisisLevel,
           tokensUsed: agentResponse.usage,
         },
-        'Streaming pipeline processing completed'
-      )
+        "Streaming pipeline processing completed",
+      );
 
       // Build diagnostics
       const diagnostics = this.buildDiagnostics(
@@ -969,12 +1184,12 @@ export class Pipeline {
         crisisResult.value,
         agentResponse,
         safetyResult.ok ? safetyResult.value : undefined,
-        evaluationResult.ok ? evaluationResult.value : undefined
-      )
+        evaluationResult.ok ? evaluationResult.value : undefined,
+      );
 
       // Yield final result
       yield {
-        type: 'done',
+        type: "done",
         result: {
           response: finalContent,
           messages: { user: userMessage, assistant: assistantMessage },
@@ -987,79 +1202,110 @@ export class Pipeline {
               output: agentResponse.usage.outputTokens,
             },
           },
-          safetyViolations: safetyResult.ok ? safetyResult.value.violations : [],
+          safetyViolations: safetyResult.ok
+            ? safetyResult.value.violations
+            : [],
           crisisLevel: effectiveCrisisLevel,
           emergencyTriggered: false,
           diagnostics,
         },
-      }
+      };
     } catch (error) {
-      logger.error({ error }, 'Unexpected streaming pipeline error')
+      logger.error({ error }, "Unexpected streaming pipeline error");
       yield {
-        type: 'error',
-        error: 'Unexpected error during pipeline processing',
-        kind: 'UnexpectedError',
-      }
+        type: "error",
+        error: "Unexpected error during pipeline processing",
+        kind: "UnexpectedError",
+      };
     }
   }
 
   private async runCrisisCheck(
     message: string,
-    ctx: PipelineContext
+    ctx: PipelineContext,
   ): Promise<Result<CrisisCheckResult, { kind: string; message: string }>> {
-    const stageStart = Date.now()
+    const stageStart = Date.now();
 
-    const result = await this.deps.crisisDetector.detect(message, ctx)
+    const result = await this.deps.crisisDetector.detect(message, ctx);
 
-    ctx.metrics.stageDurations.crisis = Date.now() - stageStart
-    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.crisis, { stage: 'crisis' })
+    ctx.metrics.stageDurations.crisis = Date.now() - stageStart;
+    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.crisis, {
+      stage: "crisis",
+    });
 
     if (!result.ok) {
-      return err({ kind: result.error.kind, message: result.error.message })
+      return err({ kind: result.error.kind, message: result.error.message });
     }
 
-    return ok(result.value)
+    return ok(result.value);
   }
 
   private async runMemoryRetrieval(
     input: PipelineInput,
-    ctx: PipelineContext
-  ): Promise<Result<{ context: PipelineContext['memory']; cacheHits: number; cacheMisses: number; semanticResults?: SemanticSearchDiagnostics['results']; preprocessedQuery?: string }, { kind: string; message: string }>> {
-    const stageStart = Date.now()
-    const logger = getLogger().child({ requestId: ctx.requestId })
+    ctx: PipelineContext,
+  ): Promise<
+    Result<
+      {
+        context: PipelineContext["memory"];
+        cacheHits: number;
+        cacheMisses: number;
+        semanticResults?: SemanticSearchDiagnostics["results"];
+        preprocessedQuery?: string;
+      },
+      { kind: string; message: string }
+    >
+  > {
+    const stageStart = Date.now();
+    const logger = getLogger().child({ requestId: ctx.requestId });
 
     // Generate embedding for semantic search (only if preflight embeddings enabled)
-    let queryEmbedding: number[] | null = null
-    let preprocessedQuery: string | undefined = undefined
+    let queryEmbedding: number[] | null = null;
+    let preprocessedQuery: string | undefined = undefined;
 
-    if (process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding) {
+    if (
+      process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== "false" &&
+      this.deps.embedding
+    ) {
       // Get preprocessing config from env
-      const preprocessingMode = parseInt(process.env.QUERY_PREPROCESSING_MODE || '0', 10) as QueryPreprocessingMode
-      const hybridThreshold = parseInt(process.env.QUERY_PREPROCESSING_THRESHOLD || '100', 10)
+      const preprocessingMode = parseInt(
+        process.env.QUERY_PREPROCESSING_MODE || "0",
+        10,
+      ) as QueryPreprocessingMode;
+      const hybridThreshold = parseInt(
+        process.env.QUERY_PREPROCESSING_THRESHOLD || "100",
+        10,
+      );
 
       // Create preprocessor and preprocess the query
       const preprocessor = new QueryPreprocessor(this.deps.anthropic ?? null, {
         mode: preprocessingMode,
         hybridThreshold,
-      })
+      });
 
       // Preprocess the message for better semantic search
-      const searchQuery = await preprocessor.preprocess(input.message, ctx)
-      preprocessedQuery = searchQuery
+      const searchQuery = await preprocessor.preprocess(input.message, ctx);
+      preprocessedQuery = searchQuery;
 
       // Log if query was modified
       if (searchQuery !== input.message) {
-        logger.debug({
-          original: input.message.slice(0, 50),
-          processed: searchQuery.slice(0, 50),
-          mode: preprocessingMode,
-        }, 'Query preprocessed for semantic search')
+        logger.debug(
+          {
+            original: input.message.slice(0, 50),
+            processed: searchQuery.slice(0, 50),
+            mode: preprocessingMode,
+          },
+          "Query preprocessed for semantic search",
+        );
       }
 
       // Embed the preprocessed query
-      const embeddingResult = await this.deps.embedding.embed(searchQuery, ctx, { label: 'query' })
+      const embeddingResult = await this.deps.embedding.embed(
+        searchQuery,
+        ctx,
+        { label: "query" },
+      );
       if (embeddingResult.ok) {
-        queryEmbedding = embeddingResult.value
+        queryEmbedding = embeddingResult.value;
       }
     }
 
@@ -1070,14 +1316,16 @@ export class Pipeline {
       ctx,
       input.userProfile,
       input.displayName,
-      input.message // Pass user message for L5 Mem0 search
-    )
+      input.message, // Pass user message for L5 Mem0 search
+    );
 
-    ctx.metrics.stageDurations.memory = Date.now() - stageStart
-    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.memory, { stage: 'memory' })
+    ctx.metrics.stageDurations.memory = Date.now() - stageStart;
+    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.memory, {
+      stage: "memory",
+    });
 
     if (!result.ok) {
-      return err({ kind: result.error.kind, message: result.error.message })
+      return err({ kind: result.error.kind, message: result.error.message });
     }
 
     return ok({
@@ -1086,53 +1334,67 @@ export class Pipeline {
       cacheMisses: result.value.cacheMisses,
       semanticResults: result.value.semanticResults,
       preprocessedQuery,
-    })
+    });
   }
 
   private async runAgentProcessing(
     input: PipelineInput,
-    ctx: PipelineContext
+    ctx: PipelineContext,
   ): Promise<Result<AgentResponse, { kind: string; message: string }>> {
-    const stageStart = Date.now()
-    const logger = getLogger().child({ requestId: ctx.requestId })
+    const stageStart = Date.now();
+    const logger = getLogger().child({ requestId: ctx.requestId });
 
     // Build memory context pre-agent (legacy, if configured)
     // Skip when memory prompts are enabled (phase-shifted architecture)
-    let memoryContext: string | null = null
+    let memoryContext: string | null = null;
     if (this.deps.memoryContextBuilder && !this.deps.memoryPromptStore) {
       try {
         memoryContext = await this.deps.memoryContextBuilder.buildContext(
           input.message,
           input.userId,
-          ctx
-        )
+          ctx,
+        );
         if (memoryContext) {
-          logger.debug({ contextLength: memoryContext.length }, 'Memory context built (legacy)')
+          logger.debug(
+            { contextLength: memoryContext.length },
+            "Memory context built (legacy)",
+          );
         }
       } catch (error) {
-        logger.warn({ error }, 'Memory context builder failed, continuing without')
+        logger.warn(
+          { error },
+          "Memory context builder failed, continuing without",
+        );
       }
     }
 
     // Read memory prompts from L1 (phase-shifted from postflight)
-    let memoryPrompts: string[] = []
+    let memoryPrompts: string[] = [];
     if (this.deps.memoryPromptStore) {
       const promptsResult = await this.deps.memoryPromptStore.getAll(
         input.userId,
-        input.conversationId
-      )
+        input.conversationId,
+      );
       if (promptsResult.ok) {
-        memoryPrompts = promptsResult.value
+        memoryPrompts = promptsResult.value;
         if (memoryPrompts.length > 0) {
-          logger.debug({ count: memoryPrompts.length }, 'Memory prompts retrieved from L1')
+          logger.debug(
+            { count: memoryPrompts.length },
+            "Memory prompts retrieved from L1",
+          );
         }
       } else {
-        logger.warn({ error: promptsResult.error }, 'Failed to retrieve memory prompts')
+        logger.warn(
+          { error: promptsResult.error },
+          "Failed to retrieve memory prompts",
+        );
       }
     }
 
     // Check if memory tools are available
-    const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
+    const hasMemoryTools =
+      this.deps.memoryToolAccess && this.deps.memoryToolAccess !== "off";
+    const locale = getLocale(input.localeCode);
 
     const systemPrompt = buildSystemPrompt({
       context: ctx.memory!,
@@ -1142,20 +1404,22 @@ export class Pipeline {
       hasMemoryTools,
       baseIdentity: this.deps.baseIdentity,
       mcpServerDescriptions: getMcpServerDescriptions(),
-    })
+      locale,
+      userTimezone: input.timezone,
+    });
 
     // Convert Vercel AI SDK tools to ToolDefinition format (including memory tools if enabled)
-    const tools = this.convertToolsToDefinitions()
+    const tools = this.convertToolsToDefinitions();
 
     // Set trace context for memory tools (so they have access to userId for database-per-user)
     if (hasMemoryTools) {
-      setMemoryToolTraceContext(ctx)
+      setMemoryToolTraceContext(ctx);
     }
 
     // Set conversation ID getter for system tools (clearConversation)
-    setGetConversationIdFn(() => ctx.sessionId || ctx.requestId)
+    setGetConversationIdFn(() => ctx.sessionId || ctx.requestId);
 
-    let result: Result<AgentResponse, { kind: string; message: string }>
+    let result: Result<AgentResponse, { kind: string; message: string }>;
     try {
       result = await this.deps.agent.generate(
         {
@@ -1165,107 +1429,129 @@ export class Pipeline {
           systemPrompt,
           tools,
         },
-        ctx
-      )
+        ctx,
+      );
     } finally {
       // Always clear trace context after agent processing
       if (hasMemoryTools) {
-        clearMemoryToolTraceContext()
+        clearMemoryToolTraceContext();
       }
     }
 
-    ctx.metrics.stageDurations.agent = Date.now() - stageStart
-    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.agent, { stage: 'agent' })
+    ctx.metrics.stageDurations.agent = Date.now() - stageStart;
+    pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.agent, {
+      stage: "agent",
+    });
 
     if (!result.ok) {
-      return err({ kind: result.error.kind, message: result.error.message })
+      return err({ kind: result.error.kind, message: result.error.message });
     }
 
     // Record token usage
-    pipelineMetrics.tokensUsed.add(result.value.usage.inputTokens, { direction: 'input' })
-    pipelineMetrics.tokensUsed.add(result.value.usage.outputTokens, { direction: 'output' })
+    pipelineMetrics.tokensUsed.add(result.value.usage.inputTokens, {
+      direction: "input",
+    });
+    pipelineMetrics.tokensUsed.add(result.value.usage.outputTokens, {
+      direction: "output",
+    });
 
     // Return full agent response for diagnostics
-    return ok(result.value)
+    return ok(result.value);
   }
 
   /**
    * Convert Vercel AI SDK tool definitions to our ToolDefinition format
    */
   private convertToolsToDefinitions(): ToolDefinition[] {
-    const tools: ToolDefinition[] = []
+    const tools: ToolDefinition[] = [];
 
     // Check master switch for agent tools
-    const toolsEnabled = process.env.ENABLE_TOOLS !== 'false'
+    const toolsEnabled = process.env.ENABLE_TOOLS !== "false";
     if (!toolsEnabled) {
-      getLogger().info('Agent tools disabled (ENABLE_TOOLS=false)')
+      getLogger().info("Agent tools disabled (ENABLE_TOOLS=false)");
       // Continue to add memory tools if configured
     } else {
       // Add agent tools (logMood, etc.)
       // Note: AI SDK v5 tools use inputSchema instead of parameters
-      const agentToolEntries = Object.entries(agentTools)
-      getLogger().debug({ count: agentToolEntries.length, names: agentToolEntries.map(([n]) => n) }, 'Adding agent tools')
+      const agentToolEntries = Object.entries(agentTools);
+      getLogger().debug(
+        {
+          count: agentToolEntries.length,
+          names: agentToolEntries.map(([n]) => n),
+        },
+        "Adding agent tools",
+      );
       for (const [name, tool] of agentToolEntries) {
         const t = tool as unknown as {
-          description?: string
-          inputSchema?: unknown
-          execute?: (args: Record<string, unknown>) => Promise<unknown>
-        }
+          description?: string;
+          inputSchema?: unknown;
+          execute?: (args: Record<string, unknown>) => Promise<unknown>;
+        };
 
         tools.push({
           name,
           description: t.description || `Tool: ${name}`,
           parameters: t.inputSchema as Record<string, unknown>,
-          execute: t.execute || (async () => ({ error: 'Not implemented' })),
-        })
+          execute: t.execute || (async () => ({ error: "Not implemented" })),
+        });
       }
     }
 
     // Add memory tools based on access level
-    const memoryToolAccess = this.deps.memoryToolAccess || 'off'
-    if (memoryToolAccess !== 'off') {
-      const memoryTools = getMemoryTools(memoryToolAccess)
-      const memoryToolEntries = Object.entries(memoryTools)
-      getLogger().debug({ count: memoryToolEntries.length, names: memoryToolEntries.map(([n]) => n), accessLevel: memoryToolAccess }, 'Adding memory tools')
+    const memoryToolAccess = this.deps.memoryToolAccess || "off";
+    if (memoryToolAccess !== "off") {
+      const memoryTools = getMemoryTools(memoryToolAccess);
+      const memoryToolEntries = Object.entries(memoryTools);
+      getLogger().debug(
+        {
+          count: memoryToolEntries.length,
+          names: memoryToolEntries.map(([n]) => n),
+          accessLevel: memoryToolAccess,
+        },
+        "Adding memory tools",
+      );
 
       for (const [name, tool] of memoryToolEntries) {
         const t = tool as unknown as {
-          description?: string
-          inputSchema?: unknown
-          execute?: (args: Record<string, unknown>) => Promise<unknown>
-        }
+          description?: string;
+          inputSchema?: unknown;
+          execute?: (args: Record<string, unknown>) => Promise<unknown>;
+        };
 
         tools.push({
           name,
           description: t.description || `Memory Tool: ${name}`,
           parameters: t.inputSchema as Record<string, unknown>,
-          execute: t.execute || (async () => ({ error: 'Not implemented' })),
-        })
+          execute: t.execute || (async () => ({ error: "Not implemented" })),
+        });
       }
     }
 
     // Add system tools (always available)
     const systemTools = [
-      { name: 'refreshSystemPrompt', tool: refreshSystemPrompt },
-      { name: 'clearConversation', tool: clearConversation },
-    ]
-    getLogger().debug({ count: systemTools.length, names: systemTools.map(t => t.name) }, 'Adding system tools')
+      { name: "refreshSystemPrompt", tool: refreshSystemPrompt },
+      { name: "clearConversation", tool: clearConversation },
+    ];
+    getLogger().debug(
+      { count: systemTools.length, names: systemTools.map((t) => t.name) },
+      "Adding system tools",
+    );
 
     for (const { name, tool } of systemTools) {
       const t = tool as unknown as {
-        description?: string
-        inputSchema?: unknown
-        execute?: (args: Record<string, unknown>) => Promise<unknown>
-      }
+        description?: string;
+        inputSchema?: unknown;
+        execute?: (args: Record<string, unknown>) => Promise<unknown>;
+      };
       tools.push({
         name,
         description: t.description || `System Tool: ${name}`,
         parameters: t.inputSchema as Record<string, unknown>,
-        execute: t.execute || (async () => ({ error: 'Not implemented' })),
-      })
+        execute: t.execute || (async () => ({ error: "Not implemented" })),
+      });
     }
 
-    return tools
+    return tools;
   }
 
   /**
@@ -1277,7 +1563,7 @@ export class Pipeline {
     crisisCheck: CrisisCheckResult,
     agentResponse: AgentResponse,
     safetyResult?: SafetyValidationResult,
-    evaluationResult?: EvaluationResult
+    evaluationResult?: EvaluationResult,
   ): PipelineDiagnostics {
     return {
       timing: {
@@ -1292,7 +1578,7 @@ export class Pipeline {
       crisis: {
         level: crisisCheck.level,
         emergencyTriggered: crisisCheck.triggerEmergency,
-        patterns: crisisCheck.patterns.map(p => ({
+        patterns: crisisCheck.patterns.map((p) => ({
           type: p.type,
           confidence: p.confidence,
           matchedText: p.matchedText,
@@ -1313,7 +1599,7 @@ export class Pipeline {
         model: agentResponse.model,
         inputTokens: agentResponse.usage.inputTokens,
         outputTokens: agentResponse.usage.outputTokens,
-        toolCalls: agentResponse.toolCalls.map(tc => ({
+        toolCalls: agentResponse.toolCalls.map((tc) => ({
           name: tc.name,
           arguments: tc.arguments,
           result: tc.result,
@@ -1321,75 +1607,96 @@ export class Pipeline {
         stopReason: agentResponse.stopReason,
         stepsCount: agentResponse.stepsCount ?? 1,
       },
-      safety: safetyResult ? {
-        passed: safetyResult.passed,
-        violations: safetyResult.violations.map(v => ({
-          type: v.type,
-          severity: v.severity,
-          description: v.description,
-        })),
-        processingTimeMs: safetyResult.processingTimeMs,
-      } : undefined,
-      evaluation: evaluationResult ? {
-        qualityScore: evaluationResult.qualityScore,
-        relevanceScore: evaluationResult.relevanceScore,
-        empathyScore: evaluationResult.empathyScore,
-        recoveryScore: evaluationResult.recoveryScore,
-        overallScore: evaluationResult.overallScore,
-        feedback: evaluationResult.feedback,
-      } : undefined,
-    }
+      safety: safetyResult
+        ? {
+            passed: safetyResult.passed,
+            violations: safetyResult.violations.map((v) => ({
+              type: v.type,
+              severity: v.severity,
+              description: v.description,
+            })),
+            processingTimeMs: safetyResult.processingTimeMs,
+          }
+        : undefined,
+      evaluation: evaluationResult
+        ? {
+            qualityScore: evaluationResult.qualityScore,
+            relevanceScore: evaluationResult.relevanceScore,
+            empathyScore: evaluationResult.empathyScore,
+            recoveryScore: evaluationResult.recoveryScore,
+            overallScore: evaluationResult.overallScore,
+            feedback: evaluationResult.feedback,
+          }
+        : undefined,
+    };
   }
 
   private async persistMessages(
     userMessage: Message,
     assistantMessage: Message,
     toolCalls: ToolCall[],
-    ctx: PipelineContext
+    ctx: PipelineContext,
   ): Promise<void> {
-    const stageStart = Date.now()
-    const logger = getLogger().child({ requestId: ctx.requestId })
+    const stageStart = Date.now();
+    const logger = getLogger().child({ requestId: ctx.requestId });
 
     // Log tool call info for debugging
-    const memoryToolCalls = getMemoryToolCalls(toolCalls)
+    const memoryToolCalls = getMemoryToolCalls(toolCalls);
     if (toolCalls.length > 0) {
       logger.debug(
         {
           totalToolCalls: toolCalls.length,
           memoryToolCalls: memoryToolCalls.length,
-          memoryToolNames: memoryToolCalls.map(tc => tc.name),
+          memoryToolNames: memoryToolCalls.map((tc) => tc.name),
         },
-        'Tool calls available for post-processing'
-      )
+        "Tool calls available for post-processing",
+      );
     }
 
     try {
       // Generate turn ID and sequence number for linking user/assistant pair
-      const turnId = `turn_${Date.now()}_${Math.random().toString(36).slice(2)}`
-      const seqResult = await this.deps.memory.getNextTurnSequence(ctx.input.conversationId, ctx)
-      const sequenceNumber = seqResult.ok ? seqResult.value : 1
+      const turnId = `turn_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const seqResult = await this.deps.memory.getNextTurnSequence(
+        ctx.input.conversationId,
+        ctx,
+      );
+      const sequenceNumber = seqResult.ok ? seqResult.value : 1;
 
-      logger.debug({ turnId, sequenceNumber }, 'Generated turn for message pair')
+      logger.debug(
+        { turnId, sequenceNumber },
+        "Generated turn for message pair",
+      );
 
       // Generate embeddings for L4 storage (only if postflight embeddings enabled)
-      let userEmbedding: number[] | null = null
-      let assistantEmbedding: number[] | null = null
+      let userEmbedding: number[] | null = null;
+      let assistantEmbedding: number[] | null = null;
 
-      if (process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding) {
+      if (
+        process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== "false" &&
+        this.deps.embedding
+      ) {
         const [userEmb, assistantEmb] = await Promise.all([
-          this.deps.embedding.embed(userMessage.content, ctx, { label: 'user' }),
-          this.deps.embedding.embed(assistantMessage.content, ctx, { label: 'assistant' }),
-        ])
+          this.deps.embedding.embed(userMessage.content, ctx, {
+            label: "user",
+          }),
+          this.deps.embedding.embed(assistantMessage.content, ctx, {
+            label: "assistant",
+          }),
+        ]);
 
-        userEmbedding = userEmb.ok ? userEmb.value : null
-        assistantEmbedding = assistantEmb.ok ? assistantEmb.value : null
+        userEmbedding = userEmb.ok ? userEmb.value : null;
+        assistantEmbedding = assistantEmb.ok ? assistantEmb.value : null;
       }
 
       // Store both messages
       await Promise.all([
         this.deps.memory.storeMessage(userMessage, userEmbedding, ctx),
-        this.deps.memory.storeMessage(assistantMessage, assistantEmbedding, ctx),
-      ])
+        this.deps.memory.storeMessage(
+          assistantMessage,
+          assistantEmbedding,
+          ctx,
+        ),
+      ]);
 
       // Store turn record linking the message pair
       const turn = {
@@ -1399,15 +1706,18 @@ export class Pipeline {
         assistantMessageId: assistantMessage.id,
         sequenceNumber,
         createdAt: Date.now(),
-      }
+      };
 
-      this.deps.memory.storeTurn(turn, ctx).then((result) => {
-        if (!result.ok) {
-          logger.warn({ error: result.error }, 'Turn storage failed')
-        }
-      }).catch((err) => {
-        logger.warn({ err }, 'Turn storage error')
-      })
+      this.deps.memory
+        .storeTurn(turn, ctx)
+        .then((result) => {
+          if (!result.ok) {
+            logger.warn({ error: result.error }, "Turn storage failed");
+          }
+        })
+        .catch((err) => {
+          logger.warn({ err }, "Turn storage error");
+        });
 
       // Update session state
       await this.deps.memory.updateSessionState(
@@ -1416,8 +1726,8 @@ export class Pipeline {
           lastActivity: Date.now(),
           crisisLevel: ctx.crisisCheck?.level ?? 1,
         },
-        ctx
-      )
+        ctx,
+      );
 
       // L5 Mem0 storage (fire and forget - Mem0 handles fact extraction)
       // Pass turnId to link extracted memories to the turn
@@ -1425,32 +1735,41 @@ export class Pipeline {
         .storeToMem0(userMessage, assistantMessage, ctx, turnId)
         .then((result) => {
           if (!result.ok) {
-            logger.warn({ error: result.error }, 'Mem0 storage failed')
+            logger.warn({ error: result.error }, "Mem0 storage failed");
           }
         })
         .catch((err) => {
-          logger.warn({ err }, 'Mem0 storage error')
-        })
+          logger.warn({ err }, "Mem0 storage error");
+        });
 
       // Entity extraction (fire and forget - don't block response)
       // Skipped when L5 Mem0 is enabled (Mem0 handles fact extraction with infer=true)
       if (this.deps.entityExtractor) {
         this.deps.entityExtractor
-          .extract(userMessage, assistantMessage, ctx.crisisCheck?.level ?? 1, ctx)
+          .extract(
+            userMessage,
+            assistantMessage,
+            ctx.crisisCheck?.level ?? 1,
+            ctx,
+          )
           .then((result) => {
-            if (result.ok && (result.value.entities.length > 0 || result.value.relationships.length > 0)) {
+            if (
+              result.ok &&
+              (result.value.entities.length > 0 ||
+                result.value.relationships.length > 0)
+            ) {
               logger.info(
                 {
                   entities: result.value.entities.length,
                   relationships: result.value.relationships.length,
                 },
-                'Entities extracted and stored'
-              )
+                "Entities extracted and stored",
+              );
             }
           })
           .catch((err) => {
-            logger.warn({ err }, 'Entity extraction failed')
-          })
+            logger.warn({ err }, "Entity extraction failed");
+          });
       }
 
       // Memory bootstrap (fire and forget - don't block response)
@@ -1464,36 +1783,44 @@ export class Pipeline {
             },
             ctx.input.conversationId,
             ctx.input.userId,
-            ctx
+            ctx,
           )
           .catch((err) => {
-            logger.warn({ err }, 'Bootstrap processing failed')
-          })
+            logger.warn({ err }, "Bootstrap processing failed");
+          });
       }
 
       // Memory reflection (fire and forget - automatic insight extraction)
       if (this.deps.memoryReflector) {
-        this.runMemoryReflection(userMessage, assistantMessage, toolCalls, ctx).catch((err) => {
-          logger.warn({ err }, 'Memory reflection failed')
-        })
+        this.runMemoryReflection(
+          userMessage,
+          assistantMessage,
+          toolCalls,
+          ctx,
+        ).catch((err) => {
+          logger.warn({ err }, "Memory reflection failed");
+        });
       }
 
       // Success metrics
-      ctx.metrics.stageDurations.persist = Date.now() - stageStart
+      ctx.metrics.stageDurations.persist = Date.now() - stageStart;
       pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, {
-        stage: 'persist',
-        status: 'success',
-      })
+        stage: "persist",
+        status: "success",
+      });
     } catch (error) {
-      logger.error({ error, conversationId: ctx.input.conversationId }, 'Failed to persist messages')
+      logger.error(
+        { error, conversationId: ctx.input.conversationId },
+        "Failed to persist messages",
+      );
       // Metrics still tracked on error (partial completion)
-      ctx.metrics.stageDurations.persist = Date.now() - stageStart
+      ctx.metrics.stageDurations.persist = Date.now() - stageStart;
       pipelineMetrics.stageDuration.record(ctx.metrics.stageDurations.persist, {
-        stage: 'persist',
-        status: 'error',
-      })
+        stage: "persist",
+        status: "error",
+      });
       // Re-throw so caller's .catch() can log (fire-and-forget handles it)
-      throw error
+      throw error;
     }
   }
 
@@ -1505,26 +1832,26 @@ export class Pipeline {
     userMessage: Message,
     assistantMessage: Message,
     toolCalls: ToolCall[],
-    ctx: PipelineContext
+    ctx: PipelineContext,
   ): Promise<void> {
-    const startTime = Date.now()
+    const startTime = Date.now();
     const logger = getLogger().child({
-      component: 'Pipeline',
-      operation: 'memoryReflection',
+      component: "Pipeline",
+      operation: "memoryReflection",
       conversationId: ctx.input.conversationId,
       userId: ctx.input.userId,
       messageId: userMessage.id,
       requestId: ctx.requestId,
-    })
+    });
 
     if (!this.deps.memoryReflector) {
-      logger.debug('Memory reflector not available, skipping')
-      return
+      logger.debug("Memory reflector not available, skipping");
+      return;
     }
 
     try {
       // Get memory tool calls to avoid duplicating what agent already saved
-      const memoryToolCalls = getMemoryToolCalls(toolCalls)
+      const memoryToolCalls = getMemoryToolCalls(toolCalls);
 
       logger.info(
         {
@@ -1534,22 +1861,22 @@ export class Pipeline {
           userMsgLength: userMessage.content.length,
           assistantMsgLength: assistantMessage.content.length,
         },
-        'Starting memory reflection for exchange'
-      )
+        "Starting memory reflection for exchange",
+      );
 
       // TODO: Get recent insights and mentioned entities from knowledge store
       // For now, we'll use empty arrays - the reflector will still work
       // but won't have context to avoid duplicates
-      const recentInsights: import('@pippa/types').L3Observation[] = []
-      const mentionedEntities: import('@pippa/types').L3Entity[] = []
+      const recentInsights: import("@pippa/types").L3Observation[] = [];
+      const mentionedEntities: import("@pippa/types").L3Entity[] = [];
 
       logger.debug(
         {
           recentInsightsCount: recentInsights.length,
           mentionedEntitiesCount: mentionedEntities.length,
         },
-        'Built reflection context'
-      )
+        "Built reflection context",
+      );
 
       // Build reflection context
       const reflectionContext: ReflectionContext = {
@@ -1558,14 +1885,20 @@ export class Pipeline {
         toolCalls: memoryToolCalls,
         recentInsights,
         mentionedEntities,
-      }
+      };
 
       // Reflect and persist
-      const result = await this.deps.memoryReflector.reflect(reflectionContext, ctx)
+      const result = await this.deps.memoryReflector.reflect(
+        reflectionContext,
+        ctx,
+      );
 
       if (result.ok) {
-        const { insights, observations, reinforcements } = result.value
-        const hasContent = insights.length > 0 || observations.length > 0 || reinforcements.length > 0
+        const { insights, observations, reinforcements } = result.value;
+        const hasContent =
+          insights.length > 0 ||
+          observations.length > 0 ||
+          reinforcements.length > 0;
 
         // Only persist if there's something to save
         if (hasContent) {
@@ -1575,18 +1908,18 @@ export class Pipeline {
               observations: observations.length,
               reinforcements: reinforcements.length,
             },
-            'Reflection found content, persisting'
-          )
+            "Reflection found content, persisting",
+          );
 
           await this.deps.memoryReflector.persist(
             result.value,
             ctx.input.userId,
             userMessage.id,
             ctx.input.conversationId,
-            ctx
-          )
+            ctx,
+          );
 
-          const durationMs = Date.now() - startTime
+          const durationMs = Date.now() - startTime;
           logger.info(
             {
               insights: insights.length,
@@ -1594,26 +1927,30 @@ export class Pipeline {
               reinforcements: reinforcements.length,
               durationMs,
             },
-            'Memory reflection complete with content'
-          )
+            "Memory reflection complete with content",
+          );
         } else {
-          const durationMs = Date.now() - startTime
-          logger.debug({ durationMs }, 'No memories to persist from reflection')
+          const durationMs = Date.now() - startTime;
+          logger.debug(
+            { durationMs },
+            "No memories to persist from reflection",
+          );
         }
       } else {
-        const durationMs = Date.now() - startTime
+        const durationMs = Date.now() - startTime;
         logger.warn(
           {
             error: result.error.message,
             errorKind: result.error.kind,
             durationMs,
           },
-          'Memory reflection returned error result'
-        )
+          "Memory reflection returned error result",
+        );
       }
     } catch (error) {
-      const durationMs = Date.now() - startTime
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const durationMs = Date.now() - startTime;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       logger.error(
         {
@@ -1621,8 +1958,8 @@ export class Pipeline {
           stack: error instanceof Error ? error.stack : undefined,
           durationMs,
         },
-        'Memory reflection failed unexpectedly'
-      )
+        "Memory reflection failed unexpectedly",
+      );
       // Don't re-throw - this is fire-and-forget
     }
   }
@@ -1635,19 +1972,19 @@ export class Pipeline {
    */
   async preflight(
     input: PipelineInput,
-    traceCtx: TraceContext
+    traceCtx: TraceContext,
   ): Promise<Result<PreflightResult, PipelineError>> {
     // Hot-reload .env if enabled (development only)
-    this.maybeHotReload()
+    this.maybeHotReload();
 
-    return withSpan('Pipeline.preflight', async () => {
+    return withSpan("Pipeline.preflight", async () => {
       const logger = getLogger().child({
         conversationId: input.conversationId,
         userId: input.userId,
         requestId: traceCtx.requestId,
-      })
+      });
 
-      logger.info('Starting preflight checks')
+      logger.info("Starting preflight checks");
 
       // Initialize pipeline context
       const ctx: PipelineContext = {
@@ -1658,141 +1995,190 @@ export class Pipeline {
           cacheHits: 0,
           cacheMisses: 0,
         },
-      }
+      };
 
       try {
         // STAGE 1: Pre-flight crisis check (<10ms target)
-        const crisisResult = await this.runCrisisCheck(input.message, ctx)
+        const crisisResult = await this.runCrisisCheck(input.message, ctx);
         if (!crisisResult.ok) {
           return err({
-            kind: 'CrisisError',
+            kind: "CrisisError",
             message: crisisResult.error.message,
-            stage: 'crisis',
+            stage: "crisis",
             context: {},
-          })
+          });
         }
 
-        ctx.crisisCheck = crisisResult.value
+        ctx.crisisCheck = crisisResult.value;
 
         // STAGE 2: Memory retrieval (L2 for context, L1 for session state only)
-        const memoryResult = await this.runMemoryRetrieval(input, ctx)
+        const memoryResult = await this.runMemoryRetrieval(input, ctx);
 
-        let cacheHits = 0
-        let cacheMisses = 0
+        let cacheHits = 0;
+        let cacheMisses = 0;
 
         // Track semantic search results for diagnostics
-        let semanticSearchResults: SemanticSearchDiagnostics['results'] = []
-        let preprocessedQuery: string = input.message
+        let semanticSearchResults: SemanticSearchDiagnostics["results"] = [];
+        let preprocessedQuery: string = input.message;
 
         if (!memoryResult.ok) {
-          logger.warn({ error: memoryResult.error }, 'Memory retrieval failed, continuing with empty context')
+          logger.warn(
+            { error: memoryResult.error },
+            "Memory retrieval failed, continuing with empty context",
+          );
           ctx.memory = {
             messages: [],
             userProfile: null,
-            sessionEntities: { people: [], places: [], events: [], emotions: [], medications: [] },
-            sessionState: { startTime: Date.now(), lastActivity: Date.now(), messageCount: 0, crisisLevel: 1 },
+            sessionEntities: {
+              people: [],
+              places: [],
+              events: [],
+              emotions: [],
+              medications: [],
+            },
+            sessionState: {
+              startTime: Date.now(),
+              lastActivity: Date.now(),
+              messageCount: 0,
+              crisisLevel: 1,
+            },
             previousSessions: [],
-          }
+          };
         } else {
-          ctx.memory = memoryResult.value.context
-          cacheHits = memoryResult.value.cacheHits
-          cacheMisses = memoryResult.value.cacheMisses
+          ctx.memory = memoryResult.value.context;
+          cacheHits = memoryResult.value.cacheHits;
+          cacheMisses = memoryResult.value.cacheMisses;
           // Capture semantic search results if any
           if (memoryResult.value.semanticResults) {
-            semanticSearchResults = memoryResult.value.semanticResults
+            semanticSearchResults = memoryResult.value.semanticResults;
           }
           // Capture preprocessed query if any
           if (memoryResult.value.preprocessedQuery) {
-            preprocessedQuery = memoryResult.value.preprocessedQuery
+            preprocessedQuery = memoryResult.value.preprocessedQuery;
           }
         }
 
-        ctx.metrics.cacheHits = cacheHits
-        ctx.metrics.cacheMisses = cacheMisses
+        ctx.metrics.cacheHits = cacheHits;
+        ctx.metrics.cacheMisses = cacheMisses;
 
         // STAGE 3: Build memory context (legacy, if configured)
         // Skip when memory prompts are enabled (phase-shifted architecture takes over)
-        let memoryContext: string | null = null
+        let memoryContext: string | null = null;
         if (this.deps.memoryContextBuilder && !this.deps.memoryPromptStore) {
           try {
             memoryContext = await this.deps.memoryContextBuilder.buildContext(
               input.message,
               input.userId,
-              ctx
-            )
+              ctx,
+            );
             if (memoryContext) {
-              logger.debug({ contextLength: memoryContext.length }, 'Memory context built (legacy)')
+              logger.debug(
+                { contextLength: memoryContext.length },
+                "Memory context built (legacy)",
+              );
             }
           } catch (error) {
-            logger.warn({ error }, 'Memory context builder failed, continuing without')
+            logger.warn(
+              { error },
+              "Memory context builder failed, continuing without",
+            );
           }
         }
 
         // STAGE 4: Resolve base identity (always fetch fresh from database)
-        let baseIdentity = this.deps.baseIdentity // fallback if no database
-        logger.debug({
-          requestedAgent: input.systemPromptId,
-          hasGetSystemPrompt: !!this.deps.getSystemPrompt,
-          hasGetDefaultSystemPrompt: !!this.deps.getDefaultSystemPrompt,
-          hasFallbackIdentity: !!this.deps.baseIdentity,
-        }, 'Resolving system prompt')
+        let baseIdentity = this.deps.baseIdentity; // fallback if no database
+        logger.debug(
+          {
+            requestedAgent: input.systemPromptId,
+            hasGetSystemPrompt: !!this.deps.getSystemPrompt,
+            hasGetDefaultSystemPrompt: !!this.deps.getDefaultSystemPrompt,
+            hasFallbackIdentity: !!this.deps.baseIdentity,
+          },
+          "Resolving system prompt",
+        );
 
         if (input.systemPromptId && this.deps.getSystemPrompt) {
           // Custom agent requested - fetch by name
-          logger.debug({ agent: input.systemPromptId }, 'Fetching custom agent from database')
-          const customPrompt = await this.deps.getSystemPrompt(input.systemPromptId)
+          logger.debug(
+            { agent: input.systemPromptId },
+            "Fetching custom agent from database",
+          );
+          const customPrompt = await this.deps.getSystemPrompt(
+            input.systemPromptId,
+          );
           if (customPrompt) {
-            baseIdentity = customPrompt.content
-            logger.debug({
-              promptId: customPrompt.id,
-              promptName: customPrompt.name,
-              contentLength: customPrompt.content.length,
-            }, 'Loaded custom system prompt from database')
+            baseIdentity = customPrompt.content;
+            logger.debug(
+              {
+                promptId: customPrompt.id,
+                promptName: customPrompt.name,
+                contentLength: customPrompt.content.length,
+              },
+              "Loaded custom system prompt from database",
+            );
           } else {
-            logger.warn({ agent: input.systemPromptId }, 'Custom agent not found in database, using fallback')
+            logger.warn(
+              { agent: input.systemPromptId },
+              "Custom agent not found in database, using fallback",
+            );
           }
         } else if (this.deps.getDefaultSystemPrompt) {
           // No custom agent - fetch default fresh
-          logger.debug('Fetching default pippa prompt from database')
-          const defaultPrompt = await this.deps.getDefaultSystemPrompt()
+          logger.debug("Fetching default pippa prompt from database");
+          const defaultPrompt = await this.deps.getDefaultSystemPrompt();
           if (defaultPrompt) {
-            baseIdentity = defaultPrompt.content
-            logger.debug({
-              promptId: defaultPrompt.id,
-              promptName: defaultPrompt.name,
-              contentLength: defaultPrompt.content.length,
-            }, 'Loaded default system prompt from database')
+            baseIdentity = defaultPrompt.content;
+            logger.debug(
+              {
+                promptId: defaultPrompt.id,
+                promptName: defaultPrompt.name,
+                contentLength: defaultPrompt.content.length,
+              },
+              "Loaded default system prompt from database",
+            );
           } else {
-            logger.warn('Default pippa prompt not found in database, using fallback')
+            logger.warn(
+              "Default pippa prompt not found in database, using fallback",
+            );
           }
         } else {
-          logger.debug('No database prompt functions available, using fallback identity')
+          logger.debug(
+            "No database prompt functions available, using fallback identity",
+          );
         }
 
-        logger.debug({ identityLength: baseIdentity?.length ?? 0 }, 'Final base identity resolved')
+        logger.debug(
+          { identityLength: baseIdentity?.length ?? 0 },
+          "Final base identity resolved",
+        );
 
         // STAGE 5: Read memory prompts from L1 (phase-shifted from postflight)
-        let memoryPrompts: string[] = []
+        let memoryPrompts: string[] = [];
         if (this.deps.memoryPromptStore) {
           const promptsResult = await this.deps.memoryPromptStore.getAll(
             input.userId,
-            input.conversationId
-          )
+            input.conversationId,
+          );
           if (promptsResult.ok) {
-            memoryPrompts = promptsResult.value
+            memoryPrompts = promptsResult.value;
             if (memoryPrompts.length > 0) {
               logger.debug(
                 { count: memoryPrompts.length },
-                'Memory prompts retrieved from L1'
-              )
+                "Memory prompts retrieved from L1",
+              );
             }
           } else {
-            logger.warn({ error: promptsResult.error }, 'Failed to retrieve memory prompts')
+            logger.warn(
+              { error: promptsResult.error },
+              "Failed to retrieve memory prompts",
+            );
           }
         }
 
         // STAGE 6: Build system prompt
-        const hasMemoryTools = this.deps.memoryToolAccess && this.deps.memoryToolAccess !== 'off'
+        const hasMemoryTools =
+          this.deps.memoryToolAccess && this.deps.memoryToolAccess !== "off";
+        const locale = getLocale(input.localeCode);
         const systemPrompt = buildSystemPrompt({
           context: ctx.memory!,
           crisisCheck: ctx.crisisCheck,
@@ -1801,10 +2187,32 @@ export class Pipeline {
           hasMemoryTools,
           baseIdentity,
           mcpServerDescriptions: getMcpServerDescriptions(),
-        })
+          locale,
+          userTimezone: input.timezone,
+        });
+
+        // Debug: Log system prompt sections for visibility
+        logger.debug(
+          {
+            promptLength: systemPrompt.length,
+            hasLocale: !!locale,
+            hasTimezone: !!input.timezone,
+            sections: systemPrompt
+              .split("## ")
+              .slice(1)
+              .map((s) => s.split("\n")[0])
+              .filter(Boolean),
+          },
+          "System prompt built",
+        );
+        // Log full prompt at trace level for deep debugging
+        logger.trace({ systemPrompt }, "Full system prompt");
+
+        // Write full system prompt to output/ for easy inspection
+        writeOutput("system-prompt.md", systemPrompt);
 
         // STAGE 7: Get tools
-        const tools = this.convertToolsToDefinitions()
+        const tools = this.convertToolsToDefinitions();
 
         logger.info(
           {
@@ -1812,14 +2220,14 @@ export class Pipeline {
             hasMemoryContext: !!memoryContext,
             toolCount: tools.length,
           },
-          'Preflight checks completed'
-        )
+          "Preflight checks completed",
+        );
 
         // Build detailed memory diagnostics from available data
-        const messages = ctx.memory?.messages || []
-        const semanticMatches = ctx.memory?.semanticMatches || []
-        const entities = ctx.memory?.sessionEntities
-        const sessionState = ctx.memory?.sessionState ?? null
+        const messages = ctx.memory?.messages || [];
+        const semanticMatches = ctx.memory?.semanticMatches || [];
+        const entities = ctx.memory?.sessionEntities;
+        const sessionState = ctx.memory?.sessionState ?? null;
 
         // Count entities if available
         const entityCount = entities
@@ -1828,7 +2236,7 @@ export class Pipeline {
             (entities.events?.length || 0) +
             (entities.emotions?.length || 0) +
             (entities.medications?.length || 0)
-          : 0
+          : 0;
 
         // Build tier diagnostics
         // Note: L1 is only used for session state, not message retrieval
@@ -1851,30 +2259,32 @@ export class Pipeline {
             queried: semanticMatches.length > 0,
             matchCount: semanticMatches.length,
           },
-        }
+        };
 
         // STAGE 7: Retrieve previous post-process stats (phase-shifted)
-        let previousPostProcess: PostProcessStats | null = null
-        const prevStatsResult = await this.deps.memory.getPostProcessStats<PostProcessStats>(
-          input.conversationId,
-          traceCtx
-        )
+        let previousPostProcess: PostProcessStats | null = null;
+        const prevStatsResult =
+          await this.deps.memory.getPostProcessStats<PostProcessStats>(
+            input.conversationId,
+            traceCtx,
+          );
         if (prevStatsResult.ok && prevStatsResult.value) {
-          previousPostProcess = prevStatsResult.value
+          previousPostProcess = prevStatsResult.value;
           logger.debug(
             { prevTimestamp: previousPostProcess.timestamp },
-            'Retrieved previous post-process stats'
-          )
+            "Retrieved previous post-process stats",
+          );
         }
 
         // Build semantic search diagnostics
-        const preflightEmbeddingsEnabled = process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== 'false'
+        const preflightEmbeddingsEnabled =
+          process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== "false";
         const semanticSearch: SemanticSearchDiagnostics = {
           query: input.message,
           preprocessedQuery,
           searched: preflightEmbeddingsEnabled && !!this.deps.embedding,
           results: semanticSearchResults,
-        }
+        };
 
         return ok({
           systemPrompt,
@@ -1886,18 +2296,18 @@ export class Pipeline {
           memoryStats,
           previousPostProcess,
           semanticSearch,
-        })
+        });
       } catch (error) {
-        logger.error({ error }, 'Unexpected preflight error')
+        logger.error({ error }, "Unexpected preflight error");
         return err({
-          kind: 'UnexpectedError',
-          message: 'Preflight checks failed unexpectedly',
-          stage: 'preflight',
+          kind: "UnexpectedError",
+          message: "Preflight checks failed unexpectedly",
+          stage: "preflight",
           context: {},
           cause: error,
-        })
+        });
       }
-    })
+    });
   }
 
   /**
@@ -1913,18 +2323,21 @@ export class Pipeline {
     responseText: string,
     preflightResult: PreflightResult,
     traceCtx: TraceContext,
-    toolCalls: ToolCall[] = []
+    toolCalls: ToolCall[] = [],
   ): Promise<void> {
-    return withSpan('Pipeline.postProcess', async () => {
+    return withSpan("Pipeline.postProcess", async () => {
       const logger = getLogger().child({
         conversationId: input.conversationId,
         userId: input.userId,
         requestId: traceCtx.requestId,
-      })
+      });
 
-      logger.info({ responseLength: responseText.length }, 'Starting post-process')
+      logger.info(
+        { responseLength: responseText.length },
+        "Starting post-process",
+      );
 
-      const { context, crisisCheck } = preflightResult
+      const { context, crisisCheck } = preflightResult;
 
       // Initialize pipeline context for post-processing
       const ctx: PipelineContext = {
@@ -1936,106 +2349,123 @@ export class Pipeline {
           stageDurations: {},
           cacheHits: preflightResult.memoryStats.cacheHits,
           cacheMisses: preflightResult.memoryStats.cacheMisses,
-          memoryTier: 'L2_POSTGRESQL',
+          memoryTier: "L2_POSTGRESQL",
         },
-      }
+      };
 
-      const startTime = Date.now()
+      const startTime = Date.now();
 
       try {
         // STAGE 1: Safety validation + Evaluation (parallel)
-        const safetyStart = Date.now()
+        const safetyStart = Date.now();
         const [safetyResult, evaluationResult] = await Promise.all([
           this.deps.safety.validate(responseText, context!, ctx),
-          this.deps.evaluator.evaluate(input.message, responseText, context!, ctx),
-        ])
+          this.deps.evaluator.evaluate(
+            input.message,
+            responseText,
+            context!,
+            ctx,
+          ),
+        ]);
 
-        ctx.metrics.stageDurations.safety = Date.now() - safetyStart
-        ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart
+        ctx.metrics.stageDurations.safety = Date.now() - safetyStart;
+        ctx.metrics.stageDurations.evaluation = Date.now() - safetyStart;
 
         // Log safety issues
         if (safetyResult.ok && !safetyResult.value.passed) {
           logger.warn(
             { violations: safetyResult.value.violations },
-            'Safety violations detected in response'
-          )
+            "Safety violations detected in response",
+          );
         }
 
         // Log evaluation
         if (evaluationResult.ok) {
           logger.debug(
             { overallScore: evaluationResult.value.overallScore },
-            'Evaluation completed'
-          )
+            "Evaluation completed",
+          );
         }
 
         // STAGE 2: Deep crisis evaluation (if enabled and initial level < 7)
-        if (this.deps.crisisEvaluator && crisisCheck.level < 7 && input.message.length > 20) {
-          const conversationHistory = context?.messages
-            .slice(-3)
-            .map((m) => `${m.role}: ${m.content}`) ?? []
+        if (
+          this.deps.crisisEvaluator &&
+          crisisCheck.level < 7 &&
+          input.message.length > 20
+        ) {
+          const conversationHistory =
+            context?.messages.slice(-3).map((m) => `${m.role}: ${m.content}`) ??
+            [];
 
           const deepResult = await this.deps.crisisEvaluator.evaluate(
             input.message,
             conversationHistory,
-            ctx
-          )
+            ctx,
+          );
 
           if (deepResult.ok && deepResult.value.level >= 7) {
             logger.warn(
-              { fastLevel: crisisCheck.level, deepLevel: deepResult.value.level },
-              'Deep crisis evaluation detected elevated risk'
-            )
+              {
+                fastLevel: crisisCheck.level,
+                deepLevel: deepResult.value.level,
+              },
+              "Deep crisis evaluation detected elevated risk",
+            );
             await this.deps.crisisHandler.handle(
               deepResult.value,
               input.userId,
               input.conversationId,
-              ctx
-            )
+              ctx,
+            );
           }
         }
 
         // STAGE 3: Persist messages
         // DEFENSIVE: Validate responseText is not empty before persisting
         // This is a safety net - empty responses should be caught earlier in chat.ts
-        if (!responseText || responseText.trim() === '') {
+        if (!responseText || responseText.trim() === "") {
           const error = new Error(
             `Empty responseText in postProcess. ` +
-            `ConversationId: ${input.conversationId}. ` +
-            `This should have been caught earlier in chat.ts.`
-          )
-          error.name = 'EmptyResponseError'
-          throw error
+              `ConversationId: ${input.conversationId}. ` +
+              `This should have been caught earlier in chat.ts.`,
+          );
+          error.name = "EmptyResponseError";
+          throw error;
         }
 
         const userMessage: Message = {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           conversationId: input.conversationId,
           userId: input.userId,
-          role: 'user',
+          role: "user",
           content: input.message,
           timestamp: Date.now(),
-        }
+        };
 
         const assistantMessage: Message = {
           id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
           conversationId: input.conversationId,
           userId: input.userId,
-          role: 'assistant',
+          role: "assistant",
           content: responseText,
           timestamp: Date.now(),
           metadata: {
             crisisLevel: crisisCheck.level,
           },
-        }
+        };
 
-        await this.persistMessages(userMessage, assistantMessage, toolCalls, ctx)
+        await this.persistMessages(
+          userMessage,
+          assistantMessage,
+          toolCalls,
+          ctx,
+        );
 
         // Calculate duration and build stats
-        const durationMs = Date.now() - startTime
+        const durationMs = Date.now() - startTime;
 
         // Build post-process stats for phase-shifted diagnostics
-        // Note: L1 message caching disabled (Vercel AI SDK clients send full history)
+        // Note: L1 message caching disabled - stored in L2
         const postProcessStats: PostProcessStats = {
           timestamp: Date.now(),
           durationMs,
@@ -2043,27 +2473,37 @@ export class Pipeline {
             l1: { messageCount: 0 }, // L1 only stores session metadata, not messages
             l2: { messageCount: 2 }, // Always 2 messages persisted
             l3: { entitiesAdded: 0, entitiesUpdated: 0 }, // Entity extraction is fire-and-forget
-            l4: { embeddingsStored: process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== 'false' && this.deps.embedding ? 2 : 0 },
+            l4: {
+              embeddingsStored:
+                process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== "false" &&
+                this.deps.embedding
+                  ? 2
+                  : 0,
+            },
           },
           safety: {
             passed: safetyResult.ok ? safetyResult.value.passed : true,
-            violationCount: safetyResult.ok ? safetyResult.value.violations?.length ?? 0 : 0,
+            violationCount: safetyResult.ok
+              ? (safetyResult.value.violations?.length ?? 0)
+              : 0,
           },
           evaluation: {
-            score: evaluationResult.ok ? evaluationResult.value.overallScore : null,
+            score: evaluationResult.ok
+              ? evaluationResult.value.overallScore
+              : null,
           },
           entityExtraction: {
             extracted: 0, // Fire-and-forget, can't track accurately
             relationships: 0,
           },
-        }
+        };
 
         // Store stats for next request's phase-shifted diagnostics
         await this.deps.memory.storePostProcessStats(
           input.conversationId,
           postProcessStats,
-          traceCtx
-        )
+          traceCtx,
+        );
 
         // STAGE 4: Generate memory prompts for next request (fire-and-forget)
         if (this.deps.memoryPromptGenerator && this.deps.memoryPromptStore) {
@@ -2071,10 +2511,10 @@ export class Pipeline {
             [userMessage, assistantMessage],
             input.userId,
             input.conversationId,
-            ctx
+            ctx,
           ).catch((err) => {
-            logger.warn({ err }, 'Memory prompt generation failed')
-          })
+            logger.warn({ err }, "Memory prompt generation failed");
+          });
         }
 
         logger.info(
@@ -2083,13 +2523,13 @@ export class Pipeline {
             evaluationScore: postProcessStats.evaluation.score,
             durationMs,
           },
-          'Post-process completed'
-        )
+          "Post-process completed",
+        );
       } catch (error) {
-        logger.error({ error }, 'Post-process failed')
+        logger.error({ error }, "Post-process failed");
         // Don't throw - post-process errors shouldn't affect the response
       }
-    })
+    });
   }
 
   /**
@@ -2100,41 +2540,44 @@ export class Pipeline {
     messages: Message[],
     userId: string,
     conversationId: string,
-    ctx: PipelineContext
+    ctx: PipelineContext,
   ): Promise<void> {
-    const startTime = Date.now()
+    const startTime = Date.now();
     const logger = getLogger().child({
-      component: 'Pipeline',
-      operation: 'memoryPromptGeneration',
+      component: "Pipeline",
+      operation: "memoryPromptGeneration",
       conversationId,
       userId,
       requestId: ctx.requestId,
-    })
+    });
 
     if (!this.deps.memoryPromptGenerator || !this.deps.memoryPromptStore) {
-      return
+      return;
     }
 
     try {
-      logger.debug({ messageCount: messages.length }, 'Starting memory prompt generation')
+      logger.debug(
+        { messageCount: messages.length },
+        "Starting memory prompt generation",
+      );
 
       const result = await this.deps.memoryPromptGenerator.generate(
         messages,
         userId,
-        ctx
-      )
+        ctx,
+      );
 
       if (!result) {
-        logger.debug('No memory prompt generated (null result)')
-        return
+        logger.debug("No memory prompt generated (null result)");
+        return;
       }
 
       if (result.ttlMinutes <= 0) {
         logger.debug(
           { reasoning: result.reasoning },
-          'Memory prompt skipped (TTL=0)'
-        )
-        return
+          "Memory prompt skipped (TTL=0)",
+        );
+        return;
       }
 
       // Store the memory prompt with TTL
@@ -2142,11 +2585,11 @@ export class Pipeline {
         userId,
         conversationId,
         result.content,
-        result.ttlMinutes
-      )
+        result.ttlMinutes,
+      );
 
       if (storeResult.ok) {
-        const durationMs = Date.now() - startTime
+        const durationMs = Date.now() - startTime;
         logger.info(
           {
             ttlMinutes: result.ttlMinutes,
@@ -2155,17 +2598,18 @@ export class Pipeline {
             l3Entities: result.l3Entities,
             durationMs,
           },
-          'Memory prompt generated and stored'
-        )
+          "Memory prompt generated and stored",
+        );
       } else {
         logger.warn(
           { error: storeResult.error },
-          'Failed to store memory prompt'
-        )
+          "Failed to store memory prompt",
+        );
       }
     } catch (error) {
-      const durationMs = Date.now() - startTime
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const durationMs = Date.now() - startTime;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       logger.error(
         {
@@ -2173,8 +2617,8 @@ export class Pipeline {
           stack: error instanceof Error ? error.stack : undefined,
           durationMs,
         },
-        'Memory prompt generation failed unexpectedly'
-      )
+        "Memory prompt generation failed unexpectedly",
+      );
       // Don't re-throw - this is fire-and-forget
     }
   }
@@ -2183,6 +2627,6 @@ export class Pipeline {
    * Get pipeline dependencies (for direct access in routes)
    */
   getDeps(): PipelineDependencies {
-    return this.deps
+    return this.deps;
   }
 }
