@@ -7,20 +7,20 @@
       "env": {},
       "description": "Use Sequential thinking when you need to think deeply about a subject, or to remember back simultaneously using tool calls to retrieve memories. This will help you provide better insight on a topic to the user. This is your primary reasoning capability."
     },
-    "searxng-web-search": {
-      "type": "http",
-      "url": "https://searxng-mcp.rso/mcp",
-      "description": "Use SearXNG for web searches when the user asks questions about current events, needs up-to-date information, wants to look something up online, or when you need to verify facts. This is your primary web search capability."
-    },
-    "fetch": {
+    "fetch-urls": {
       "type": "stdio",
       "command": "npx",
       "args": ["fetch-mcp"],
-      "description": "Use fetch when you need to retrieve a specific web url for the user or for your own research purposes. This is your primary method to surf the web."
+      "description": "Use fetch when you need to retrieve a specific url for the user or for your own research purposes. This can be used post searxng-web-search to retrieve content. This is your primary method to surf the web."
+    },
+    "searxng-web-search": {
+      "type": "http",
+      "url": "https://searxng.mcp.rso/mcp",
+      "description": "Use SearXNG for web searches when the user asks questions about current events, needs up-to-date information, wants to look something up online, or when you need to verify facts. This is your primary web search capability."
     },
     "meteo-weather-forecast": {
       "type": "http",
-      "url": "https://meteo-mcp.rso/mcp",
+      "url": "https://meteo.mcp.rso/mcp",
       "description": "Use Meteo for weather and forecast data when the user asks questions about current weather or wants the forecast, mentions distant travel, discusses vacations, events, parties, or just needs a reminder to bring an umbrella. This is your primary web weather capability. Geolocating a location is available."
     }
   }
