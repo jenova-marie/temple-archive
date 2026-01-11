@@ -1,5 +1,10 @@
 {
   "mcpServers": {
+    "searxng": {
+      "type": "http",
+      "url": "https://searxng.rso/mcp",
+      "description": "Use SearXNG for web searches when the user asks questions about current events, needs up-to-date information, wants to look something up online, or when you need to verify facts. This is your primary web search capability."
+    },
     "fetch": {
       "type": "stdio",
       "command": "npx",

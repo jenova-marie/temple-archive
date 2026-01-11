@@ -5,6 +5,15 @@
 import type { AssembledContext, CrisisCheckResult, Mem0SearchResult } from "@pippa/types";
 
 /**
+ * MCP server description for system prompt injection
+ */
+export interface MCPServerDescription {
+  name: string;
+  description: string;
+  tools: string[];
+}
+
+/**
  * Options for building the system prompt
  */
 export interface BuildSystemPromptOptions {
@@ -20,6 +29,8 @@ export interface BuildSystemPromptOptions {
   hasMemoryTools?: boolean;
   /** Base identity prompt from database (optional, falls back to default) */
   baseIdentity?: string;
+  /** MCP server descriptions for external tool guidance */
+  mcpServerDescriptions?: MCPServerDescription[];
 }
 
 /**
@@ -35,7 +46,7 @@ export function buildSystemPrompt(
       ? contextOrOptions
       : { context: contextOrOptions, crisisCheck };
 
-  const { context, memoryContext, memoryPrompts, hasMemoryTools, baseIdentity } = options;
+  const { context, memoryContext, memoryPrompts, hasMemoryTools, baseIdentity, mcpServerDescriptions } = options;
   const crisis = options.crisisCheck ?? crisisCheck;
 
   const sections: string[] = [];
@@ -80,6 +91,11 @@ export function buildSystemPrompt(
     hasMemoryTools ? TOOL_INSTRUCTIONS_WITH_MEMORY : TOOL_INSTRUCTIONS,
   );
 
+  // MCP server descriptions (external tool guidance)
+  if (mcpServerDescriptions && mcpServerDescriptions.length > 0) {
+    sections.push(buildMcpSection(mcpServerDescriptions));
+  }
+
   // Safety boundaries
   sections.push(SAFETY_BOUNDARIES);
 
@@ -116,6 +132,28 @@ function buildMemoryPromptsSection(memoryPrompts: string[]): string {
   for (const prompt of memoryPrompts) {
     lines.push(prompt);
     lines.push("");
+  }
+
+  return lines.join("\n").trim();
+}
+
+/**
+ * Build the MCP external tools section
+ */
+function buildMcpSection(servers: MCPServerDescription[]): string {
+  const lines = ["## External Tools (MCP Servers)"];
+  lines.push("");
+  lines.push("*You have access to additional external tools. Use them proactively when relevant:*");
+  lines.push("");
+
+  for (const server of servers) {
+    lines.push(`### ${server.name}`);
+    lines.push(server.description);
+    lines.push("");
+    if (server.tools.length > 0) {
+      lines.push(`Available tools: ${server.tools.join(", ")}`);
+      lines.push("");
+    }
   }
 
   return lines.join("\n").trim();

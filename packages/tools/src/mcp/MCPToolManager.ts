@@ -31,6 +31,8 @@ export interface MCPServerConfigStdio {
   cwd?: string;
   /** Whether this server is enabled */
   enabled?: boolean;
+  /** Description for the AI to know when/how to use this server's tools */
+  description?: string;
 }
 
 /**
@@ -45,6 +47,8 @@ export interface MCPServerConfigHttp {
   url: string;
   /** Whether this server is enabled */
   enabled?: boolean;
+  /** Description for the AI to know when/how to use this server's tools */
+  description?: string;
 }
 
 /**
@@ -244,6 +248,27 @@ export class MCPToolManager {
    */
   get serverNames(): string[] {
     return Array.from(this.clients.keys());
+  }
+
+  /**
+   * Get descriptions of all connected servers for system prompt injection.
+   * Returns an array of { name, description, tools } for servers that have descriptions.
+   */
+  getServerDescriptions(): Array<{ name: string; description: string; tools: string[] }> {
+    const descriptions: Array<{ name: string; description: string; tools: string[] }> = [];
+
+    for (const [name, entry] of this.clients) {
+      const description = entry.config.description;
+      if (description) {
+        descriptions.push({
+          name,
+          description,
+          tools: Object.keys(entry.tools),
+        });
+      }
+    }
+
+    return descriptions;
   }
 
   /**

@@ -58,6 +58,14 @@ export function getMcpServerNames(): string[] {
 }
 
 /**
+ * Get descriptions of connected MCP servers for system prompt injection.
+ * Only returns servers that have descriptions configured.
+ */
+export function getMcpServerDescriptions(): Array<{ name: string; description: string; tools: string[] }> {
+  return mcpManager?.getServerDescriptions() ?? [];
+}
+
+/**
  * Shutdown all MCP connections.
  * Should be called when the application is shutting down.
  */

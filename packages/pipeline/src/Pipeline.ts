@@ -39,7 +39,7 @@ import { ok, err, getDefaultPipelineConfig } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
 import { MemoryOrchestrator, type EntityExtractor, type IMemoryContextProvider, type IBootstrapOrchestrator, type IContextCompactor, type MemoryReflector, type ReflectionContext, QueryPreprocessor, type QueryPreprocessingMode, type MemoryPromptStore, type MemoryPromptGenerator  } from '@pippa/memory'
 import { buildSystemPrompt } from '@pippa/agent'
-import { agentTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, type MemoryToolAccessLevel } from '@pippa/tools'
+import { agentTools, getMemoryTools, setMemoryToolTraceContext, clearMemoryToolTraceContext, refreshSystemPrompt, clearConversation, setGetConversationIdFn, getMcpServerDescriptions, type MemoryToolAccessLevel } from '@pippa/tools'
 
 /**
  * Memory tool names for filtering tool calls during post-processing.
@@ -802,6 +802,7 @@ export class Pipeline {
         memoryPrompts,
         hasMemoryTools,
         baseIdentity: this.deps.baseIdentity,
+        mcpServerDescriptions: getMcpServerDescriptions(),
       })
 
       const tools = this.convertToolsToDefinitions()
@@ -1140,6 +1141,7 @@ export class Pipeline {
       memoryPrompts,
       hasMemoryTools,
       baseIdentity: this.deps.baseIdentity,
+      mcpServerDescriptions: getMcpServerDescriptions(),
     })
 
     // Convert Vercel AI SDK tools to ToolDefinition format (including memory tools if enabled)
@@ -1798,6 +1800,7 @@ export class Pipeline {
           memoryPrompts,
           hasMemoryTools,
           baseIdentity,
+          mcpServerDescriptions: getMcpServerDescriptions(),
         })
 
         // STAGE 7: Get tools

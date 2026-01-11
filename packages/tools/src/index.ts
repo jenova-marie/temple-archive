@@ -62,6 +62,7 @@ export {
   hasMcpTools,
   getMcpServerCount,
   getMcpServerNames,
+  getMcpServerDescriptions,
   shutdownMcpTools,
   getMcpManager,
   loadMcpConfig,

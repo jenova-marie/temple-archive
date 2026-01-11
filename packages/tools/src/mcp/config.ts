@@ -105,6 +105,7 @@ export function loadMcpConfig(): MCPServerConfig[] {
             type: (serverConfig as { type?: "http" | "sse" }).type ?? "http",
             url: serverConfig.url as string,
             enabled: serverConfig.enabled ?? true,
+            description: (serverConfig as { description?: string }).description,
           };
         } else if ("command" in serverConfig && serverConfig.command) {
           return {
@@ -115,6 +116,7 @@ export function loadMcpConfig(): MCPServerConfig[] {
             env: serverConfig.env,
             cwd: serverConfig.cwd,
             enabled: serverConfig.enabled ?? true,
+            description: (serverConfig as { description?: string }).description,
           };
         } else {
           // Invalid config - log warning and mark as disabled

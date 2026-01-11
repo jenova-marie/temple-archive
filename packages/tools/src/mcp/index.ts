@@ -22,6 +22,7 @@ export {
   hasMcpTools,
   getMcpServerCount,
   getMcpServerNames,
+  getMcpServerDescriptions,
   shutdownMcpTools,
   getMcpManager,
 } from "./provider.js";
