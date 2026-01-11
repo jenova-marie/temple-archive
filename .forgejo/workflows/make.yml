@@ -105,7 +105,7 @@ jobs:
           REGISTRY: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/
           TAG: ${{ env.ENV }}
           AGENT_API_PORT: "61664"
-          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent
+          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa
 
       - name: Notify build failure
         if: failure()

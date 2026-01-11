@@ -34,8 +34,8 @@ target "agent-api" {
   inherits = ["base"]
   target = "agent-api"
   tags = [
-    "${REGISTRY}pippa-agent:${TAG}",
-    "${REGISTRY}pippa-agent:latest"
+    "${REGISTRY}pippa:agent-${TAG}",
+    "${REGISTRY}pippa:agent-latest"
   ]
   platforms = ["linux/arm64"]
 }
@@ -44,8 +44,8 @@ target "web-api" {
   inherits = ["base"]
   target = "web-api"
   tags = [
-    "${REGISTRY}pippa-api:${TAG}",
-    "${REGISTRY}pippa-api:latest"
+    "${REGISTRY}pippa:api-${TAG}",
+    "${REGISTRY}pippa:api-latest"
   ]
   platforms = ["linux/arm64"]
 }
@@ -57,8 +57,8 @@ target "web-app" {
     AGENT_API_PORT = "${AGENT_API_PORT}"
   }
   tags = [
-    "${REGISTRY}pippa-app:${TAG}",
-    "${REGISTRY}pippa-app:latest"
+    "${REGISTRY}pippa:app-${TAG}",
+    "${REGISTRY}pippa:app-latest"
   ]
   platforms = ["linux/arm64"]
 }
