@@ -20,8 +20,11 @@ pnpm build
 # Build everything including api
 pnpm build:all
 
-# Start dev server (uses tsx watch)
+# Start dev server (uses tsx watch, CONTAINER_ROOT=./opt)
 pnpm dev
+
+# Start dev server for Docker environment (uses /container)
+pnpm dev:docker
 
 # Run tests
 pnpm test
@@ -48,6 +51,27 @@ PORT=3333 pnpm dev
 # Start infrastructure (Redis, PostgreSQL, Neo4j, Qdrant)
 docker-compose up -d
 ```
+
+### Container Root Path
+
+The `CONTAINER_ROOT` environment variable controls where config files are loaded from:
+
+| Script | CONTAINER_ROOT | Purpose |
+|--------|---------------|---------|
+| `pnpm dev` | `./opt` | Local development (uses ./opt folder) |
+| `pnpm dev:docker` | `/container` | Docker environment (default) |
+| `pnpm start` | `/container` | Production (default) |
+| `pnpm start:local` | `./opt` | Local production build |
+
+Files resolved via `containerPath()`:
+- `{CONTAINER_ROOT}/data/locale-data.json` - Locale/regional preferences
+- `{CONTAINER_ROOT}/mcp.local.json` - MCP config (local overrides, gitignored)
+- `{CONTAINER_ROOT}/mcp.json` - MCP server configuration (default)
+
+**MCP Config Priority:**
+1. `MCP_CONFIG_PATH` env var (explicit override)
+2. `mcp.local.json` (local development, not committed)
+3. `mcp.json` (default, committed)
 
 ## Database Migrations
 
