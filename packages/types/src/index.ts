@@ -140,6 +140,19 @@ export type {
   PipelineDiagnostics,
 } from './diagnostics.js'
 
+// Locale types
+export type {
+  TemperatureUnit,
+  DistanceUnit,
+  WeightUnit,
+  VolumeUnit,
+  SpeedUnit,
+  TimeFormat,
+  WeekStart,
+  LocaleData,
+  LocaleDataMap,
+} from './locale.js'
+
 // Result types
 export type {
   Ok,

@@ -9,3 +9,4 @@ export type {
   MemoryDiagnostics,
   SemanticSearchDiagnostics,
 } from './Pipeline.js'
+export { getLocale, getAvailableLocaleCodes, clearLocaleCache } from './localeLoader.js'
