@@ -21,7 +21,7 @@ const booleanString = z.preprocess((val) => {
 const appSchema = z.object({
   nodeEnv: z.enum(["development", "production", "test"]).optional(),
   port: z.coerce.number().optional(),
-  logLevel: z.enum(["debug", "info", "warn", "error"]).optional(),
+  logLevel: z.enum(["trace", "debug", "info", "warn", "error"]).optional(),
   useStubs: booleanString.optional(),
 }).transform((val) => ({
   nodeEnv: val.nodeEnv ?? "development",

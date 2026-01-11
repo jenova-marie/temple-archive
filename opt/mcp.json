@@ -21,7 +21,7 @@
     "meteo-weather-forecast": {
       "type": "http",
       "url": "http://open-meteo-mcp:3000/mcp",
-      "description": "Use Meteo for weather and forecast data when the user asks questions about current weather or wants the forecast, mentions distant travel, discusses vacations, events, parties, or just needs a reminder to bring an umbrella. This is your primary web weather capability. Geolocating a location is available."
+      "description": "Use Meteo for weather and forecast data when the user asks questions about current weather or wants the forecast, mentions distant travel, discusses vacations, events, parties, or just needs a reminder to bring an umbrella. This is your primary web weather capability. Geolocating a location is available. Convert all values to the user's provided local data."
     }
   }
 }

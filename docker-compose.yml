@@ -22,6 +22,7 @@ services:
     ports:
       - "${AGENT_API_PORT}:${AGENT_API_PORT}"
     volumes:
+      - ./opt:/container
       - ./spiffe-bundle.pem:/spiffe-bundle.pem:ro
     environment:
       - NODE_EXTRA_CA_CERTS=/spiffe-bundle.pem

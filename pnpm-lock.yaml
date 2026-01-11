@@ -581,6 +581,9 @@ importers:
       '@pippa/safety':
         specifier: workspace:*
         version: link:../safety
+      '@pippa/shared':
+        specifier: workspace:^
+        version: link:../shared
       '@pippa/tools':
         specifier: workspace:*
         version: link:../tools
@@ -641,6 +644,9 @@ importers:
       '@pippa/observability':
         specifier: workspace:*
         version: link:../observability
+      '@pippa/shared':
+        specifier: workspace:^
+        version: link:../shared
       '@pippa/types':
         specifier: workspace:*
         version: link:../types
