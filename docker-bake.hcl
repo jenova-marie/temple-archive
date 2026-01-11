@@ -13,6 +13,10 @@ variable "AGENT_API_PORT" {
   default = "61664"
 }
 
+variable "CACHE_REPO" {
+  default = ""
+}
+
 // Shared settings for all targets
 group "default" {
   targets = ["agent-api", "web-api", "web-app"]
@@ -21,6 +25,9 @@ group "default" {
 target "base" {
   context = "."
   dockerfile = "Dockerfile"
+  secret = ["id=npmrc,src=.npmrc"]
+  cache-from = CACHE_REPO != "" ? ["type=registry,ref=${CACHE_REPO}:cache"] : []
+  cache-to = CACHE_REPO != "" ? ["type=registry,ref=${CACHE_REPO}:cache,mode=max"] : []
 }
 
 target "agent-api" {

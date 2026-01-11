@@ -101,14 +101,11 @@ jobs:
         with:
           files: ./docker-bake.hcl
           push: true
-          set: |
-            *.cache-from=type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache
-            *.cache-to=type=registry,ref=${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent:cache,mode=max
-            *.secret=id=npmrc,src=./.npmrc
         env:
           REGISTRY: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/
           TAG: ${{ env.ENV }}
           AGENT_API_PORT: "61664"
+          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa-agent
 
       - name: Notify build failure
         if: failure()
