@@ -17,9 +17,10 @@ services:
     ports:
       - "${AGENT_API_PORT}:${AGENT_API_PORT}"
     volumes:
-      - ./spiffe-bundle.pem:/spiffe-bundle.pem:ro
+      - /opt/containers/pippa:/container:ro
+      - /etc/pki/tls/certs/ca-bundle.crt:/container/ca-bundle.crt:ro
     environment:
-      - NODE_EXTRA_CA_CERTS=/spiffe-bundle.pem
+      - NODE_EXTRA_CA_CERTS=/container/ca-bundle.crt
 
       # Application
       - PORT=${AGENT_API_PORT}
@@ -111,6 +112,10 @@ services:
       # Runtime config
       - HOT_CONFIG
       - AGENT_MODEL
+
+      # MCP (Model Context Protocol) servers
+      - ENABLE_MCP=true
+      - MCP_CONFIG_PATH=/container/mcp.json
 
       # Observability
       - OTEL_EXPORTER_OTLP_ENDPOINT
