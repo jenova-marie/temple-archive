@@ -2,7 +2,7 @@
  * Dynamic system prompt builder for the RecoverySky agent
  */
 
-import type { AssembledContext, CrisisCheckResult, Mem0SearchResult } from "@pippa/types";
+import type { AssembledContext, CrisisCheckResult, LocaleData, Mem0SearchResult } from "@pippa/types";
 
 /**
  * MCP server description for system prompt injection
@@ -31,6 +31,12 @@ export interface BuildSystemPromptOptions {
   baseIdentity?: string;
   /** MCP server descriptions for external tool guidance */
   mcpServerDescriptions?: MCPServerDescription[];
+  /** User's locale data for regional formatting preferences */
+  locale?: LocaleData;
+  /** User's current date/time (defaults to server time if not provided) */
+  userDateTime?: Date;
+  /** User's timezone (IANA format, e.g., 'America/New_York') */
+  userTimezone?: string;
 }
 
 /**
@@ -46,13 +52,21 @@ export function buildSystemPrompt(
       ? contextOrOptions
       : { context: contextOrOptions, crisisCheck };
 
-  const { context, memoryContext, memoryPrompts, hasMemoryTools, baseIdentity, mcpServerDescriptions } = options;
+  const { context, memoryContext, memoryPrompts, hasMemoryTools, baseIdentity, mcpServerDescriptions, locale, userDateTime, userTimezone } = options;
   const crisis = options.crisisCheck ?? crisisCheck;
 
   const sections: string[] = [];
 
   // Base identity (use database value if provided, otherwise fall back to default)
   sections.push(baseIdentity ?? BASE_IDENTITY);
+
+  // Locale preferences (regional formatting)
+  if (locale) {
+    sections.push(buildLocaleSection(locale));
+  }
+
+  // Current date/time (always include - defaults to server time)
+  sections.push(buildDateTimeSection(userDateTime, userTimezone, locale));
 
   // Mem0 memories from L5 (primary memory system when enabled)
   if (context.mem0Memories && context.mem0Memories.length > 0) {
@@ -155,6 +169,84 @@ function buildMcpSection(servers: MCPServerDescription[]): string {
       lines.push("");
     }
   }
+
+  return lines.join("\n").trim();
+}
+
+/**
+ * Build the locale preferences section
+ */
+function buildLocaleSection(locale: LocaleData): string {
+  const lines = ["## Regional Preferences"];
+  lines.push("");
+  lines.push("*Use these formatting preferences when presenting data to the user:*");
+  lines.push("");
+  lines.push(`- **Temperature**: Use ${locale.temperatureUnit === 'fahrenheit' ? 'Fahrenheit (°F)' : 'Celsius (°C)'}`);
+  lines.push(`- **Distance**: Use ${locale.distanceUnit === 'miles' ? 'miles' : 'kilometers'}`);
+  lines.push(`- **Speed**: Use ${locale.speedUnit === 'mph' ? 'mph' : 'km/h'}`);
+  lines.push(`- **Weight**: Use ${locale.weightUnit === 'pounds' ? 'pounds/ounces' : 'kilograms/grams'}`);
+  lines.push(`- **Volume**: Use ${locale.volumeUnit === 'gallons' ? 'gallons' : 'liters'}`);
+  lines.push(`- **Date format**: ${locale.dateFormat}`);
+  lines.push(`- **Time format**: ${locale.timeFormat === '12h' ? '12-hour (AM/PM)' : '24-hour'}`);
+  lines.push(`- **Week starts on**: ${locale.weekStart === 'sunday' ? 'Sunday' : 'Monday'}`);
+
+  return lines.join("\n").trim();
+}
+
+/**
+ * Build the current date/time section
+ */
+function buildDateTimeSection(userDateTime?: Date, userTimezone?: string, locale?: LocaleData): string {
+  const now = userDateTime || new Date();
+  const timezone = userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Format based on locale preferences
+  const use12Hour = locale?.timeFormat === '12h';
+  const dateFormat = locale?.dateFormat || 'YYYY-MM-DD';
+
+  // Get day of week
+  const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: timezone });
+
+  // Format date according to locale preference
+  const year = now.toLocaleDateString('en-CA', { year: 'numeric', timeZone: timezone });
+  const month = now.toLocaleDateString('en-CA', { month: '2-digit', timeZone: timezone });
+  const day = now.toLocaleDateString('en-CA', { day: '2-digit', timeZone: timezone });
+
+  let formattedDate: string;
+  switch (dateFormat) {
+    case 'MM/DD/YYYY':
+      formattedDate = `${month}/${day}/${year}`;
+      break;
+    case 'DD/MM/YYYY':
+      formattedDate = `${day}/${month}/${year}`;
+      break;
+    case 'DD.MM.YYYY':
+      formattedDate = `${day}.${month}.${year}`;
+      break;
+    case 'DD-MM-YYYY':
+      formattedDate = `${day}-${month}-${year}`;
+      break;
+    case 'YYYY.MM.DD':
+      formattedDate = `${year}.${month}.${day}`;
+      break;
+    case 'YYYY-MM-DD':
+    default:
+      formattedDate = `${year}-${month}-${day}`;
+      break;
+  }
+
+  // Format time
+  const timeOptions: Intl.DateTimeFormatOptions = {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: use12Hour,
+    timeZone: timezone,
+  };
+  const formattedTime = now.toLocaleTimeString('en-US', timeOptions);
+
+  const lines = ["## Current Date & Time"];
+  lines.push("");
+  lines.push(`**${dayOfWeek}, ${formattedDate}** at **${formattedTime}** (${timezone})`);
 
   return lines.join("\n").trim();
 }

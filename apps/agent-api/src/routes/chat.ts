@@ -71,6 +71,10 @@ const chatBodySchema = z
       .min(1),
     /** Optional agent/persona (system prompt) to use instead of default pippa */
     agent: z.string().optional(),
+    /** User's locale code (ISO 3166-1 alpha-2, e.g., 'US', 'DE'). Defaults to 'US'. */
+    locale: z.string().length(2).optional(),
+    /** User's timezone (IANA format, e.g., 'America/New_York'). Defaults to server timezone. */
+    timezone: z.string().optional(),
   })
   .passthrough();
 
@@ -237,6 +241,8 @@ export function createChatRouter({
         messages: rawMessages,
         agent: systemPromptId,
         conversation_id,
+        locale: localeCode,
+        timezone,
       } = parseResult.data;
 
       // Validate messages array
@@ -367,6 +373,8 @@ export function createChatRouter({
         systemPromptId,
         userProfile: userData.profile,
         displayName: userData.displayName,
+        localeCode: localeCode || 'US',
+        timezone,
       };
 
       logger.info(

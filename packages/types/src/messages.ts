@@ -104,6 +104,10 @@ export interface PipelineInput {
   userProfile?: UserProfile | null;
   /** User's display name from JWT (for personalization) */
   displayName?: string;
+  /** User's locale code (ISO 3166-1 alpha-2, e.g., 'US', 'DE'). Defaults to 'US'. */
+  localeCode?: string;
+  /** User's timezone (IANA format, e.g., 'America/New_York'). Defaults to server timezone. */
+  timezone?: string;
 }
 
 import type { PipelineDiagnostics } from "./diagnostics.js";
