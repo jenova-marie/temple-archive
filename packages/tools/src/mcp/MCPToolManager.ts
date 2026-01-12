@@ -39,6 +39,8 @@ export interface MCPServerConfigStdio {
   enabled?: boolean;
   /** Description for the AI to know when/how to use this server's tools */
   description?: string;
+  /** Whitelist of tool names to expose (if omitted, all tools are exposed) */
+  tools?: string[];
 }
 
 /**
@@ -55,6 +57,8 @@ export interface MCPServerConfigHttp {
   enabled?: boolean;
   /** Description for the AI to know when/how to use this server's tools */
   description?: string;
+  /** Whitelist of tool names to expose (if omitted, all tools are exposed) */
+  tools?: string[];
 }
 
 /**
@@ -308,7 +312,21 @@ export class MCPToolManager {
 
       // Get tools from the server
       const toolsResult = await client.listTools();
-      const tools = toolsResult.tools as MCPTool[];
+      let tools = toolsResult.tools as MCPTool[];
+
+      // Filter tools if whitelist is specified
+      const toolWhitelist = config.tools;
+      if (toolWhitelist && toolWhitelist.length > 0) {
+        const allToolNames = tools.map(t => t.name);
+        tools = tools.filter(t => toolWhitelist.includes(t.name));
+        const filteredOut = allToolNames.filter(n => !toolWhitelist.includes(n));
+        if (filteredOut.length > 0) {
+          this.logger.debug(
+            { name: config.name, filteredOut },
+            "Filtered out tools not in whitelist"
+          );
+        }
+      }
 
       // Store the client and its tools
       this.clients.set(config.name, { client, config, tools });
@@ -471,6 +489,7 @@ export class MCPToolManager {
   /**
    * Get descriptions of all connected servers for system prompt injection.
    * Returns an array of { name, description, tools } for servers that have descriptions.
+   * Uses config.tools whitelist if specified, otherwise uses discovered tools.
    */
   getServerDescriptions(): Array<{ name: string; description: string; tools: string[] }> {
     const descriptions: Array<{ name: string; description: string; tools: string[] }> = [];
@@ -478,10 +497,14 @@ export class MCPToolManager {
     for (const [name, entry] of this.clients) {
       const description = entry.config.description;
       if (description) {
+        // Use config.tools whitelist if specified, otherwise use discovered tools
+        const toolNames = entry.config.tools && entry.config.tools.length > 0
+          ? entry.config.tools
+          : entry.tools.map(t => t.name);
         descriptions.push({
           name,
           description,
-          tools: entry.tools.map(t => t.name),
+          tools: toolNames,
         });
       }
     }
