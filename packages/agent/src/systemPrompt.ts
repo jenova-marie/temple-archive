@@ -83,6 +83,11 @@ export function buildSystemPrompt(
   // Current date/time (always include - defaults to server time)
   sections.push(buildDateTimeSection(userDateTime, userTimezone, locale));
 
+  // User context section (include if profile exists OR displayName is set)
+  if (context.userProfile || context.displayName) {
+    sections.push(buildUserContextSection(context));
+  }
+
   // Mem0 memories from L5 (primary memory system when enabled)
   if (context.mem0Memories && context.mem0Memories.length > 0) {
     sections.push(buildMem0Section(context.mem0Memories));
@@ -97,11 +102,6 @@ export function buildSystemPrompt(
   // TODO: Remove this once memory prompts are fully rolled out
   if (memoryContext) {
     sections.push(memoryContext);
-  }
-
-  // User context section (include if profile exists OR displayName is set)
-  if (context.userProfile || context.displayName) {
-    sections.push(buildUserContextSection(context));
   }
 
   // Session context
