@@ -16,4 +16,5 @@ export {
   loadMemoryPromptConfig,
   type MemoryPromptConfig,
   type MemoryPromptResult,
+  type GenerateOptions,
 } from "./MemoryPromptGenerator.js";

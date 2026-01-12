@@ -17,6 +17,7 @@ import type {
   TraceContext,
   SemanticMatch,
   Entity,
+  UserProfile,
 } from "@pippa/types";
 import { getLogger, withSpan } from "@pippa/observability";
 
@@ -48,6 +49,13 @@ export interface MemoryPromptResult {
   l3Entities?: number;
 }
 
+export interface GenerateOptions {
+  /** User profile for context injection */
+  userProfile?: UserProfile | null;
+  /** User's display name (from JWT) */
+  displayName?: string;
+}
+
 const DEFAULT_CONFIG: MemoryPromptConfig = {
   recentMessages: 1,
   maxTtlMinutes: 60,
@@ -67,12 +75,23 @@ Exchange:
 Return JSON:
 {"queries": ["query1", "query2"]}`;
 
-const NARRATIVIZATION_PROMPT = `You are helping an AI companion remember relevant context from past conversations.
+const NARRATIVIZATION_PROMPT = `
+
+** User Context **
+{userContext}
+
+** Agent Context **
+- **Name**: Pippa
+- **Pronouns**: you/yours
+- **Locale**: US
+
+You are helping an AI companion remember relevant context from past conversations.  You are writing to the Agent about the User.
+
+**It is critical to correctly align the context of the response such that you are writing TO an aganet (you/yours) regarding a user.  Never use 'I' statements.**
 
 Create a brief, useful memory context from these search results. Focus on information that would help the AI respond more personally and contextually.
 
-Also rate how long this memory should stay active (0-{maxTtl} minutes).
-
+Rate how long this memory should stay active (0-{maxTtl} minutes).
 Scoring guide:
 - 0: Don't store (nothing relevant found, or ephemeral greetings)
 - 5-15: Quick topics (simple questions, brief updates)
@@ -100,14 +119,16 @@ If nothing relevant was found, return:
  */
 export class MemoryPromptGenerator {
   private readonly config: MemoryPromptConfig;
-  private readonly logger = getLogger().child({ component: "MemoryPromptGenerator" });
+  private readonly logger = getLogger().child({
+    component: "MemoryPromptGenerator",
+  });
 
   constructor(
     private readonly anthropic: Anthropic,
     private readonly vectorStore: IVectorStore | null,
     private readonly knowledgeStore: IKnowledgeStore | null,
     private readonly embeddingProvider: IEmbeddingProvider | null,
-    config: Partial<MemoryPromptConfig> = {}
+    config: Partial<MemoryPromptConfig> = {},
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -118,11 +139,13 @@ export class MemoryPromptGenerator {
    * @param messages - Recent N messages (user + assistant pairs)
    * @param userId - User ID for scoped search
    * @param ctx - Trace context
+   * @param options - Optional user context for prompt injection
    */
   async generate(
     messages: Message[],
     userId: string,
-    ctx: TraceContext
+    ctx: TraceContext,
+    options?: GenerateOptions,
   ): Promise<MemoryPromptResult | null> {
     return withSpan("MemoryPromptGenerator.generate", async () => {
       if (messages.length === 0) {
@@ -159,7 +182,12 @@ export class MemoryPromptGenerator {
       }
 
       // Step 5: Narrativize results and score TTL
-      const result = await this.narrativize(l4Results, l3Entities, ctx);
+      const result = await this.narrativize(
+        l4Results,
+        l3Entities,
+        options,
+        ctx,
+      );
 
       const duration = Date.now() - startTime;
       this.logger.info(
@@ -170,7 +198,7 @@ export class MemoryPromptGenerator {
           ttlMinutes: result.ttlMinutes,
           durationMs: duration,
         },
-        "Memory prompt generated"
+        "Memory prompt generated",
       );
 
       return {
@@ -185,13 +213,19 @@ export class MemoryPromptGenerator {
   /**
    * Generate L4 search queries from messages using Haiku
    */
-  private async generateQueries(messages: Message[], _ctx: TraceContext): Promise<string[]> {
+  private async generateQueries(
+    messages: Message[],
+    _ctx: TraceContext,
+  ): Promise<string[]> {
     return withSpan("MemoryPromptGenerator.generateQueries", async () => {
       const messagesText = messages
         .map((m) => `${m.role}: ${m.content}`)
         .join("\n");
 
-      const prompt = QUERY_GENERATION_PROMPT.replace("{messages}", messagesText);
+      const prompt = QUERY_GENERATION_PROMPT.replace(
+        "{messages}",
+        messagesText,
+      );
 
       try {
         const response = await this.anthropic.messages.create({
@@ -200,7 +234,8 @@ export class MemoryPromptGenerator {
           messages: [{ role: "user", content: prompt }],
         });
 
-        const text = response.content[0].type === "text" ? response.content[0].text : "";
+        const text =
+          response.content[0].type === "text" ? response.content[0].text : "";
 
         // Parse JSON response
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -210,7 +245,8 @@ export class MemoryPromptGenerator {
         }
 
         const parsed = JSON.parse(jsonMatch[0]) as { queries: string[] };
-        const queries = parsed.queries?.filter((q) => q && q.trim().length > 0) ?? [];
+        const queries =
+          parsed.queries?.filter((q) => q && q.trim().length > 0) ?? [];
 
         this.logger.debug({ queries }, "Generated search queries");
         return queries;
@@ -227,10 +263,12 @@ export class MemoryPromptGenerator {
   private async searchL4(
     queries: string[],
     userId: string,
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<SemanticMatch[]> {
     if (!this.vectorStore || !this.embeddingProvider) {
-      this.logger.debug("L4 search skipped - no vector store or embedding provider");
+      this.logger.debug(
+        "L4 search skipped - no vector store or embedding provider",
+      );
       return [];
     }
 
@@ -245,7 +283,10 @@ export class MemoryPromptGenerator {
             label: "memory_prompt_query",
           });
           if (!embedResult.ok) {
-            this.logger.warn({ error: embedResult.error }, "Failed to embed query");
+            this.logger.warn(
+              { error: embedResult.error },
+              "Failed to embed query",
+            );
             continue;
           }
 
@@ -257,7 +298,7 @@ export class MemoryPromptGenerator {
               limit: this.config.l4SearchLimit,
               daysBack: 30, // Search last 30 days
             },
-            ctx
+            ctx,
           );
 
           if (!searchResult.ok) {
@@ -277,7 +318,10 @@ export class MemoryPromptGenerator {
         }
       }
 
-      this.logger.debug({ matchCount: allMatches.length }, "L4 search complete");
+      this.logger.debug(
+        { matchCount: allMatches.length },
+        "L4 search complete",
+      );
       return allMatches;
     });
   }
@@ -288,7 +332,7 @@ export class MemoryPromptGenerator {
   private async searchL3(
     messages: Message[],
     _userId: string,
-    ctx: TraceContext
+    ctx: TraceContext,
   ): Promise<Entity[]> {
     if (!this.knowledgeStore) {
       this.logger.debug("L3 search skipped - no knowledge store");
@@ -321,9 +365,42 @@ export class MemoryPromptGenerator {
         }
       }
 
-      this.logger.debug({ entityCount: allEntities.length }, "L3 search complete");
+      this.logger.debug(
+        { entityCount: allEntities.length },
+        "L3 search complete",
+      );
       return allEntities;
     });
+  }
+
+  /**
+   * Format user context for prompt injection
+   */
+  private formatUserContext(options?: GenerateOptions): string {
+    const lines: string[] = [];
+
+    if (options?.displayName) {
+      lines.push(`- **Name**: ${options.displayName}`);
+    }
+
+    const profile = options?.userProfile;
+    if (profile?.pronouns) {
+      lines.push(`- **Pronouns**: ${profile.pronouns}`);
+    }
+    if (profile?.localeCode) {
+      lines.push(`- **Locale**: ${profile.localeCode}`);
+    }
+    if (profile?.recoveryDate) {
+      const days = Math.floor(
+        (Date.now() - new Date(profile.recoveryDate).getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      lines.push(
+        `- **Recovery**: ${days} days (since ${profile.recoveryDate})`,
+      );
+    }
+
+    return lines.length > 0 ? lines.join("\n") : "(no user context available)";
   }
 
   /**
@@ -332,14 +409,21 @@ export class MemoryPromptGenerator {
   private async narrativize(
     l4Results: SemanticMatch[],
     l3Entities: Entity[],
-    _ctx: TraceContext
+    options: GenerateOptions | undefined,
+    _ctx: TraceContext,
   ): Promise<{ content: string; ttlMinutes: number; reasoning: string }> {
     return withSpan("MemoryPromptGenerator.narrativize", async () => {
+      // Format user context
+      const userContext = this.formatUserContext(options);
+
       // Format L4 results
       const l4Text =
         l4Results.length > 0
           ? l4Results
-              .map((m, i) => `${i + 1}. [${m.metadata.role || "unknown"}] ${m.content.slice(0, 200)}...`)
+              .map(
+                (m, i) =>
+                  `${i + 1}. [${m.metadata.role || "unknown"}] ${m.content.slice(0, 200)}...`,
+              )
               .join("\n")
           : "(no semantic matches found)";
 
@@ -347,12 +431,18 @@ export class MemoryPromptGenerator {
       const l3Text =
         l3Entities.length > 0
           ? l3Entities
-              .map((e) => `- ${e.name} (${e.type}): ${JSON.stringify(e.properties || {}).slice(0, 100)}`)
+              .map(
+                (e) =>
+                  `- ${e.name} (${e.type}): ${JSON.stringify(e.properties || {}).slice(0, 100)}`,
+              )
               .join("\n")
           : "(no entities found)";
 
-      const prompt = NARRATIVIZATION_PROMPT
-        .replace("{maxTtl}", String(this.config.maxTtlMinutes))
+      const prompt = NARRATIVIZATION_PROMPT.replace(
+        "{maxTtl}",
+        String(this.config.maxTtlMinutes),
+      )
+        .replace("{userContext}", userContext)
         .replace("{l4Results}", l4Text)
         .replace("{l3Entities}", l3Text);
 
@@ -363,7 +453,8 @@ export class MemoryPromptGenerator {
           messages: [{ role: "user", content: prompt }],
         });
 
-        const text = response.content[0].type === "text" ? response.content[0].text : "";
+        const text =
+          response.content[0].type === "text" ? response.content[0].text : "";
 
         // Parse JSON response
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -379,7 +470,10 @@ export class MemoryPromptGenerator {
         };
 
         // Clamp TTL to valid range
-        const ttlMinutes = Math.max(0, Math.min(this.config.maxTtlMinutes, parsed.ttlMinutes || 0));
+        const ttlMinutes = Math.max(
+          0,
+          Math.min(this.config.maxTtlMinutes, parsed.ttlMinutes || 0),
+        );
 
         return {
           content: parsed.memory || "",
@@ -399,7 +493,13 @@ export class MemoryPromptGenerator {
  */
 export function loadMemoryPromptConfig(): Partial<MemoryPromptConfig> {
   return {
-    recentMessages: parseInt(process.env.MEMORY_PROMPT_RECENT_MESSAGES || "1", 10),
-    maxTtlMinutes: parseInt(process.env.MEMORY_PROMPT_MAX_TTL_MINUTES || "60", 10),
+    recentMessages: parseInt(
+      process.env.MEMORY_PROMPT_RECENT_MESSAGES || "1",
+      10,
+    ),
+    maxTtlMinutes: parseInt(
+      process.env.MEMORY_PROMPT_MAX_TTL_MINUTES || "60",
+      10,
+    ),
   };
 }

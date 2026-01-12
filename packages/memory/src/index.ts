@@ -213,6 +213,7 @@ export {
   type MemoryPromptStoreConfig,
   type MemoryPromptConfig,
   type MemoryPromptResult,
+  type GenerateOptions,
 } from './prompts/index.js'
 
 // Semantic deduplication (local embeddings)

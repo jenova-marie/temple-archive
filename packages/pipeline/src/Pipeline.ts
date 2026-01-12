@@ -49,6 +49,7 @@ import {
   type QueryPreprocessingMode,
   type MemoryPromptStore,
   type MemoryPromptGenerator,
+  type GenerateOptions,
 } from "@pippa/memory";
 import { buildSystemPrompt } from "@pippa/agent";
 import {
@@ -2530,6 +2531,10 @@ export class Pipeline {
             input.userId,
             input.conversationId,
             ctx,
+            {
+              userProfile: ctx.memory?.userProfile,
+              displayName: ctx.memory?.displayName,
+            },
           ).catch((err) => {
             logger.warn({ err }, "Memory prompt generation failed");
           });
@@ -2559,6 +2564,7 @@ export class Pipeline {
     userId: string,
     conversationId: string,
     ctx: PipelineContext,
+    options?: GenerateOptions,
   ): Promise<void> {
     const startTime = Date.now();
     const logger = getLogger().child({
@@ -2583,6 +2589,7 @@ export class Pipeline {
         messages,
         userId,
         ctx,
+        options,
       );
 
       if (!result) {
