@@ -1260,6 +1260,7 @@ export class Pipeline {
         cacheMisses: number;
         semanticResults?: SemanticSearchDiagnostics["results"];
         preprocessedQuery?: string;
+        l5Dedup?: MemoryDiagnostics["l5Dedup"];
       },
       { kind: string; message: string }
     >
@@ -1343,6 +1344,7 @@ export class Pipeline {
       cacheMisses: result.value.cacheMisses,
       semanticResults: result.value.semanticResults,
       preprocessedQuery,
+      l5Dedup: result.value.l5Dedup,
     });
   }
 
