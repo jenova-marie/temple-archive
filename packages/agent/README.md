@@ -218,7 +218,7 @@ const context: AssembledContext = {
   userProfile: {
     userId: 'user_123',
     recoveryPhase: 'early_recovery',
-    sobrietyDate: '2024-01-01',
+    recoveryDate: '2024-01-01',
     triggers: ['stress', 'social situations'],
     copingStrategies: ['meditation', 'calling sponsor'],
     preferences: { tone: 'gentle' },

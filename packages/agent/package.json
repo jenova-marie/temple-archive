@@ -18,9 +18,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@pippa/types": "workspace:*",
-    "@pippa/observability": "workspace:*",
     "@ai-sdk/anthropic": "^2.0.53",
+    "@pippa/observability": "workspace:*",
+    "@pippa/types": "workspace:*",
     "ai": "^5.0.116"
   },
   "devDependencies": {

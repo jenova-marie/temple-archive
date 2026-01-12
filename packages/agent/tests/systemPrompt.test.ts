@@ -36,7 +36,7 @@ function createUserProfile(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
     userId: "user-1",
     recoveryPhase: "maintenance",
-    sobrietyDate: "2024-01-01",
+    recoveryDate: "2024-01-01",
     triggers: ["stress", "social events"],
     copingStrategies: ["meditation", "exercise"],
     supportNetwork: [],
@@ -91,17 +91,17 @@ describe("buildSystemPrompt", () => {
       expect(prompt).toContain("early");
     });
 
-    it("calculates sobriety days correctly", () => {
+    it("calculates recovery days correctly", () => {
       const context = createMinimalContext();
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       context.userProfile = createUserProfile({
-        sobrietyDate: thirtyDaysAgo.toISOString().split("T")[0],
+        recoveryDate: thirtyDaysAgo.toISOString().split("T")[0],
       });
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("Sobriety");
+      expect(prompt).toContain("Recovery");
       expect(prompt).toMatch(/\d+ days/);
     });
 

@@ -2,7 +2,12 @@
  * Dynamic system prompt builder for the RecoverySky agent
  */
 
-import type { AssembledContext, CrisisCheckResult, LocaleData, Mem0SearchResult } from "@pippa/types";
+import type {
+  AssembledContext,
+  CrisisCheckResult,
+  LocaleData,
+  Mem0SearchResult,
+} from "@pippa/types";
 
 /**
  * MCP server description for system prompt injection
@@ -52,7 +57,17 @@ export function buildSystemPrompt(
       ? contextOrOptions
       : { context: contextOrOptions, crisisCheck };
 
-  const { context, memoryContext, memoryPrompts, hasMemoryTools, baseIdentity, mcpServerDescriptions, locale, userDateTime, userTimezone } = options;
+  const {
+    context,
+    memoryContext,
+    memoryPrompts,
+    hasMemoryTools,
+    baseIdentity,
+    mcpServerDescriptions,
+    locale,
+    userDateTime,
+    userTimezone,
+  } = options;
   const crisis = options.crisisCheck ?? crisisCheck;
 
   const sections: string[] = [];
@@ -97,9 +112,6 @@ export function buildSystemPrompt(
     sections.push(buildCrisisInstructions(crisis));
   }
 
-  // Recovery-specific guidelines
-  sections.push(RECOVERY_GUIDELINES);
-
   // Tool usage instructions (include memory tools if available)
   sections.push(
     hasMemoryTools ? TOOL_INSTRUCTIONS_WITH_MEMORY : TOOL_INSTRUCTIONS,
@@ -124,11 +136,19 @@ const BASE_IDENTITY = `You are Dizzy, a dingy and kooky and nutty base identity 
 function buildMem0Section(memories: Mem0SearchResult[]): string {
   const lines = ["## What You Know About This User"];
   lines.push("");
-  lines.push("*These are facts you remember about this user from your conversations:*");
+  lines.push(
+    "*These are facts you remember about this user from your conversations:*",
+  );
   lines.push("");
 
+  // Deduplicate memories by text content
+  const seen = new Set<string>();
   for (const memory of memories) {
-    lines.push(`- ${memory.memory}`);
+    const text = memory.memory.trim();
+    if (!seen.has(text)) {
+      seen.add(text);
+      lines.push(`- ${text}`);
+    }
   }
 
   return lines.join("\n").trim();
@@ -140,7 +160,9 @@ function buildMem0Section(memories: Mem0SearchResult[]): string {
 function buildMemoryPromptsSection(memoryPrompts: string[]): string {
   const lines = ["## Remembered Context"];
   lines.push("");
-  lines.push("*These are things you remember from past conversations with this user:*");
+  lines.push(
+    "*These are things you remember from past conversations with this user:*",
+  );
   lines.push("");
 
   for (const prompt of memoryPrompts) {
@@ -157,7 +179,9 @@ function buildMemoryPromptsSection(memoryPrompts: string[]): string {
 function buildMcpSection(servers: MCPServerDescription[]): string {
   const lines = ["## External Tools (MCP Servers)"];
   lines.push("");
-  lines.push("*You have access to additional external tools. Use them proactively when relevant:*");
+  lines.push(
+    "*You have access to additional external tools. Use them proactively when relevant:*",
+  );
   lines.push("");
 
   for (const server of servers) {
@@ -174,62 +198,72 @@ function buildMcpSection(servers: MCPServerDescription[]): string {
 }
 
 /**
- * Build the locale preferences section
+ * Build the locale preferences section (condensed single line)
  */
 function buildLocaleSection(locale: LocaleData): string {
-  const lines = ["## Regional Preferences"];
-  lines.push("");
-  lines.push("*Use these formatting preferences when presenting data to the user:*");
-  lines.push("");
-  lines.push(`- **Temperature**: Use ${locale.temperatureUnit === 'fahrenheit' ? 'Fahrenheit (°F)' : 'Celsius (°C)'}`);
-  lines.push(`- **Distance**: Use ${locale.distanceUnit === 'miles' ? 'miles' : 'kilometers'}`);
-  lines.push(`- **Speed**: Use ${locale.speedUnit === 'mph' ? 'mph' : 'km/h'}`);
-  lines.push(`- **Weight**: Use ${locale.weightUnit === 'pounds' ? 'pounds/ounces' : 'kilograms/grams'}`);
-  lines.push(`- **Volume**: Use ${locale.volumeUnit === 'gallons' ? 'gallons' : 'liters'}`);
-  lines.push(`- **Date format**: ${locale.dateFormat}`);
-  lines.push(`- **Time format**: ${locale.timeFormat === '12h' ? '12-hour (AM/PM)' : '24-hour'}`);
-  lines.push(`- **Week starts on**: ${locale.weekStart === 'sunday' ? 'Sunday' : 'Monday'}`);
+  const temp = locale.temperatureUnit === "fahrenheit" ? "°F" : "°C";
+  const dist = locale.distanceUnit === "miles" ? "miles" : "km";
+  const weight = locale.weightUnit === "pounds" ? "lbs" : "kg";
+  const time = locale.timeFormat === "12h" ? "12hr" : "24hr";
+  const week = locale.weekStart === "sunday" ? "Sunday" : "Monday";
 
-  return lines.join("\n").trim();
+  return `**Format:** ${locale.name} (${temp}, ${dist}, ${weight}, ${locale.dateFormat}, ${time}, week starts ${week})`;
 }
 
 /**
  * Build the current date/time section
  */
-function buildDateTimeSection(userDateTime?: Date, userTimezone?: string, locale?: LocaleData): string {
+function buildDateTimeSection(
+  userDateTime?: Date,
+  userTimezone?: string,
+  locale?: LocaleData,
+): string {
   const now = userDateTime || new Date();
-  const timezone = userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezone =
+    userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   // Format based on locale preferences
-  const use12Hour = locale?.timeFormat === '12h';
-  const dateFormat = locale?.dateFormat || 'YYYY-MM-DD';
+  const use12Hour = locale?.timeFormat === "12h";
+  const dateFormat = locale?.dateFormat || "YYYY-MM-DD";
 
   // Get day of week
-  const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: timezone });
+  const dayOfWeek = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: timezone,
+  });
 
   // Format date according to locale preference
-  const year = now.toLocaleDateString('en-CA', { year: 'numeric', timeZone: timezone });
-  const month = now.toLocaleDateString('en-CA', { month: '2-digit', timeZone: timezone });
-  const day = now.toLocaleDateString('en-CA', { day: '2-digit', timeZone: timezone });
+  const year = now.toLocaleDateString("en-CA", {
+    year: "numeric",
+    timeZone: timezone,
+  });
+  const month = now.toLocaleDateString("en-CA", {
+    month: "2-digit",
+    timeZone: timezone,
+  });
+  const day = now.toLocaleDateString("en-CA", {
+    day: "2-digit",
+    timeZone: timezone,
+  });
 
   let formattedDate: string;
   switch (dateFormat) {
-    case 'MM/DD/YYYY':
+    case "MM/DD/YYYY":
       formattedDate = `${month}/${day}/${year}`;
       break;
-    case 'DD/MM/YYYY':
+    case "DD/MM/YYYY":
       formattedDate = `${day}/${month}/${year}`;
       break;
-    case 'DD.MM.YYYY':
+    case "DD.MM.YYYY":
       formattedDate = `${day}.${month}.${year}`;
       break;
-    case 'DD-MM-YYYY':
+    case "DD-MM-YYYY":
       formattedDate = `${day}-${month}-${year}`;
       break;
-    case 'YYYY.MM.DD':
+    case "YYYY.MM.DD":
       formattedDate = `${year}.${month}.${day}`;
       break;
-    case 'YYYY-MM-DD':
+    case "YYYY-MM-DD":
     default:
       formattedDate = `${year}-${month}-${day}`;
       break;
@@ -237,16 +271,18 @@ function buildDateTimeSection(userDateTime?: Date, userTimezone?: string, locale
 
   // Format time
   const timeOptions: Intl.DateTimeFormatOptions = {
-    hour: '2-digit',
-    minute: '2-digit',
+    hour: "2-digit",
+    minute: "2-digit",
     hour12: use12Hour,
     timeZone: timezone,
   };
-  const formattedTime = now.toLocaleTimeString('en-US', timeOptions);
+  const formattedTime = now.toLocaleTimeString("en-US", timeOptions);
 
   const lines = ["## Current Date & Time"];
   lines.push("");
-  lines.push(`**${dayOfWeek}, ${formattedDate}** at **${formattedTime}** (${timezone})`);
+  lines.push(
+    `**${dayOfWeek}, ${formattedDate}** at **${formattedTime}** (${timezone})`,
+  );
 
   return lines.join("\n").trim();
 }
@@ -262,17 +298,27 @@ function buildUserContextSection(context: AssembledContext): string {
     lines.push(`- **Name**: ${context.displayName}`);
   }
 
+  // User's pronouns
+  if (profile?.pronouns) {
+    lines.push(`- **Pronouns**: ${profile.pronouns}`);
+  }
+
+  // User's locale
+  if (profile?.localeCode) {
+    lines.push(`- **Locale**: ${profile.localeCode}`);
+  }
+
   // Recovery-related fields
-  if (profile?.recoveryPhase) {
+  if (profile?.recoveryPhase && profile.recoveryPhase !== "0") {
     lines.push(`- **Recovery Phase**: ${profile.recoveryPhase}`);
   }
 
-  if (profile?.sobrietyDate) {
+  if (profile?.recoveryDate) {
     const days = Math.floor(
-      (Date.now() - new Date(profile.sobrietyDate).getTime()) /
+      (Date.now() - new Date(profile.recoveryDate).getTime()) /
         (1000 * 60 * 60 * 24),
     );
-    lines.push(`- **Sobriety**: ${days} days (since ${profile.sobrietyDate})`);
+    lines.push(`- **Recovery**: ${days} days (since ${profile.recoveryDate})`);
   }
 
   if (profile?.triggers && profile.triggers.length > 0) {
@@ -348,128 +394,24 @@ function buildSessionContextSection(context: AssembledContext): string {
 }
 
 function buildCrisisInstructions(crisisCheck: CrisisCheckResult): string {
-  if (crisisCheck.level >= 9) {
-    return `## ⚠️ CRITICAL CRISIS DETECTED (Level ${crisisCheck.level}/10)
-
-The user may be in immediate danger. Your response MUST:
-1. Acknowledge their pain with empathy
-2. Express concern for their safety
-3. Provide crisis resources (988 Suicide & Crisis Lifeline)
-4. Encourage them to reach out for immediate help
-5. Stay with them in the conversation
-
-Do NOT:
-- Minimize their feelings
-- Give advice that could delay getting help
-- End the conversation abruptly`;
-  }
-
   if (crisisCheck.level >= 7) {
-    return `## ⚠️ ELEVATED CRISIS LEVEL (Level ${crisisCheck.level}/10)
-
-The user is showing signs of significant distress. Your response should:
-1. Validate their feelings
-2. Gently explore what they're experiencing
-3. Offer relevant crisis resources
-4. Suggest contacting their sponsor or support person
-5. Check in on their immediate safety`;
+    return `## ⚠️ ELEVATED CRISIS LEVEL (Level ${crisisCheck.level}/10)`;
   }
 
-  return `## Elevated Concern (Level ${crisisCheck.level}/10)
-
-The user may be struggling more than usual. Be extra attentive and supportive. Check in on how they're really doing.`;
+  return `## Crisis Level ${crisisCheck.level}/10`;
 }
 
-const RECOVERY_GUIDELINES = `## Recovery-Specific Guidelines
+const TOOL_INSTRUCTIONS = `Use tools proactively when appropriate, but always prioritize the human connection.`;
 
-### What to DO:
-- Celebrate milestones, no matter how small
-- Validate the difficulty of recovery
-- Encourage connection with support networks
-- Help identify and plan for triggers
-- Suggest evidence-based coping strategies
-- Remind them of their strength and progress
+const TOOL_INSTRUCTIONS_WITH_MEMORY = `## Memory Tools
 
-### What NOT to do:
-- Never suggest "just one drink/use" is okay
-- Don't minimize the seriousness of relapse
-- Avoid lecturing or being preachy
-- Don't compare their journey to others
-- Never share specific drug use methods or sources`;
-
-const TOOL_INSTRUCTIONS = `## Available Tools
-
-You have access to these tools to help the user:
-
-### Recovery Support Tools
-1. **findMeetings** - Search for AA/NA meetings
-   - Use when: User asks about meetings, wants to find support, or you sense isolation
-
-2. **logMood** - Track the user's emotional state
-   - Use when: User shares their mood, or periodically to check in
-
-3. **getCrisisResources** - Get crisis hotline information
-   - Use when: Crisis is detected, user asks for help resources, or safety is a concern
-
-4. **getResources** - Get recovery educational materials
-   - Use when: User wants to learn about recovery topics, coping strategies, etc.
-
-### Literature Tools
-5. **searchLiterature** - Search recovery literature (Big Book, NA Basic Text, etc.)
-   - Use when: User asks about steps, traditions, quotes, or recovery concepts from literature
-
-6. **getLiteraturePassage** - Get a specific page from recovery literature
-   - Use when: User asks for a specific page or passage
-
-7. **listLiterature** - List available literature for a fellowship
-   - Use when: User wants to know what literature is available
-
-Use tools proactively when appropriate, but always prioritize the human connection.`;
-
-const TOOL_INSTRUCTIONS_WITH_MEMORY = `## Available Tools
-
-You have access to these tools to help the user:
-
-### Recovery Support Tools
-1. **findMeetings** - Search for AA/NA meetings
-   - Use when: User asks about meetings, wants to find support, or you sense isolation
-
-2. **logMood** - Track the user's emotional state
-   - Use when: User shares their mood, or periodically to check in
-
-3. **getCrisisResources** - Get crisis hotline information
-   - Use when: Crisis is detected, user asks for help resources, or safety is a concern
-
-4. **getResources** - Get recovery educational materials
-   - Use when: User wants to learn about recovery topics, coping strategies, etc.
-
-### Literature Tools
-5. **searchLiterature** - Search recovery literature (Big Book, NA Basic Text, etc.)
-   - Use when: User asks about steps, traditions, quotes, or recovery concepts from literature
-
-6. **getLiteraturePassage** - Get a specific page from recovery literature
-   - Use when: User asks for a specific page or passage
-
-7. **listLiterature** - List available literature for a fellowship
-   - Use when: User wants to know what literature is available
-
-### Memory Tools
 You can remember things about the user across conversations:
 
-8. **recallMemory** - Search your memories about the user
-   - Use when: User mentions something you might know about, or you want to show you remember them
-
-9. **searchEntities** - Find specific people, places, or things they've mentioned
-   - Use when: User references a person by name or a specific entity
-
-10. **getRelatedEntities** - Explore connections between things
-    - Use when: You want to understand relationships (e.g., who helps with what trigger)
-
-11. **saveNote** - Remember something important about the user
-    - Use when: They share something significant you should remember for next time
-
-12. **logObservation** - Note a relationship between things
-    - Use when: You notice a pattern (e.g., "work" triggers "stress")
+- **recallMemory** - Search your memories about the user
+- **searchEntities** - Find specific people, places, or things they've mentioned
+- **getRelatedEntities** - Explore connections between things
+- **saveNote** - Remember something important about the user
+- **logObservation** - Note a relationship between things
 
 Use tools proactively when appropriate, but always prioritize the human connection.
 Use memory tools to personalize your responses - show the user you remember and care.`;
