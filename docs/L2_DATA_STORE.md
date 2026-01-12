@@ -64,7 +64,7 @@ PostgreSQL also enables features that a cache can't:
 │   │             │              └────────▶│                     │           │
 │   │ userId (PK) │                        │ id (PK)             │           │
 │   │ recoveryPhase│                       │ conversationId (FK) │           │
-│   │ sobrietyDate │                       │ summary             │           │
+│   │ recoveryDate │                       │ summary             │           │
 │   │ triggers[]   │                       │ embedding (1536)    │           │
 │   │ copingStrategies[]│                  │ keyTopics[]         │           │
 │   │ preferences  │                       └─────────────────────┘           │
@@ -144,7 +144,7 @@ PostgreSQL also enables features that a cache can't:
 │  ──────────────────┼────────────────┼────────────────────────────────────  │
 │  userId            │ text (PK)      │ User identifier                      │
 │  recoveryPhase     │ text           │ Current recovery phase               │
-│  sobrietyDate      │ date           │ Sobriety start date                  │
+│  recoveryDate      │ date           │ Sobriety start date                  │
 │  triggers          │ text[]         │ Known trigger patterns               │
 │  copingStrategies  │ text[]         │ Effective coping methods             │
 │  preferences       │ jsonb          │ Communication preferences            │

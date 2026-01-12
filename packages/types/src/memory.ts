@@ -8,10 +8,14 @@ import type { Result } from './result.js'
 export interface UserProfile {
   /** User identifier */
   userId: string
+  /** User's preferred pronouns (e.g., "she/her", "he/him", "they/them") */
+  pronouns?: string
+  /** User's locale code (e.g., "en-US", "es-MX") */
+  localeCode?: string
   /** Recovery phase (early, middle, maintenance) */
   recoveryPhase?: string
-  /** Sobriety date (if applicable) */
-  sobrietyDate?: string
+  /** Recovery date (if applicable) */
+  recoveryDate?: string
   /** Known triggers */
   triggers: string[]
   /** Effective coping strategies */

@@ -262,9 +262,9 @@ describe("database schemas", () => {
       expect(tableColumns).toContain("recoveryPhase");
     });
 
-    it("has sobrietyDate field", () => {
+    it("has recoveryDate field", () => {
       const tableColumns = Object.keys(userProfiles);
-      expect(tableColumns).toContain("sobrietyDate");
+      expect(tableColumns).toContain("recoveryDate");
     });
 
     it("has triggers array field", () => {
@@ -291,7 +291,7 @@ describe("database schemas", () => {
       const _profile: DbUserProfile = {
         userId: "user-1",
         recoveryPhase: "early-recovery",
-        sobrietyDate: "2024-01-01",
+        recoveryDate: "2024-01-01",
         triggers: ["stress", "boredom"],
         copingStrategies: ["exercise", "meditation"],
         preferences: { notifications: true },

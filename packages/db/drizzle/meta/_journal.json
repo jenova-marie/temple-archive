@@ -50,6 +50,20 @@
       "when": 1767980486616,
       "tag": "0006_yummy_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1768189141506,
+      "tag": "0007_happy_agent_brand",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1768189200000,
+      "tag": "0008_rename_sobriety_to_recovery",
+      "breakpoints": true
     }
   ]
 }

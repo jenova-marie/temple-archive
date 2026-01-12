@@ -166,8 +166,10 @@ export const userProfiles = pgTable(
   'user_profiles',
   {
     userId: text('user_id').primaryKey(),
+    pronouns: text('pronouns'),
+    localeCode: text('locale_code'),
     recoveryPhase: text('recovery_phase'),
-    sobrietyDate: date('sobriety_date'),
+    recoveryDate: date('recovery_date'),
     triggers: text('triggers').array().default([]),
     copingStrategies: text('coping_strategies').array().default([]),
     preferences: jsonb('preferences').default({}),
