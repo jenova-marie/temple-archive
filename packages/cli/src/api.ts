@@ -33,6 +33,7 @@ export interface MemoryTierStats {
   l2: { queried: boolean; messageCount: number }
   l3: { queried: boolean; entityCount: number }
   l4: { queried: boolean; matchCount: number }
+  l5Dedup?: { durationMs: number; rawCount: number; dedupCount: number }
   cacheHits: number
   cacheMisses: number
 }

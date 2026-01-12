@@ -22,8 +22,6 @@ export interface ChatOptions {
 function displayMetrics(metrics: ChatMetrics): void {
   console.log(chalk.gray('─'.repeat(50)))
   console.log(chalk.cyan.bold('Metrics:'))
-  console.log(chalk.gray(`  Preflight:     ${metrics.preflightMs}ms`))
-  console.log(chalk.gray(`  Total:         ${metrics.totalMs}ms`))
   console.log(chalk.gray(`  Input tokens:  ${metrics.inputTokens}`))
   console.log(chalk.gray(`  Output tokens: ${metrics.outputTokens}`))
   console.log(chalk.gray(`  Crisis level:  ${metrics.crisisLevel}`))
@@ -65,6 +63,24 @@ function displayMetrics(metrics: ChatMetrics): void {
           : chalk.gray('○ no matches'))
       : chalk.gray('- disabled')
     console.log(chalk.gray(`  L4 Qdrant:     ${l4Status}`))
+
+    // L5 Dedup (fact count only, timing in Timing section)
+    if (metrics.memory.l5Dedup) {
+      const { rawCount, dedupCount } = metrics.memory.l5Dedup
+      const removed = rawCount - dedupCount
+      const l5Status = removed > 0
+        ? chalk.green(`✓ ${dedupCount} facts (${removed} dupes removed)`)
+        : chalk.gray(`○ ${dedupCount} facts`)
+      console.log(chalk.gray(`  L5 Mem0:       ${l5Status}`))
+    }
+  }
+
+  // Timing breakdown
+  console.log(chalk.cyan.bold('Timing:'))
+  console.log(chalk.gray(`  Preflight:     ${metrics.preflightMs}ms`))
+  console.log(chalk.gray(`  Total:         ${metrics.totalMs}ms`))
+  if (metrics.memory?.l5Dedup) {
+    console.log(chalk.gray(`  L5 Dedup:      ${metrics.memory.l5Dedup.durationMs}ms`))
   }
 
   // Memory prompts (phase-shifted from previous postflight)
