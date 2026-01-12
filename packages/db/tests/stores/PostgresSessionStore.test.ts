@@ -182,13 +182,15 @@ describe("PostgresSessionStore", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         // Default profile is auto-created for existing users
-        expect(result.value).toEqual(expect.objectContaining({
-          userId: "user-1",
-          triggers: [],
-          copingStrategies: [],
-          preferences: {},
-          milestones: [],
-        }));
+        expect(result.value).toEqual(
+          expect.objectContaining({
+            userId: "user-1",
+            triggers: [],
+            copingStrategies: [],
+            preferences: {},
+            milestones: [],
+          }),
+        );
         expect(result.value?.lastUpdated).toBeDefined();
       }
       // Verify insert was called to create the default profile
@@ -200,7 +202,7 @@ describe("PostgresSessionStore", () => {
         {
           userId: "user-1",
           recoveryPhase: "early",
-          sobrietyDate: "2024-01-01",
+          recoveryDate: "2024-01-01",
           triggers: ["stress", "social"],
           copingStrategies: ["exercise", "meditation"],
           preferences: { preferredName: "Test" },
