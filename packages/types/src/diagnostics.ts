@@ -63,6 +63,15 @@ export interface MemoryDiagnostics {
   semanticMatchesCount: number
   /** Retrieval latency (ms) */
   latencyMs: number
+  /** L5 memory deduplication stats */
+  l5Dedup?: {
+    /** Duration of deduplication (ms) */
+    durationMs: number
+    /** Number of raw memories before dedup */
+    rawCount: number
+    /** Number of memories after dedup */
+    dedupCount: number
+  }
 }
 
 /**

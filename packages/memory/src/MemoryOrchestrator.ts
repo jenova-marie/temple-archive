@@ -31,6 +31,7 @@ import type {
 } from '@pippa/types'
 import { ok, err } from '@pippa/types'
 import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import { deduplicateFactsWithScores } from './semanticDedup.js'
 
 export interface MemoryOrchestratorConfig {
   /** Maximum messages to retrieve from L2 */
@@ -47,6 +48,8 @@ export interface MemoryOrchestratorConfig {
   enableL5Memory: boolean
   /** Maximum memories to retrieve from L5 */
   l5MemoryLimit: number
+  /** Similarity threshold for semantic deduplication of L5 memories (0-1). Default: 0.80 */
+  l5DedupThreshold?: number
 }
 
 export interface MemoryRetrievalResult {
@@ -63,6 +66,15 @@ export interface MemoryRetrievalResult {
     role?: string
     timestamp?: number
   }>
+  /** L5 memory deduplication stats */
+  l5Dedup?: {
+    /** Duration of deduplication (ms) */
+    durationMs: number
+    /** Number of raw memories before dedup */
+    rawCount: number
+    /** Number of memories after dedup */
+    dedupCount: number
+  }
 }
 
 export interface MemoryError {
@@ -143,11 +155,41 @@ export class MemoryOrchestrator {
 
       // L5 Mem0 retrieval (primary memory system when enabled)
       let mem0Memories: Mem0SearchResult[] | undefined
+      let l5DedupStats: { durationMs: number; rawCount: number; dedupCount: number } | undefined
       if (this.config.enableL5Memory && queryText) {
-        mem0Memories = await this.queryL5Memories(userId, queryText, ctx)
-        if (mem0Memories && mem0Memories.length > 0) {
+        const rawMemories = await this.queryL5Memories(userId, queryText, ctx)
+        if (rawMemories && rawMemories.length > 0) {
+          // Semantic deduplication to remove similar facts
+          const dedupStartTime = Date.now()
+          const dedupThreshold = this.config.l5DedupThreshold ?? 0.80
+          const factsWithScores = rawMemories.map(m => ({
+            text: m.memory,
+            score: m.score ?? 0,
+            original: m,
+          }))
+
+          const deduplicated = await deduplicateFactsWithScores(
+            factsWithScores.map(f => ({ text: f.text, score: f.score })),
+            { threshold: dedupThreshold }
+          )
+
+          // Map back to original Mem0SearchResult objects
+          const dedupTexts = new Set(deduplicated.map(d => d.text))
+          mem0Memories = rawMemories.filter(m => dedupTexts.has(m.memory))
+
+          const dedupDurationMs = Date.now() - dedupStartTime
+          l5DedupStats = {
+            durationMs: dedupDurationMs,
+            rawCount: rawMemories.length,
+            dedupCount: mem0Memories.length,
+          }
+
           cacheHits++
-          logger.debug({ count: mem0Memories.length }, 'L5 Mem0 memories retrieved')
+          logger.debug(
+            { raw: rawMemories.length, deduplicated: mem0Memories.length, durationMs: dedupDurationMs },
+            'L5 Mem0 memories retrieved and deduplicated'
+          )
+          pipelineMetrics.stageDuration.record(dedupDurationMs, { stage: 'l5_dedup' })
         }
       }
 
@@ -205,6 +247,7 @@ export class MemoryOrchestrator {
             latencyMs: Date.now() - startTime,
             cacheHits,
             cacheMisses,
+            l5Dedup: l5DedupStats,
           })
         }
 
@@ -262,6 +305,7 @@ export class MemoryOrchestrator {
             cacheHits,
             cacheMisses,
             semanticResults,
+            l5Dedup: l5DedupStats,
           })
         }
       }
@@ -290,6 +334,7 @@ export class MemoryOrchestrator {
         latencyMs: Date.now() - startTime,
         cacheHits,
         cacheMisses,
+        l5Dedup: l5DedupStats,
       })
     })
   }

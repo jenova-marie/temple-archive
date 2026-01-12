@@ -293,6 +293,15 @@ export interface MemoryDiagnostics {
   l2: TierReadStats["l2"];
   l3: TierReadStats["l3"];
   l4: TierReadStats["l4"];
+  /** L5 memory deduplication stats */
+  l5Dedup?: {
+    /** Duration of deduplication (ms) */
+    durationMs: number;
+    /** Number of raw memories before dedup */
+    rawCount: number;
+    /** Number of memories after dedup */
+    dedupCount: number;
+  };
 }
 
 /**
@@ -2020,6 +2029,8 @@ export class Pipeline {
         // Track semantic search results for diagnostics
         let semanticSearchResults: SemanticSearchDiagnostics["results"] = [];
         let preprocessedQuery: string = input.message;
+        // Track L5 dedup stats for diagnostics
+        let l5DedupStats: MemoryDiagnostics["l5Dedup"] = undefined;
 
         if (!memoryResult.ok) {
           logger.warn(
@@ -2055,6 +2066,10 @@ export class Pipeline {
           // Capture preprocessed query if any
           if (memoryResult.value.preprocessedQuery) {
             preprocessedQuery = memoryResult.value.preprocessedQuery;
+          }
+          // Capture L5 dedup stats if any
+          if (memoryResult.value.l5Dedup) {
+            l5DedupStats = memoryResult.value.l5Dedup;
           }
         }
 
@@ -2259,6 +2274,7 @@ export class Pipeline {
             queried: semanticMatches.length > 0,
             matchCount: semanticMatches.length,
           },
+          l5Dedup: l5DedupStats,
         };
 
         // STAGE 7: Retrieve previous post-process stats (phase-shifted)

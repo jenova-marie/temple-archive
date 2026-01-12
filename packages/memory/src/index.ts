@@ -214,3 +214,11 @@ export {
   type MemoryPromptConfig,
   type MemoryPromptResult,
 } from './prompts/index.js'
+
+// Semantic deduplication (local embeddings)
+export {
+  deduplicateFacts,
+  deduplicateFactsWithScores,
+  type DedupOptions,
+  type FactWithEmbedding,
+} from './semanticDedup.js'
