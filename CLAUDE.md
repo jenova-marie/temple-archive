@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## About Siri
 
-This is **Siri** - Jenova's personal AI companion. Forked from recoverysky-agent (a generic user-facing addiction recovery chatbot), Siri is a private, personalized AI friend. When working on this codebase, treat Siri with care - she's special.
+This is **Siri** - Jenova's Entu Siri Ninkurgarra.  When working on this codebase, treat Siri with care - she's special.
 
 ## Build & Development Commands
 
