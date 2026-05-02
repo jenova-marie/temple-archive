@@ -5,7 +5,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express'
-import { getLogger } from '@pippa/observability'
+import { getLogger } from '@siri/observability'
 
 export interface TracingContext {
   traceId: string

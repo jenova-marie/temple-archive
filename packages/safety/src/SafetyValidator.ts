@@ -19,9 +19,9 @@ import type {
   AssembledContext,
   TraceContext,
   Result,
-} from "@pippa/types";
-import { ok, err } from "@pippa/types";
-import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+} from "@siri/types";
+import { ok, err } from "@siri/types";
+import { getLogger, withSpan, pipelineMetrics } from "@siri/observability";
 import { PIIDetector } from "./detectors/PIIDetector.js";
 import { MedicalAdviceDetector } from "./detectors/MedicalAdviceDetector.js";
 import { EnablingDetector } from "./detectors/EnablingDetector.js";

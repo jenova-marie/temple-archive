@@ -7,9 +7,9 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk'
-import type { Memory, TraceContext, Result, StoreError } from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+import type { Memory, TraceContext, Result, StoreError } from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 import { nanoid } from 'nanoid'
 import type { IMemoryExtractor, Exchange, ExtractionResult, BootstrapConfig } from './types.js'
 

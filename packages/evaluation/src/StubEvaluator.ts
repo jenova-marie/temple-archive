@@ -15,9 +15,9 @@ import type {
   AssembledContext,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+} from '@siri/types'
+import { ok } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 
 export class StubEvaluator implements IEvaluator {
   private mockScores: Partial<EvaluationResult> = {}

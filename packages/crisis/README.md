@@ -1,11 +1,11 @@
-# @pippa/crisis
+# @siri/crisis
 
 Real-time crisis detection for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @pippa/crisis
+pnpm add @siri/crisis
 ```
 
 ## Overview
@@ -15,7 +15,7 @@ This package provides fast pre-flight crisis detection using keyword and pattern
 ## Quick Start
 
 ```typescript
-import { KeywordCrisisDetector, CRISIS_PATTERNS, CRISIS_RESOURCES } from '@pippa/crisis'
+import { KeywordCrisisDetector, CRISIS_PATTERNS, CRISIS_RESOURCES } from '@siri/crisis'
 
 const detector = new KeywordCrisisDetector({
   emergencyThreshold: 9,
@@ -141,7 +141,7 @@ Clamped between 1 and 10.
 Pre-defined crisis resources for emergency responses:
 
 ```typescript
-import { CRISIS_RESOURCES } from '@pippa/crisis'
+import { CRISIS_RESOURCES } from '@siri/crisis'
 
 // National resources
 CRISIS_RESOURCES.national
@@ -160,7 +160,7 @@ CRISIS_RESOURCES.recovery
 For testing:
 
 ```typescript
-import { StubCrisisDetector, StubCrisisHandler } from '@pippa/crisis'
+import { StubCrisisDetector, StubCrisisHandler } from '@siri/crisis'
 
 // Detector that returns configurable results
 const detector = new StubCrisisDetector()
@@ -183,7 +183,7 @@ The package records:
 ## Example: Full Flow
 
 ```typescript
-import { KeywordCrisisDetector, CRISIS_RESOURCES } from '@pippa/crisis'
+import { KeywordCrisisDetector, CRISIS_RESOURCES } from '@siri/crisis'
 
 const detector = new KeywordCrisisDetector()
 

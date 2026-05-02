@@ -1,6 +1,6 @@
 # L3 Knowledge Graph (Neo4j "Cadillac")
 
-The L3 tier stores semantic knowledge as a graph of entities, relationships, and observations. We call it "The Cadillac" because it's the luxury tier - rich, structured, relationship-aware memory that transforms Pippa from a chatbot into a companion who understands your world.
+The L3 tier stores semantic knowledge as a graph of entities, relationships, and observations. We call it "The Cadillac" because it's the luxury tier - rich, structured, relationship-aware memory that transforms Siri from a chatbot into a companion who understands your world.
 
 ## The Problem
 

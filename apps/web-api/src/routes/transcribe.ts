@@ -8,13 +8,13 @@
 import type { FastifyPluginAsync } from "fastify";
 import { transcriptionRepository } from "../db/index.js";
 import { transcribeAudio } from "../services/groq.js";
-import { getLogger, withSpan } from "@pippa/observability";
+import { getLogger, withSpan } from "@siri/observability";
 import { nanoid } from "nanoid";
 import {
   MAX_AUDIO_SIZE_BYTES,
   SUPPORTED_AUDIO_TYPES,
-} from "@pippa/shared";
-import type { TranscribeResponse, ErrorResponse } from "@pippa/shared";
+} from "@siri/shared";
+import type { TranscribeResponse, ErrorResponse } from "@siri/shared";
 
 function createTraceContext(requestId: string, userId?: string) {
   return {

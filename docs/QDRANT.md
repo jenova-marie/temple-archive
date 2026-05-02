@@ -165,7 +165,7 @@ Navigate to **Payload Indexes** and add:
 The collection is created automatically on first use via `ensureCollection()`:
 
 ```typescript
-import { ensureCollection, createQdrantClient } from '@pippa/memory'
+import { ensureCollection, createQdrantClient } from '@siri/memory'
 
 const client = createQdrantClient({ url: 'http://localhost:6333' })
 
@@ -198,7 +198,7 @@ In hybrid mode, sparse vectors are generated locally using a lightweight BM25 im
 ### Using BM25 Directly
 
 ```typescript
-import { getBM25Embedder, generateSparseVector } from '@pippa/memory'
+import { getBM25Embedder, generateSparseVector } from '@siri/memory'
 
 // Singleton instance
 const bm25 = getBM25Embedder()
@@ -224,7 +224,7 @@ interface BM25Config {
 ### Hybrid Search (Dense + Sparse)
 
 ```typescript
-import { QdrantVectorStore } from '@pippa/memory'
+import { QdrantVectorStore } from '@siri/memory'
 
 const store = new QdrantVectorStore(client, { searchMode: 'hybrid' })
 

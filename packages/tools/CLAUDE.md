@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Package Overview
 
-`@pippa/tools` provides AI tool definitions for the RecoverySky Agent, built with Vercel AI SDK. These tools enable the AI agent to:
+`@siri/tools` provides AI tool definitions for the RecoverySky Agent, built with Vercel AI SDK. These tools enable the AI agent to:
 - Find AA/NA meetings (`findMeetings`)
 - Log user mood (`logMood`)
 - Get crisis resources (`getCrisisResources`)
@@ -32,8 +32,8 @@ This package is part of the `recoverysky-agent` monorepo. It exports tool defini
 - `src/index.ts` - Re-exports for public API
 
 **Dependencies:**
-- `@pippa/observability` - For tracing (`withSpan`) and logging (`getLogger`)
-- `@pippa/types` - Shared types
+- `@siri/observability` - For tracing (`withSpan`) and logging (`getLogger`)
+- `@siri/types` - Shared types
 - `ai` - Vercel AI SDK for `tool()` function
 - `zod` - Schema validation for tool parameters
 

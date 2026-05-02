@@ -7,7 +7,7 @@ import {
 } from "../../src/redis/client.js";
 
 // Mock observability
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

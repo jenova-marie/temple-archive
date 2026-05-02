@@ -7,10 +7,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Mem0Store } from '../src/Mem0Store.js'
 import type { Mem0HttpClient } from '../src/client.js'
-import type { TraceContext } from '@pippa/types'
+import type { TraceContext } from '@siri/types'
 
 // Mock the observability module
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

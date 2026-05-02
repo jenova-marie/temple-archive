@@ -7,9 +7,9 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Redis } from "ioredis";
-import type { Message, TraceContext, Result } from "@pippa/types";
-import { ok, err } from "@pippa/types";
-import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+import type { Message, TraceContext, Result } from "@siri/types";
+import { ok, err } from "@siri/types";
+import { getLogger, withSpan, pipelineMetrics } from "@siri/observability";
 import { RedisKeys, RedisTTL } from "../redis/keys.js";
 import type {
   CompactionConfig,

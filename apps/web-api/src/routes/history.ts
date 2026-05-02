@@ -7,9 +7,9 @@
 
 import type { FastifyPluginAsync } from "fastify";
 import { transcriptionRepository } from "../db/index.js";
-import { getLogger, withSpan } from "@pippa/observability";
+import { getLogger, withSpan } from "@siri/observability";
 import { nanoid } from "nanoid";
-import type { HistoryResponse, ErrorResponse } from "@pippa/shared";
+import type { HistoryResponse, ErrorResponse } from "@siri/shared";
 
 function createTraceContext(requestId: string, userId?: string) {
   return {

@@ -1,11 +1,11 @@
-# @pippa/evaluation
+# @siri/evaluation
 
 Response quality evaluation for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @pippa/evaluation
+pnpm add @siri/evaluation
 ```
 
 ## Overview
@@ -15,7 +15,7 @@ This package evaluates AI-generated responses for quality, relevance, empathy, a
 ## Quick Start
 
 ```typescript
-import { StubEvaluator } from '@pippa/evaluation'
+import { StubEvaluator } from '@siri/evaluation'
 
 const evaluator = new StubEvaluator()
 

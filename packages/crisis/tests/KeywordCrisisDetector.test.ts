@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { KeywordCrisisDetector } from "../src/KeywordCrisisDetector.js";
-import type { TraceContext } from "@pippa/types";
+import type { TraceContext } from "@siri/types";
 
 // Mock observability to avoid side effects
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

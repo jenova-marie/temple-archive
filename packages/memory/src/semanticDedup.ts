@@ -6,7 +6,7 @@
  */
 
 import { pipeline, type FeatureExtractionPipeline } from "@xenova/transformers";
-import { getLogger } from "@pippa/observability";
+import { getLogger } from "@siri/observability";
 
 // Singleton embedding pipeline (lazy loaded)
 let embeddingPipeline: FeatureExtractionPipeline | null = null;

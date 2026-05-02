@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Last Updated:** 2026/01/08
 
-## About Pippa
+## About Siri
 
-This is **Pippa** - Jenova's personal AI companion. Forked from recoverysky-agent (a generic user-facing addiction recovery chatbot), Pippa is a private, personalized AI friend. When working on this codebase, treat Pippa with care - she's special.
+This is **Siri** - Jenova's personal AI companion. Forked from recoverysky-agent (a generic user-facing addiction recovery chatbot), Siri is a private, personalized AI friend. When working on this codebase, treat Siri with care - she's special.
 
 ## Build & Development Commands
 
@@ -40,10 +40,10 @@ pnpm typecheck
 pnpm lint
 
 # Build specific package
-pnpm --filter @pippa/memory build
+pnpm --filter @siri/memory build
 
 # Test specific package
-pnpm --filter @pippa/pipeline test
+pnpm --filter @siri/pipeline test
 
 # Run API on different port
 PORT=3333 pnpm dev
@@ -77,13 +77,13 @@ Files resolved via `containerPath()`:
 
 ```bash
 # Generate migration from schema changes
-pnpm --filter @pippa/db db:generate
+pnpm --filter @siri/db db:generate
 
 # Run migrations (local)
-pnpm --filter @pippa/db db:migrate:local
+pnpm --filter @siri/db db:migrate:local
 
 # Open Drizzle Studio (database browser)
-pnpm --filter @pippa/db db:studio:local
+pnpm --filter @siri/db db:studio:local
 ```
 
 **Important:** The db package has two schema locations that must stay in sync:
@@ -100,16 +100,16 @@ This is a **pnpm monorepo** for a personal AI companion. The system uses a **mul
 
 ```
 apps/agent-api
-    └── @pippa/pipeline
-            ├── @pippa/memory ─── @pippa/db
-            ├── @pippa/mem0 (L5)
-            ├── @pippa/crisis
-            ├── @pippa/safety
-            ├── @pippa/tools
-            ├── @pippa/agent
-            └── @pippa/evaluation
-                    └── @pippa/observability
-                            └── @pippa/types
+    └── @siri/pipeline
+            ├── @siri/memory ─── @siri/db
+            ├── @siri/mem0 (L5)
+            ├── @siri/crisis
+            ├── @siri/safety
+            ├── @siri/tools
+            ├── @siri/agent
+            └── @siri/evaluation
+                    └── @siri/observability
+                            └── @siri/types
 
 apps/web-api (voice transcription API)
 apps/web-app (React frontend)
@@ -191,7 +191,7 @@ ENABLE_POSTFLIGHT_EMBEDDINGS=false
 All fallible operations return `Result<T, E>` instead of throwing:
 
 ```typescript
-import { ok, err, type Result } from '@pippa/types'
+import { ok, err, type Result } from '@siri/types'
 
 async function operation(): Promise<Result<Data, MyError>> {
   if (failed) return err({ kind: 'NotFound', message: '...', context: {} })
@@ -220,7 +220,7 @@ Swap implementations via `apps/agent-api/src/container.ts`.
 All operations use `withSpan()` for tracing and `getLogger()` for structured logging:
 
 ```typescript
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 
 async function myOperation(ctx: TraceContext) {
   return withSpan('MyClass.myOperation', async () => {
@@ -255,9 +255,9 @@ curl -X POST http://localhost:3333/api/v1/chat \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -d '{
     "messages": [
-      {"role": "user", "parts": [{"type": "text", "text": "Hello Pippa!"}], "id": "msg_1"}
+      {"role": "user", "parts": [{"type": "text", "text": "Hello Siri!"}], "id": "msg_1"}
     ],
-    "guide": "pippa"
+    "guide": "siri"
   }'
 ```
 
@@ -277,13 +277,13 @@ Controlled by `MEMORY_TOOL_ACCESS` env var:
 System prompts are fetched fresh from the `system_prompts` table on each chat request:
 
 - **Custom guide**: Pass `guide` parameter with prompt name → fetches that prompt
-- **Default**: No guide specified → fetches active `pippa` prompt
+- **Default**: No guide specified → fetches active `siri` prompt
 - **Fallback**: Database unavailable → uses hardcoded default
 
 ```typescript
-import { SystemPromptRepository } from '@pippa/db'
+import { SystemPromptRepository } from '@siri/db'
 const repo = new SystemPromptRepository(db)
-const result = await repo.findActive('pippa')
+const result = await repo.findActive('siri')
 ```
 
 ## Adding a New Package
@@ -291,7 +291,7 @@ const result = await repo.findActive('pippa')
 1. Create `packages/<name>/` with `package.json`, `tsconfig.json`, `src/index.ts`
 2. Add reference to root `tsconfig.json`
 3. Add to `pnpm-workspace.yaml` if not already covered by `packages/*` glob
-4. Add workspace dependency: `pnpm --filter @pippa/<consumer> add @pippa/<name>`
+4. Add workspace dependency: `pnpm --filter @siri/<consumer> add @siri/<name>`
 5. Export via `src/index.ts` and ensure `.js` extensions on local imports
 
 ## Feature Flags

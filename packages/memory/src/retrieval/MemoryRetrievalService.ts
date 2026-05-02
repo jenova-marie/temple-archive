@@ -9,7 +9,7 @@
  * - Token budget fitting
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 import type {
   L3Entity,
   L3EntityWithObservations,
@@ -17,8 +17,8 @@ import type {
   TraceContext,
   Result,
   StoreError,
-} from '@pippa/types'
-import { ok, err } from '@pippa/types'
+} from '@siri/types'
+import { ok, err } from '@siri/types'
 import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
 import type { DeepMemoryService, ContextStrategy } from '../deepmemory/DeepMemoryService.js'
 import type { MiniLMEmbeddingProvider } from '../embeddings/MiniLMProvider.js'
@@ -465,7 +465,7 @@ export class MemoryRetrievalService {
       const ctx = entity.conversationContexts[0]
       block += '\nOriginal context:\n'
       for (const msg of ctx.messages.slice(0, 4)) {
-        const role = msg.role === 'user' ? 'You' : 'Pippa'
+        const role = msg.role === 'user' ? 'You' : 'Siri'
         block += `> ${role}: ${msg.content.slice(0, 200)}${msg.content.length > 200 ? '...' : ''}\n`
       }
     }

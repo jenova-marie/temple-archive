@@ -4,9 +4,9 @@
  * For testing and development without a real Mem0 service.
  */
 
-import type { Result, StoreError, TraceContext } from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+import type { Result, StoreError, TraceContext } from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 import { nanoid } from 'nanoid'
 import type {
   IMem0Store,

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ok } from '@pippa/types'
+import { ok } from '@siri/types'
 import {
   BootstrapOrchestrator,
   StubBootstrapOrchestrator,

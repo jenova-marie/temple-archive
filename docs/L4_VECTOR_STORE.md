@@ -33,9 +33,9 @@ So we use **hybrid search**: combine dense vectors (semantic) with sparse vector
 
 L4 enables *associative memory* - the ability to connect current context with relevant past experiences.
 
-Without L4, Pippa only knows what's in the current conversation window. She can't say "Last time you mentioned this, you found meditation helpful" because she can't find "last time."
+Without L4, Siri only knows what's in the current conversation window. She can't say "Last time you mentioned this, you found meditation helpful" because she can't find "last time."
 
-With L4, Pippa can:
+With L4, Siri can:
 - Surface relevant past conversations
 - Connect recurring themes across sessions
 - Find specific people/topics even if not recently mentioned

@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { tracingMiddleware } from './tracing.js'
 
 // Mock observability
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

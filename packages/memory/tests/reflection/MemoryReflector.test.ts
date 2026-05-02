@@ -12,11 +12,11 @@ import {
   type ReflectionResult,
   type MemoryReflectorConfig,
 } from '../../src/reflection/MemoryReflector.js'
-import type { Message, TraceContext, L3Entity, L3Observation } from '@pippa/types'
-import { ok, err } from '@pippa/types'
+import type { Message, TraceContext, L3Entity, L3Observation } from '@siri/types'
+import { ok, err } from '@siri/types'
 
 // Mock observability to avoid side effects
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

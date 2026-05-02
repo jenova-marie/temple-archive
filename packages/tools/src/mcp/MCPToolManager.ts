@@ -12,7 +12,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { getLogger } from "@pippa/observability";
+import { getLogger } from "@siri/observability";
 
 // Type for Vercel AI SDK tools - use the generic Tool type
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -265,7 +265,7 @@ export class MCPToolManager {
             "Trying Streamable HTTP transport"
           );
           client = new Client(
-            { name: "pippa-agent", version: "1.0.0" },
+            { name: "siri-agent", version: "1.0.0" },
             { capabilities: {} }
           );
           const transport = new StreamableHTTPClientTransport(url);
@@ -282,7 +282,7 @@ export class MCPToolManager {
             "Streamable HTTP failed, trying SSE transport"
           );
           client = new Client(
-            { name: "pippa-agent", version: "1.0.0" },
+            { name: "siri-agent", version: "1.0.0" },
             { capabilities: {} }
           );
           const sseTransport = new SSEClientTransport(url);
@@ -296,7 +296,7 @@ export class MCPToolManager {
       } else if (isStdioConfig(config)) {
         // Stdio transport - spawn child process
         client = new Client(
-          { name: "pippa-agent", version: "1.0.0" },
+          { name: "siri-agent", version: "1.0.0" },
           { capabilities: {} }
         );
         const transport = new StdioClientTransport({

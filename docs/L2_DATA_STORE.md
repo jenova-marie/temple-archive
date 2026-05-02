@@ -4,7 +4,7 @@ The L2 tier provides durable, queryable storage for all conversation history, us
 
 ## The Problem
 
-Conversations need to persist. When a user returns after days, weeks, or months, Pippa should remember everything - every message, every insight, every milestone.
+Conversations need to persist. When a user returns after days, weeks, or months, Siri should remember everything - every message, every insight, every milestone.
 
 L1 (Redis) provides speed but not durability. Its 4-hour TTL means old conversations vanish. Its limited query capability can't answer questions like "find messages where the user mentioned their therapist" or "what crisis events happened last month?"
 
@@ -322,14 +322,14 @@ async getUserProfile(userId: string): Promise<Result<UserProfile | null>> {
 │                                                                            │
 │  0002_solid_nocturne.sql        │ Adds fellowship column to literature    │
 │                                                                            │
-│  0003_pippa_prompt.sql          │ Seeds initial system prompts            │
+│  0003_siri_prompt.sql          │ Seeds initial system prompts            │
 │                                                                            │
 │  0004_smart_justice.sql         │ Adds transcriptions table               │
 │                                                                            │
 │  Commands:                                                                 │
-│  • pnpm --filter @pippa/db db:generate  → Generate from schema            │
-│  • pnpm --filter @pippa/db db:migrate:local → Apply migrations            │
-│  • pnpm --filter @pippa/db db:studio:local → Open Drizzle Studio          │
+│  • pnpm --filter @siri/db db:generate  → Generate from schema            │
+│  • pnpm --filter @siri/db db:migrate:local → Apply migrations            │
+│  • pnpm --filter @siri/db db:studio:local → Open Drizzle Studio          │
 │                                                                            │
 └────────────────────────────────────────────────────────────────────────────┘
 ```

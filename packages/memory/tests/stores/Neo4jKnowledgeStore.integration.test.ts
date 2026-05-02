@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import neo4j, { Driver } from 'neo4j-driver'
 import { Neo4jKnowledgeStore } from '../../src/stores/Neo4jKnowledgeStore.js'
-import type { Entity, TraceContext } from '@pippa/types'
+import type { Entity, TraceContext } from '@siri/types'
 
 // Skip if NEO4J_URI not set (CI without Neo4j)
 const NEO4J_URI = process.env.NEO4J_URI || 'bolt://localhost:7687'

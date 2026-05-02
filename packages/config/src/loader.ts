@@ -7,7 +7,7 @@ import { configSchema, type Config } from "./schema.js"
  * Options for loading configuration.
  */
 export interface LoadConfigOptions {
-  /** Path to the YAML config file. If not provided, searches for pippa.agent.yaml */
+  /** Path to the YAML config file. If not provided, searches for siri.agent.yaml */
   configPath?: string
   /** If true, don't throw when config file is not found (use defaults only) */
   allowMissingConfig?: boolean
@@ -256,10 +256,10 @@ function deepMerge(
 
 /**
  * Searches for the config file by walking up the directory tree.
- * Looks for pippa.agent.yaml or pippa.agent.yml.
+ * Looks for siri.agent.yaml or siri.agent.yml.
  */
 function findConfigFile(startDir: string = process.cwd()): string | null {
-  const configNames = ["pippa.agent.yaml", "pippa.agent.yml"]
+  const configNames = ["siri.agent.yaml", "siri.agent.yml"]
   let currentDir = startDir
 
   // Walk up until we hit root or find config

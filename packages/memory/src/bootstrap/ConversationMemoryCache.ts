@@ -6,7 +6,7 @@
  */
 
 import type { Redis } from 'ioredis'
-import { getLogger } from '@pippa/observability'
+import { getLogger } from '@siri/observability'
 import type { IConversationMemoryCache, CacheMetadata, BootstrapConfig } from './types.js'
 
 /**

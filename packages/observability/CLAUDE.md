@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Package Overview
 
-This is `@pippa/observability`, a unified observability package for the RecoverySky Agent system. It wraps [wonder-logger](https://github.com/jenova-marie/wonder-logger) with project-specific defaults to provide:
+This is `@siri/observability`, a unified observability package for the RecoverySky Agent system. It wraps [wonder-logger](https://github.com/jenova-marie/wonder-logger) with project-specific defaults to provide:
 
 - Structured logging via Pino with automatic trace context injection
 - Distributed tracing via OpenTelemetry
@@ -33,7 +33,7 @@ This is a thin wrapper package with two source files:
 
 - `@jenova-marie/wonder-logger` - Core logging/tracing functionality
 - `@opentelemetry/api` - OpenTelemetry API for tracing and metrics
-- `@pippa/types` - Workspace package for `DomainError` type (dev dependency)
+- `@siri/types` - Workspace package for `DomainError` type (dev dependency)
 
 ## Environment Variables
 

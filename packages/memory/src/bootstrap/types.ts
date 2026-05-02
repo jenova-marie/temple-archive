@@ -5,7 +5,7 @@
  * bootstrap system that primes conversations with relevant past memories.
  */
 
-import type { Memory, TraceContext, Result, StoreError } from '@pippa/types'
+import type { Memory, TraceContext, Result, StoreError } from '@siri/types'
 
 // =============================================================================
 // Configuration

@@ -8,11 +8,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // @ts-expect-error - ioredis-mock doesn't have types
 import RedisMock from "ioredis-mock";
 import { RedisContextStore } from "../../src/stores/RedisContextStore.js";
-import type { SessionState, Message, TraceContext } from "@pippa/types";
+import type { SessionState, Message, TraceContext } from "@siri/types";
 import { RedisKeys } from "../../src/redis/keys.js";
 
 // Mock observability to avoid side effects
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

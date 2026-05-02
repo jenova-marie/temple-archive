@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { QdrantVectorStore } from "../../src/stores/QdrantVectorStore.js";
-import type { Message, TraceContext } from "@pippa/types";
+import type { Message, TraceContext } from "@siri/types";
 import {
   messageIdToPointId,
   DENSE_VECTOR_NAME,
@@ -14,7 +14,7 @@ import {
 } from "../../src/qdrant/schema.js";
 
 // Mock observability to avoid side effects
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

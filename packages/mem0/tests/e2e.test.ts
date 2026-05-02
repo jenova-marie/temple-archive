@@ -2,13 +2,13 @@
  * End-to-end tests for Mem0 client against running FastAPI service.
  *
  * Requires: Mem0 FastAPI service running at http://localhost:8000
- * Run with: pnpm --filter @pippa/mem0 test
+ * Run with: pnpm --filter @siri/mem0 test
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { createMem0Client, checkMem0Health, closeMem0Client } from '../src/client.js'
 import { Mem0Store } from '../src/Mem0Store.js'
-import type { TraceContext } from '@pippa/types'
+import type { TraceContext } from '@siri/types'
 
 const BASE_URL = 'http://localhost:8000'
 const TEST_TIMEOUT = 60000

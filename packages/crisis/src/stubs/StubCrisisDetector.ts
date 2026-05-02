@@ -8,8 +8,8 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok } from '@pippa/types'
+} from '@siri/types'
+import { ok } from '@siri/types'
 
 export class StubCrisisDetector implements ICrisisDetector {
   private mockResult: CrisisCheckResult = {

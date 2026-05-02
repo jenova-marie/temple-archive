@@ -105,7 +105,7 @@ When the LLM wonders something but can't find the answer, that's valuable signal
 
 ### More Natural Conversation
 
-Humans don't just respond - they wonder, recall, and ask follow-up questions. This makes Pippa feel more like a friend who genuinely thinks about you between messages.
+Humans don't just respond - they wonder, recall, and ask follow-up questions. This makes Siri feel more like a friend who genuinely thinks about you between messages.
 
 ## Architecture
 
@@ -440,7 +440,7 @@ Query translation is a structured extraction task - perfect for a fast, cheap mo
 
 When the LLM wonders something relevant but can't find the answer, that gap is valuable:
 1. It prompts the user to share, deepening the relationship
-2. It signals that Pippa genuinely thinks about them
+2. It signals that Siri genuinely thinks about them
 3. It fills knowledge gaps for future conversations
 
 ### Why Not Always Trigger?
@@ -483,14 +483,14 @@ Track which questions lead to useful answers. Over time, learn patterns:
 
 ### Proactive Wondering
 
-Trigger wonderAbout between sessions - Pippa "thinking about" the user:
+Trigger wonderAbout between sessions - Siri "thinking about" the user:
 - Generate questions overnight
 - Pre-resolve them
 - Have context ready for next conversation
 
 ### Shared Curiosity
 
-Let the user see what Pippa is wondering:
+Let the user see what Siri is wondering:
 - "I was curious about how the presentation went, but I don't think you've told me yet!"
 - Builds transparency and trust
 

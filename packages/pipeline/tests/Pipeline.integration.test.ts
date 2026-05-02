@@ -6,30 +6,30 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Pipeline, type PipelineDependencies } from "../src/Pipeline.js";
-import { ok, err } from "@pippa/types";
+import { ok, err } from "@siri/types";
 import type {
   TraceContext,
   PipelineInput,
   IAgentProvider,
   AgentResponse,
   AssembledContext,
-} from "@pippa/types";
+} from "@siri/types";
 import {
   InMemoryContextStore,
   InMemorySessionStore,
   InMemoryKnowledgeStore,
   InMemoryVectorStore,
   MemoryOrchestrator,
-} from "@pippa/memory";
+} from "@siri/memory";
 import {
   KeywordCrisisDetector,
   StubCrisisHandler,
-} from "@pippa/crisis";
-import { StubSafetyValidator } from "@pippa/safety";
-import { StubEvaluator } from "@pippa/evaluation";
+} from "@siri/crisis";
+import { StubSafetyValidator } from "@siri/safety";
+import { StubEvaluator } from "@siri/evaluation";
 
 // Mock observability
-vi.mock("@pippa/observability", () => {
+vi.mock("@siri/observability", () => {
   const mockLoggerMethods = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -56,11 +56,11 @@ vi.mock("@pippa/observability", () => {
 });
 
 // Mock agent and tools
-vi.mock("@pippa/agent", () => ({
+vi.mock("@siri/agent", () => ({
   buildSystemPrompt: () => "System prompt for testing",
 }));
 
-vi.mock("@pippa/tools", () => ({
+vi.mock("@siri/tools", () => ({
   recoveryTools: {},
   meetingTools: {},
   literatureTools: {},

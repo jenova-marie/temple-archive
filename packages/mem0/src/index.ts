@@ -1,5 +1,5 @@
 /**
- * @pippa/mem0 - Mem0 Memory Store (L5)
+ * @siri/mem0 - Mem0 Memory Store (L5)
  *
  * Provides integration with Mem0 FastAPI service for
  * intelligent memory extraction, deduplication, and retrieval.

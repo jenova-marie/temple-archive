@@ -14,10 +14,10 @@ import {
   loadCompactionConfig,
 } from '../../src/compaction/index.js'
 import { RedisKeys } from '../../src/redis/keys.js'
-import type { Message, TraceContext } from '@pippa/types'
+import type { Message, TraceContext } from '@siri/types'
 
 // Mock observability to avoid side effects
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

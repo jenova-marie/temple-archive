@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { tool } from "ai";
-import { getLogger, withSpan } from "@pippa/observability";
+import { getLogger, withSpan } from "@siri/observability";
 
 /**
  * Callback type for refreshing the base identity
@@ -135,7 +135,7 @@ export const refreshSystemPrompt = tool({
           return {
             success: false,
             message:
-              "No active pippa prompt found in the database. Using default prompt.",
+              "No active siri prompt found in the database. Using default prompt.",
           };
         }
       } catch (error) {

@@ -1,6 +1,6 @@
-# Pippa
+# Siri
 
-Pippa is a personal AI companion - forked from RecoverySky Agent but customized as Jenova's private AI friend. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
+Siri is a personal AI companion - forked from RecoverySky Agent but customized as Jenova's private AI friend. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
 
 **Last Updated:** 2026/01/08
 
@@ -47,7 +47,7 @@ The CLI provides an interactive way to chat with the agent:
 
 ```bash
 # Build and use the CLI
-pnpm --filter @pippa/cli build
+pnpm --filter @siri/cli build
 
 # Start interactive chat
 node packages/cli/dist/index.js
@@ -85,9 +85,9 @@ curl -X POST http://localhost:3333/api/v1/chat \
   -d '{
     "id": "conv_123",
     "messages": [
-      {"role": "user", "parts": [{"type": "text", "text": "Hello Pippa!"}], "id": "msg_1"}
+      {"role": "user", "parts": [{"type": "text", "text": "Hello Siri!"}], "id": "msg_1"}
     ],
-    "guide": "pippa"
+    "guide": "siri"
   }'
 ```
 
@@ -99,7 +99,7 @@ The `userId` is automatically extracted from the JWT `sub` claim.
 |-------|------|----------|-------------|
 | `id` | string | Yes | Conversation/thread ID |
 | `messages` | UIMessage[] | Yes | Array of messages with `role`, `parts`, `id` |
-| `guide` | string | No | System prompt name (e.g., "pippa") |
+| `guide` | string | No | System prompt name (e.g., "siri") |
 | `trigger` | string | No | Action trigger type (e.g., "submit-message") |
 
 #### Response Format
@@ -180,7 +180,7 @@ curl http://localhost:3333/health/metrics
 ## Project Structure
 
 ```
-pippa/
+siri/
 ├── packages/
 │   ├── types/           # Shared TypeScript interfaces
 │   ├── observability/   # Logging, tracing, metrics (wonder-logger)
@@ -338,8 +338,8 @@ System prompts can be loaded from disk or database with priority ordering:
 INSERT INTO system_prompts (id, name, content, active, created, updated)
 VALUES (
   'prompt_001',
-  'pippa',
-  'You are Pippa, a compassionate AI companion...',
+  'siri',
+  'You are Siri, a compassionate AI companion...',
   true,
   NOW(),
   NOW()
@@ -563,7 +563,7 @@ pnpm build
 pnpm build:all
 
 # Build specific package
-pnpm --filter @pippa/memory build
+pnpm --filter @siri/memory build
 ```
 
 ### Test
@@ -579,7 +579,7 @@ pnpm test:watch
 pnpm vitest run --coverage
 
 # Test specific package
-pnpm --filter @pippa/pipeline test
+pnpm --filter @siri/pipeline test
 ```
 
 ### Test Coverage
@@ -588,17 +588,17 @@ The project maintains comprehensive unit test coverage using Vitest with mock-ba
 
 | Package | Tests | Key Areas |
 |---------|-------|-----------|
-| @pippa/types | 33 | Result types, domain errors |
-| @pippa/observability | 48 | Logging, tracing, metrics |
-| @pippa/crisis | 126 | Detection patterns, handlers, evaluators |
-| @pippa/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator, memory prompts |
-| @pippa/mem0 | ~30 | Mem0Store, client, transforms, InMemoryMem0Store |
-| @pippa/db | 20 | Schema, PostgresSessionStore |
-| @pippa/agent | 50 | VercelAIAgentProvider, prompt builder |
-| @pippa/safety | 13 | PII, medical, enabling detectors |
-| @pippa/evaluation | 14 | LLMEvaluator, scoring |
-| @pippa/tools | 37 | Recovery tools, meeting client, memory tools, Mem0 tools |
-| @pippa/cli | ~20 | Commands, chat, health |
+| @siri/types | 33 | Result types, domain errors |
+| @siri/observability | 48 | Logging, tracing, metrics |
+| @siri/crisis | 126 | Detection patterns, handlers, evaluators |
+| @siri/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator, memory prompts |
+| @siri/mem0 | ~30 | Mem0Store, client, transforms, InMemoryMem0Store |
+| @siri/db | 20 | Schema, PostgresSessionStore |
+| @siri/agent | 50 | VercelAIAgentProvider, prompt builder |
+| @siri/safety | 13 | PII, medical, enabling detectors |
+| @siri/evaluation | 14 | LLMEvaluator, scoring |
+| @siri/tools | 37 | Recovery tools, meeting client, memory tools, Mem0 tools |
+| @siri/cli | ~20 | Commands, chat, health |
 | **Total** | **500+** | |
 
 All tests use mocks for external dependencies (Redis, PostgreSQL, Neo4j, Qdrant, Mem0, AI providers).
@@ -694,7 +694,7 @@ pnpm typecheck
 - [x] Fire-and-forget summarization via Haiku
 
 ### Phase 11: L5 Mem0 Memory ✅
-- [x] @pippa/mem0 package with Mem0Store implementation
+- [x] @siri/mem0 package with Mem0Store implementation
 - [x] Mem0 HTTP client with health checks
 - [x] InMemoryMem0Store for testing
 - [x] Integration with MemoryOrchestrator

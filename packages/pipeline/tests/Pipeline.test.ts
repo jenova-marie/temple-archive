@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Pipeline, type PipelineDependencies } from "../src/Pipeline.js";
-import { ok, err } from "@pippa/types";
+import { ok, err } from "@siri/types";
 import type {
   TraceContext,
   PipelineInput,
@@ -14,11 +14,11 @@ import type {
   SafetyValidationResult,
   EvaluationResult,
   AssembledContext,
-} from "@pippa/types";
-import { MemoryOrchestrator } from "@pippa/memory";
+} from "@siri/types";
+import { MemoryOrchestrator } from "@siri/memory";
 
 // Mock observability - include all logger methods at root level for direct calls
-vi.mock("@pippa/observability", () => {
+vi.mock("@siri/observability", () => {
   const mockLoggerMethods = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -45,12 +45,12 @@ vi.mock("@pippa/observability", () => {
 });
 
 // Mock buildSystemPrompt
-vi.mock("@pippa/agent", () => ({
+vi.mock("@siri/agent", () => ({
   buildSystemPrompt: () => "System prompt for testing",
 }));
 
 // Mock recoveryTools
-vi.mock("@pippa/tools", () => ({
+vi.mock("@siri/tools", () => ({
   recoveryTools: {},
   meetingTools: {},
   literatureTools: {},

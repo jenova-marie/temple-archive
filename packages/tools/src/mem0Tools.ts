@@ -1,5 +1,5 @@
 /**
- * Mem0 Tools for the Pippa Agent
+ * Mem0 Tools for the Siri Agent
  *
  * These tools allow the agent to interact with the Mem0 memory system:
  * - searchMemories: Semantic search for relevant facts
@@ -10,8 +10,8 @@
 
 import { z } from 'zod'
 import { tool } from 'ai'
-import { getLogger, withSpan } from '@pippa/observability'
-import type { IMem0Store, TraceContext } from '@pippa/types'
+import { getLogger, withSpan } from '@siri/observability'
+import type { IMem0Store, TraceContext } from '@siri/types'
 
 // ============================================================================
 // Dependency Injection

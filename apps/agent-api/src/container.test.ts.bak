@@ -5,7 +5,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
   default: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock("@pippa/observability", () => ({
   }),
 }));
 
-vi.mock("@pippa/memory", () => ({
+vi.mock("@siri/memory", () => ({
   MemoryOrchestrator: vi.fn().mockImplementation(() => ({})),
   InMemoryContextStore: vi.fn().mockImplementation(() => ({})),
   InMemorySessionStore: vi.fn().mockImplementation(() => ({})),
@@ -65,14 +65,14 @@ vi.mock("@pippa/memory", () => ({
   }),
 }));
 
-vi.mock("@pippa/tools", () => ({
+vi.mock("@siri/tools", () => ({
   setMemoryToolProviders: vi.fn(),
   setBootstrapOrchestrator: vi.fn(),
   setSystemPromptRefreshFn: vi.fn(),
   setClearConversationFn: vi.fn(),
 }));
 
-vi.mock("@pippa/db", () => ({
+vi.mock("@siri/db", () => ({
   createDatabaseClient: vi.fn().mockReturnValue({}),
   PostgresSessionStore: vi.fn().mockImplementation(() => ({})),
   SystemPromptRepository: vi.fn().mockImplementation(() => ({
@@ -85,29 +85,29 @@ vi.mock("@pippa/db", () => ({
   UserCacheStore: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@pippa/crisis", () => ({
+vi.mock("@siri/crisis", () => ({
   KeywordCrisisDetector: vi.fn().mockImplementation(() => ({})),
   StubCrisisHandler: vi.fn().mockImplementation(() => ({})),
   DeepCrisisEvaluator: vi.fn().mockImplementation(() => ({})),
   WebhookCrisisHandler: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@pippa/safety", () => ({
+vi.mock("@siri/safety", () => ({
   StubSafetyValidator: vi.fn().mockImplementation(() => ({})),
   SafetyValidator: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@pippa/agent", () => ({
+vi.mock("@siri/agent", () => ({
   MockAgentProvider: vi.fn().mockImplementation(() => ({})),
   VercelAIAgentProvider: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@pippa/evaluation", () => ({
+vi.mock("@siri/evaluation", () => ({
   StubEvaluator: vi.fn().mockImplementation(() => ({})),
   LLMEvaluator: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("@pippa/pipeline", () => ({
+vi.mock("@siri/pipeline", () => ({
   Pipeline: vi.fn().mockImplementation(() => ({})),
 }));
 
@@ -124,18 +124,18 @@ import {
   OpenAIEmbeddingProvider,
   QdrantVectorStore,
   createQdrantClient,
-} from "@pippa/memory";
-import { createDatabaseClient, PostgresSessionStore } from "@pippa/db";
+} from "@siri/memory";
+import { createDatabaseClient, PostgresSessionStore } from "@siri/db";
 import {
   KeywordCrisisDetector,
   StubCrisisHandler,
   DeepCrisisEvaluator,
   WebhookCrisisHandler,
-} from "@pippa/crisis";
-import { StubSafetyValidator } from "@pippa/safety";
-import { MockAgentProvider, VercelAIAgentProvider } from "@pippa/agent";
-import { StubEvaluator } from "@pippa/evaluation";
-import { Pipeline } from "@pippa/pipeline";
+} from "@siri/crisis";
+import { StubSafetyValidator } from "@siri/safety";
+import { MockAgentProvider, VercelAIAgentProvider } from "@siri/agent";
+import { StubEvaluator } from "@siri/evaluation";
+import { Pipeline } from "@siri/pipeline";
 import Anthropic from "@anthropic-ai/sdk";
 
 describe("container", () => {

@@ -10,7 +10,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
   })),
 }))
 
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),
@@ -32,7 +32,7 @@ vi.mock('@pippa/observability', () => ({
   },
 }))
 
-vi.mock('@pippa/memory', () => ({
+vi.mock('@siri/memory', () => ({
   MemoryOrchestrator: vi.fn().mockImplementation(() => ({
     assembleContext: vi.fn().mockResolvedValue({ ok: true, value: {} }),
   })),
@@ -86,7 +86,7 @@ vi.mock('@pippa/memory', () => ({
   loadMemoryPromptConfig: vi.fn().mockReturnValue({ enabled: false }),
 }))
 
-vi.mock('@pippa/tools', () => ({
+vi.mock('@siri/tools', () => ({
   setMemoryToolProviders: vi.fn(),
   setBootstrapOrchestrator: vi.fn(),
   setSystemPromptRefreshFn: vi.fn(),
@@ -94,7 +94,7 @@ vi.mock('@pippa/tools', () => ({
   setMem0ToolStore: vi.fn(),
 }))
 
-vi.mock('@pippa/db', () => ({
+vi.mock('@siri/db', () => ({
   createDatabaseClient: vi.fn().mockReturnValue({}),
   PostgresSessionStore: vi.fn().mockImplementation(() => ({
     getUserProfile: vi.fn().mockResolvedValue({ ok: true, value: null }),
@@ -110,7 +110,7 @@ vi.mock('@pippa/db', () => ({
   })),
 }))
 
-vi.mock('@pippa/crisis', () => ({
+vi.mock('@siri/crisis', () => ({
   KeywordCrisisDetector: vi.fn().mockImplementation(() => ({
     detect: vi.fn().mockResolvedValue({ ok: true, value: { level: 1 } }),
   })),
@@ -124,7 +124,7 @@ vi.mock('@pippa/crisis', () => ({
   WebhookCrisisHandler: vi.fn().mockImplementation(() => ({})),
 }))
 
-vi.mock('@pippa/safety', () => ({
+vi.mock('@siri/safety', () => ({
   StubSafetyValidator: vi.fn().mockImplementation(() => ({
     validate: vi.fn().mockResolvedValue({ ok: true, value: { safe: true } }),
   })),
@@ -133,7 +133,7 @@ vi.mock('@pippa/safety', () => ({
   })),
 }))
 
-vi.mock('@pippa/agent', () => ({
+vi.mock('@siri/agent', () => ({
   MockAgentProvider: vi.fn().mockImplementation(() => ({
     chat: vi.fn().mockResolvedValue({ ok: true, value: { content: 'Mock' } }),
   })),
@@ -142,7 +142,7 @@ vi.mock('@pippa/agent', () => ({
   })),
 }))
 
-vi.mock('@pippa/evaluation', () => ({
+vi.mock('@siri/evaluation', () => ({
   StubEvaluator: vi.fn().mockImplementation(() => ({
     evaluate: vi.fn().mockResolvedValue({ ok: true, value: { score: 1.0 } }),
   })),
@@ -154,7 +154,7 @@ vi.mock('@pippa/evaluation', () => ({
   })),
 }))
 
-vi.mock('@pippa/pipeline', () => ({
+vi.mock('@siri/pipeline', () => ({
   Pipeline: vi.fn().mockImplementation(() => ({
     preflight: vi.fn().mockResolvedValue({ ok: true, value: {} }),
     postProcess: vi.fn().mockResolvedValue(undefined),
@@ -162,7 +162,7 @@ vi.mock('@pippa/pipeline', () => ({
   })),
 }))
 
-vi.mock('@pippa/types', () => ({
+vi.mock('@siri/types', () => ({
   getDefaultPipelineConfig: vi.fn().mockReturnValue({
     memory: {
       l2MessageLimit: 200,

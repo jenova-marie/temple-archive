@@ -9,8 +9,8 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from "@pippa/types";
-import { ok } from "@pippa/types";
+} from "@siri/types";
+import { ok } from "@siri/types";
 import { CRISIS_RESOURCES } from "../patterns.js";
 
 export class StubCrisisHandler implements ICrisisHandler {

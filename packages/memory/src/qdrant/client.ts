@@ -6,7 +6,7 @@
  */
 
 import { QdrantClient } from '@qdrant/js-client-rest'
-import { getLogger } from '@pippa/observability'
+import { getLogger } from '@siri/observability'
 
 export interface QdrantClientConfig {
   /** Qdrant server URL (default: QDRANT_URL env var or http://localhost:6333) */

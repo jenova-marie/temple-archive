@@ -5,7 +5,7 @@
  */
 
 import type { QdrantClient } from "@qdrant/js-client-rest";
-import { getLogger } from "@pippa/observability";
+import { getLogger } from "@siri/observability";
 import { createHash } from "crypto";
 
 // Collection configuration constants

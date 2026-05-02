@@ -1,8 +1,8 @@
 {
-  "name": "pippa",
+  "name": "siri",
   "version": "0.2.0",
   "private": true,
-  "description": "My wonderful Pippa",
+  "description": "My wonderful Siri",
   "type": "module",
   "pnpm": {
     "overrides": {
@@ -15,8 +15,8 @@
     "build:docker:local": "DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t recoverysky-agent .",
     "dev": "CONTAINER_ROOT=./opt pnpm -r --parallel --filter './apps/*' dev",
     "dev:docker": "pnpm -r --parallel --filter './apps/*' dev",
-    "start": "pnpm --filter @pippa/agent-api start",
-    "start:local": "CONTAINER_ROOT=./opt pnpm --filter @pippa/agent-api start",
+    "start": "pnpm --filter @siri/agent-api start",
+    "start:local": "CONTAINER_ROOT=./opt pnpm --filter @siri/agent-api start",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint packages apps --ext .ts,.tsx",

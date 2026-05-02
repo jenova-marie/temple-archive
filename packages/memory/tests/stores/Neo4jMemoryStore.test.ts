@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Neo4jMemoryStore } from "../../src/stores/Neo4jMemoryStore.js";
-import type { TraceContext, CreateMemoryInput, MemoryRelationType } from "@pippa/types";
+import type { TraceContext, CreateMemoryInput, MemoryRelationType } from "@siri/types";
 
 // Mock observability
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

@@ -4,9 +4,9 @@
  * Handles persisting conversation memory caches and loading from past conversations.
  */
 
-import type { Result, StoreError } from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+import type { Result, StoreError } from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 import { eq, inArray } from 'drizzle-orm'
 import type { IMemoryCachePersistence, IConversationMemoryCache } from './types.js'
 

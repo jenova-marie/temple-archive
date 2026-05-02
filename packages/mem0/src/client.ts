@@ -5,7 +5,7 @@
  * Follows the same patterns as the Qdrant and Redis client modules.
  */
 
-import { getLogger } from '@pippa/observability'
+import { getLogger } from '@siri/observability'
 import type { Mem0ClientConfig } from './types.js'
 
 const DEFAULT_URL = 'http://localhost:8000'

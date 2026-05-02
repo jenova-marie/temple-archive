@@ -11,8 +11,8 @@
  * - Physical addresses
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import type { TraceContext, SafetyViolation } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
+import type { TraceContext, SafetyViolation } from '@siri/types'
 
 export type PIIType =
   | 'ssn'

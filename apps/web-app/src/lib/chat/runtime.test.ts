@@ -97,12 +97,12 @@ describe('useMeetingGuideRuntime', () => {
       user: { access_token: mockAccessToken } as any,
       isAuthenticated: true,
     })
-    useChatStore.setState({ selectedGuideId: 'pippa' })
+    useChatStore.setState({ selectedGuideId: 'siri' })
 
     renderHook(() => useMeetingGuideRuntime())
 
     expect(transportConstructorCalls.length).toBeGreaterThan(0)
-    expect(transportConstructorCalls[0].body.guide).toBe('pippa')
+    expect(transportConstructorCalls[0].body.guide).toBe('siri')
   })
 
   it('generates unique conversation ID per hook instance', () => {

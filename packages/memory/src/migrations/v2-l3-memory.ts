@@ -13,7 +13,7 @@
  */
 
 import type { Driver, Session } from 'neo4j-driver'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 
 /**
  * Migration result

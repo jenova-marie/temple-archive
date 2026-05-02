@@ -7,8 +7,8 @@
 
 import type { Redis } from "ioredis";
 import { nanoid } from "nanoid";
-import { getLogger } from "@pippa/observability";
-import { ok, err, type Result } from "@pippa/types";
+import { getLogger } from "@siri/observability";
+import { ok, err, type Result } from "@siri/types";
 
 export interface MemoryPrompt {
   id: string;

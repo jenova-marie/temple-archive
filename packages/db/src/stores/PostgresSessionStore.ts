@@ -15,9 +15,9 @@ import type {
   SessionSummary,
   StoreError,
   TraceContext,
-} from "@pippa/types";
-import { ok, err, type Result } from "@pippa/types";
-import { getLogger, withSpan } from "@pippa/observability";
+} from "@siri/types";
+import { ok, err, type Result } from "@siri/types";
+import { getLogger, withSpan } from "@siri/observability";
 import { eq, desc, asc, and, lte, gt, or } from "drizzle-orm";
 import type { DatabaseClient } from "../client.js";
 import {

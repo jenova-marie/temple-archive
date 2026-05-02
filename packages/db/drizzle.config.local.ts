@@ -10,7 +10,7 @@ export default defineConfig({
     port: 5432,
     user: "postgres",
     password: "postgres",
-    database: "pippa",
+    database: "siri",
     ssl: false,
   },
   verbose: true,

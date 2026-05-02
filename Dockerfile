@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.4
 
-# Pippa Agent & Web - Multi-stage Alpine build
+# Siri Agent & Web - Multi-stage Alpine build
 #
 # Build with npmrc secret for private registry:
-#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t pippa-agent .
-#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc --target web -t pippa-web .
+#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t siri-agent .
+#   DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc --target web -t siri-web .
 #
 # Or via compose:
 #   docker-compose build
@@ -62,7 +62,7 @@ COPY packages/ ./packages/
 COPY apps/ ./apps/
 
 # Build all packages EXCEPT web-app (web-app is built separately in web-app-builder with AGENT_API_PORT)
-RUN pnpm -r --filter '!@pippa/web-app' build
+RUN pnpm -r --filter '!@siri/web-app' build
 
 # =============================================================================
 # Stage 4: Web Builder (separate stage for web-specific build)
@@ -81,8 +81,8 @@ COPY apps/ ./apps/
 RUN cp apps/web-app/build.env apps/web-app/.env
 
 # Build shared package first, then web app
-RUN pnpm --filter @pippa/shared build && \
-    pnpm --filter @pippa/web-app build
+RUN pnpm --filter @siri/shared build && \
+    pnpm --filter @siri/web-app build
 
 # =============================================================================
 # Stage 5: Agent Production
@@ -92,8 +92,8 @@ FROM node:22-bookworm AS agent-api
 RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
 # Add non-root user
-RUN groupadd -g 1001 pippa && \
-    useradd -u 1001 -g pippa -s /sbin/nologin -M pippa
+RUN groupadd -g 1001 siri && \
+    useradd -u 1001 -g siri -s /sbin/nologin -M siri
 
 WORKDIR /app
 
@@ -138,9 +138,9 @@ COPY --from=builder /app/packages/mem0/dist ./packages/mem0/dist
 COPY --from=builder /app/apps/agent-api/dist ./apps/agent-api/dist
 
 # Set ownership
-RUN chown -R pippa:pippa /app
+RUN chown -R siri:siri /app
 
-USER pippa
+USER siri
 
 ENV NODE_ENV=production
 ENV PORT=61664
@@ -161,8 +161,8 @@ FROM node:22-bookworm AS web-api
 RUN corepack enable && corepack prepare pnpm@9.14.4 --activate
 
 # Add non-root user
-RUN groupadd -g 1001 pippa && \
-    useradd -u 1001 -g pippa -s /sbin/nologin -M pippa
+RUN groupadd -g 1001 siri && \
+    useradd -u 1001 -g siri -s /sbin/nologin -M siri
 
 WORKDIR /app
 
@@ -189,9 +189,9 @@ COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/web-api/dist ./apps/web-api/dist
 
 # Set ownership
-RUN chown -R pippa:pippa /app
+RUN chown -R siri:siri /app
 
-USER pippa
+USER siri
 
 ENV NODE_ENV=production
 ENV PORT=61665

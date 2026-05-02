@@ -1,11 +1,11 @@
 {
   "name": "agent",
-  "description": "Starting Docker Compose services for Pippa!!!",
+  "description": "Starting Docker Compose services for Siri!!!",
   "vault": [
-    "docker-config:Pippa",
-    "app-config:Pippa",
-    "app-secrets:Pippa/JSON",
-    "db-users:Pippa/JSON",
-    "redis-passwords:Pippa/JSON"
+    "docker-config:Siri",
+    "app-config:Siri",
+    "app-secrets:Siri/JSON",
+    "db-users:Siri/JSON",
+    "redis-passwords:Siri/JSON"
   ]
 }

@@ -1,6 +1,6 @@
 # Entity Extraction
 
-How Pippa extracts entities, observations, and relationships from conversations.
+How Siri extracts entities, observations, and relationships from conversations.
 
 ## The Problem
 
@@ -30,7 +30,7 @@ We guide the extraction with a structured prompt that requests JSON output, maki
 
 Without entity extraction, L3 would be empty. The knowledge graph would have no nodes, no relationships, no observations. The agent would have conversation history but no *understanding* of what that history means.
 
-Entity extraction is the bridge between raw conversation and semantic memory. It's how Pippa learns that John exists, that you care about him, that he's connected to your recovery journey.
+Entity extraction is the bridge between raw conversation and semantic memory. It's how Siri learns that John exists, that you care about him, that he's connected to your recovery journey.
 
 Over time, this builds a rich model of the user's world - not through explicit data entry, but through natural conversation. The graph grows organically as the relationship deepens.
 

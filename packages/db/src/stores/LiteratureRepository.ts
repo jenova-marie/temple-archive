@@ -5,7 +5,7 @@
  */
 
 import { eq, ilike, sql, inArray } from "drizzle-orm";
-import { ok, err, type Result, type DomainError } from "@pippa/types";
+import { ok, err, type Result, type DomainError } from "@siri/types";
 import {
   literature,
   literatureBlocks,

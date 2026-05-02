@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerMessage } from "@pippa/shared";
+import type { ClientMessage, ServerMessage } from "@siri/shared";
 
 interface UseTranscriptionWebSocketOptions {
   /** API base URL (defaults to VITE_TRANSCRIPTION_API_URL or VITE_API_BASE_URL) */
@@ -27,7 +27,7 @@ interface UseTranscriptionWebSocketReturn {
 
 /**
  * WebSocket hook for real-time audio transcription
- * Connects to the @pippa/api WebSocket endpoint
+ * Connects to the @siri/api WebSocket endpoint
  */
 export function useTranscriptionWebSocket({
   apiBaseUrl,

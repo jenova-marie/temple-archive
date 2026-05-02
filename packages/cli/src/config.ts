@@ -20,7 +20,7 @@ const defaults: CLIConfig = {
 }
 
 export const config = new Conf<CLIConfig>({
-  projectName: 'pippa-cli',
+  projectName: 'siri-cli',
   defaults,
 })
 

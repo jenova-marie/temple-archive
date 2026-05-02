@@ -71,7 +71,7 @@ describe("loadConfig", () => {
 
   describe("with YAML config", () => {
     it("loads values from YAML file", () => {
-      const configPath = join(testDir, "pippa.agent.yaml")
+      const configPath = join(testDir, "siri.agent.yaml")
       writeFileSync(
         configPath,
         `
@@ -94,7 +94,7 @@ redis:
 
     it("interpolates ${VAR} in YAML values", () => {
       process.env.TEST_API_KEY = "secret-key-123"
-      const configPath = join(testDir, "pippa.agent.yaml")
+      const configPath = join(testDir, "siri.agent.yaml")
       writeFileSync(
         configPath,
         `
@@ -111,7 +111,7 @@ ai:
 
     it("interpolates ${VAR:-default} syntax", () => {
       // Don't set the env var
-      const configPath = join(testDir, "pippa.agent.yaml")
+      const configPath = join(testDir, "siri.agent.yaml")
       writeFileSync(
         configPath,
         `
@@ -127,7 +127,7 @@ postgresql:
 
     it("uses env var when set despite default in interpolation", () => {
       process.env.DATABASE_URL = "postgresql://actual:5432/realdb"
-      const configPath = join(testDir, "pippa.agent.yaml")
+      const configPath = join(testDir, "siri.agent.yaml")
       writeFileSync(
         configPath,
         `
@@ -144,7 +144,7 @@ postgresql:
 
   describe("with environment variable overrides", () => {
     it("env vars override YAML values", () => {
-      const configPath = join(testDir, "pippa.agent.yaml")
+      const configPath = join(testDir, "siri.agent.yaml")
       writeFileSync(
         configPath,
         `

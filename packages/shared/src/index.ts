@@ -3,7 +3,7 @@ export { cn } from "./utils.js";
 
 // NOTE: Container paths (getContainerRoot, containerPath, ContainerPaths)
 // are NOT exported here because they use Node.js APIs.
-// Import from '@pippa/shared/server' for server-side code.
+// Import from '@siri/shared/server' for server-side code.
 
 // Guides
 export { GUIDES, DEFAULT_GUIDE_ID } from "./guides.js";

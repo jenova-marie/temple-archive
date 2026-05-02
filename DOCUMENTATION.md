@@ -1,4 +1,4 @@
-# Pippa Documentation
+# Siri Documentation
 
 > Quick navigation to all project documentation.
 
@@ -20,7 +20,7 @@
 
 ## Memory System
 
-The memory system is Pippa's most complex subsystem. Read in this order:
+The memory system is Siri's most complex subsystem. Read in this order:
 
 ### Overview
 | Doc | Purpose |
@@ -61,21 +61,21 @@ Each package has its own documentation:
 
 | Package | README | CLAUDE.md |
 |---------|--------|-----------|
-| `@pippa/types` | [README](packages/types/README.md) | - |
-| `@pippa/observability` | [README](packages/observability/README.md) | [CLAUDE.md](packages/observability/CLAUDE.md) |
-| `@pippa/db` | [README](packages/db/README.md) | [CLAUDE.md](packages/db/CLAUDE.md) |
-| `@pippa/memory` | [README](packages/memory/README.md) | [CLAUDE.md](packages/memory/CLAUDE.md) |
+| `@siri/types` | [README](packages/types/README.md) | - |
+| `@siri/observability` | [README](packages/observability/README.md) | [CLAUDE.md](packages/observability/CLAUDE.md) |
+| `@siri/db` | [README](packages/db/README.md) | [CLAUDE.md](packages/db/CLAUDE.md) |
+| `@siri/memory` | [README](packages/memory/README.md) | [CLAUDE.md](packages/memory/CLAUDE.md) |
 
 ### Processing Packages
 
 | Package | README | CLAUDE.md |
 |---------|--------|-----------|
-| `@pippa/crisis` | [README](packages/crisis/README.md) | [CLAUDE.md](packages/crisis/CLAUDE.md) |
-| `@pippa/safety` | [README](packages/safety/README.md) | [CLAUDE.md](packages/safety/CLAUDE.md) |
-| `@pippa/agent` | [README](packages/agent/README.md) | [CLAUDE.md](packages/agent/CLAUDE.md) |
-| `@pippa/tools` | [README](packages/tools/README.md) | [CLAUDE.md](packages/tools/CLAUDE.md) |
-| `@pippa/evaluation` | [README](packages/evaluation/README.md) | [CLAUDE.md](packages/evaluation/CLAUDE.md) |
-| `@pippa/pipeline` | [README](packages/pipeline/README.md) | [CLAUDE.md](packages/pipeline/CLAUDE.md) |
+| `@siri/crisis` | [README](packages/crisis/README.md) | [CLAUDE.md](packages/crisis/CLAUDE.md) |
+| `@siri/safety` | [README](packages/safety/README.md) | [CLAUDE.md](packages/safety/CLAUDE.md) |
+| `@siri/agent` | [README](packages/agent/README.md) | [CLAUDE.md](packages/agent/CLAUDE.md) |
+| `@siri/tools` | [README](packages/tools/README.md) | [CLAUDE.md](packages/tools/CLAUDE.md) |
+| `@siri/evaluation` | [README](packages/evaluation/README.md) | [CLAUDE.md](packages/evaluation/CLAUDE.md) |
+| `@siri/pipeline` | [README](packages/pipeline/README.md) | [CLAUDE.md](packages/pipeline/CLAUDE.md) |
 
 ### Apps
 

@@ -12,8 +12,8 @@ import type {
   AssembledContext,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok } from '@pippa/types'
+} from '@siri/types'
+import { ok } from '@siri/types'
 
 const NEUTRAL_RESULT: EvaluationResult = {
   qualityScore: 0.5,

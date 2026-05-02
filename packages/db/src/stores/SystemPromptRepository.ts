@@ -6,7 +6,7 @@
  */
 
 import { eq, and } from "drizzle-orm";
-import { ok, err, type Result, type DomainError } from "@pippa/types";
+import { ok, err, type Result, type DomainError } from "@siri/types";
 import { systemPrompts, type SystemPrompt } from "../schema/systemPrompts.js";
 import type { DatabaseClient } from "../client.js";
 
@@ -40,7 +40,7 @@ export class SystemPromptRepository {
    * Only one prompt per name can be active at a time.
    *
    * @example
-   * const result = await repo.findActive('pippa');
+   * const result = await repo.findActive('siri');
    * if (result.ok && result.value) {
    *   const content = result.value.content;
    * }

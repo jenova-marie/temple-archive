@@ -3,7 +3,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express'
-import { getLogger, pipelineMetrics } from '@pippa/observability'
+import { getLogger, pipelineMetrics } from '@siri/observability'
 
 /**
  * Custom error class with status code

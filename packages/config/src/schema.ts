@@ -69,7 +69,7 @@ const postgresqlSchema = z.object({
     z.object({ rejectUnauthorized: z.boolean() }),
   ]).optional(),
 }).optional().transform((val) => ({
-  url: val?.url ?? "postgresql://postgres:postgres@localhost:5432/pippa",
+  url: val?.url ?? "postgresql://postgres:postgres@localhost:5432/siri",
   ssl: val?.ssl,
 }))
 
@@ -320,7 +320,7 @@ const memorySchema = z.object({
 }))
 
 /**
- * Zod schema for Pippa Agent configuration.
+ * Zod schema for Siri Agent configuration.
  * All fields have sensible defaults to allow minimal configuration.
  */
 export const configSchema = z.object({

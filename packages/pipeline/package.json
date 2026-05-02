@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/pipeline",
+  "name": "@siri/pipeline",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -20,15 +20,15 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@pippa/agent": "workspace:*",
-    "@pippa/crisis": "workspace:*",
-    "@pippa/evaluation": "workspace:*",
-    "@pippa/memory": "workspace:*",
-    "@pippa/observability": "workspace:*",
-    "@pippa/safety": "workspace:*",
-    "@pippa/shared": "workspace:^",
-    "@pippa/tools": "workspace:*",
-    "@pippa/types": "workspace:*"
+    "@siri/agent": "workspace:*",
+    "@siri/crisis": "workspace:*",
+    "@siri/evaluation": "workspace:*",
+    "@siri/memory": "workspace:*",
+    "@siri/observability": "workspace:*",
+    "@siri/safety": "workspace:*",
+    "@siri/shared": "workspace:^",
+    "@siri/tools": "workspace:*",
+    "@siri/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

@@ -1,4 +1,4 @@
-# Pippa Agent & Web - Production Compose
+# Siri Agent & Web - Production Compose
 #
 # Build and run:
 #   docker-compose up -d --build
@@ -8,14 +8,14 @@
 #   - External services (Redis, PostgreSQL, Neo4j, Qdrant)
 
 services:
-  pippa-agent-api:
+  siri-agent-api:
     build:
       context: .
       dockerfile: Dockerfile
       target: agent-api
       secrets:
         - npmrc
-    container_name: pippa-agent-api
+    container_name: siri-agent-api
     restart: unless-stopped
     networks:
       - recoverysky
@@ -53,7 +53,7 @@ services:
       - REDIS_URL=redis://redis:6379
 
       # L2: PostgreSQL (on bad-bitch-net)
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pippa
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/siri
 
       # L3: Neo4j (on bad-bitch-net)
       - NEO4J_URI=neo4j://neo4j:7687
@@ -94,14 +94,14 @@ services:
     #   start_period: 10s
     #   retries: 3
 
-  pippa-web-api:
+  siri-web-api:
     build:
       context: .
       dockerfile: Dockerfile
       target: web-api
       secrets:
         - npmrc
-    container_name: pippa-web-api
+    container_name: siri-web-api
     restart: unless-stopped
     networks:
       - recoverysky
@@ -114,12 +114,12 @@ services:
       - PORT=${WEB_API_PORT}
 
       # L2: PostgreSQL (on bad-bitch-net)
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/pippa
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/siri
 
       # LLM Provider
       - GROQ_API_KEY
 
-  pippa-web-app:
+  siri-web-app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -128,7 +128,7 @@ services:
         AGENT_API_PORT: ${AGENT_API_PORT}
       secrets:
         - npmrc
-    container_name: pippa-web-app
+    container_name: siri-web-app
     restart: unless-stopped
     networks:
       - recoverysky

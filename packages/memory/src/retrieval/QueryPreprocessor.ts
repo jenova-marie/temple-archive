@@ -10,8 +10,8 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk'
-import type { TraceContext } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+import type { TraceContext } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 
 export type QueryPreprocessingMode = 0 | 1 | 2 | 3
 

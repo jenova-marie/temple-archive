@@ -16,8 +16,8 @@ import type {
   SemanticMatch,
   Result,
   StoreError,
-} from "@pippa/types";
-import { ok, err } from "@pippa/types";
+} from "@siri/types";
+import { ok, err } from "@siri/types";
 
 // Mock observability - include all logger methods at root level for direct calls
 const mockLoggerMethods = {
@@ -26,7 +26,7 @@ const mockLoggerMethods = {
   warn: vi.fn(),
   error: vi.fn(),
 };
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     ...mockLoggerMethods,
     child: () => mockLoggerMethods,

@@ -2,7 +2,7 @@
 # See: https://github.com/jenova-marie/wonder-logger
 
 service:
-  name: ${SERVICE_NAME:-pippa}
+  name: ${SERVICE_NAME:-siri}
   version: ${npm_package_version:-0.1.0}
   environment: ${NODE_ENV:-production}
 

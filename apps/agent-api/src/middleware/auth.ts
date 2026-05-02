@@ -6,7 +6,7 @@
 
 import type { Request, Response, NextFunction } from "express";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
-import { getLogger } from "@pippa/observability";
+import { getLogger } from "@siri/observability";
 
 /**
  * Zitadel JWT claims

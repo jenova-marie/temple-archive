@@ -6,14 +6,14 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { getLogger } from "@pippa/observability";
-import { sql } from "@pippa/db";
+import { getLogger } from "@siri/observability";
+import { sql } from "@siri/db";
 import authPlugin from "./plugins/auth.js";
 import { transcribeRoutes } from "./routes/transcribe.js";
 import { historyRoutes } from "./routes/history.js";
 import { websocketRoutes } from "./routes/websocket.js";
 import { db } from "./db/index.js";
-import { MAX_AUDIO_SIZE_BYTES } from "@pippa/shared";
+import { MAX_AUDIO_SIZE_BYTES } from "@siri/shared";
 import { env } from "./env.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -23,7 +23,7 @@ export async function buildApp() {
   const logger = getLogger().child({ component: "fastify" });
 
   const app = Fastify({
-    // Disable Fastify's built-in logger - use @pippa/observability instead
+    // Disable Fastify's built-in logger - use @siri/observability instead
     logger: false,
   });
 

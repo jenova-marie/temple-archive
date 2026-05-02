@@ -9,7 +9,7 @@ import type {
   UserProfile,
   SessionState,
   SessionEntities,
-} from "@pippa/types";
+} from "@siri/types";
 
 function createMinimalContext(): AssembledContext {
   return {

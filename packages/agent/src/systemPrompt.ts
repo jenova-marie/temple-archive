@@ -7,7 +7,7 @@ import type {
   CrisisCheckResult,
   LocaleData,
   Mem0SearchResult,
-} from "@pippa/types";
+} from "@siri/types";
 
 /**
  * MCP server description for system prompt injection

@@ -34,9 +34,9 @@ import type {
   PipelineDiagnostics,
   SafetyValidationResult,
   EvaluationResult,
-} from "@pippa/types";
-import { ok, err, getDefaultPipelineConfig } from "@pippa/types";
-import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+} from "@siri/types";
+import { ok, err, getDefaultPipelineConfig } from "@siri/types";
+import { getLogger, withSpan, pipelineMetrics } from "@siri/observability";
 import {
   MemoryOrchestrator,
   type EntityExtractor,
@@ -50,8 +50,8 @@ import {
   type MemoryPromptStore,
   type MemoryPromptGenerator,
   type GenerateOptions,
-} from "@pippa/memory";
-import { buildSystemPrompt } from "@pippa/agent";
+} from "@siri/memory";
+import { buildSystemPrompt } from "@siri/agent";
 import {
   agentTools,
   getMemoryTools,
@@ -62,7 +62,7 @@ import {
   setGetConversationIdFn,
   getMcpServerDescriptions,
   type MemoryToolAccessLevel,
-} from "@pippa/tools";
+} from "@siri/tools";
 import { getLocale } from "./localeLoader.js";
 
 /** Cached monorepo root for output directory */
@@ -1879,8 +1879,8 @@ export class Pipeline {
       // TODO: Get recent insights and mentioned entities from knowledge store
       // For now, we'll use empty arrays - the reflector will still work
       // but won't have context to avoid duplicates
-      const recentInsights: import("@pippa/types").L3Observation[] = [];
-      const mentionedEntities: import("@pippa/types").L3Entity[] = [];
+      const recentInsights: import("@siri/types").L3Observation[] = [];
+      const mentionedEntities: import("@siri/types").L3Entity[] = [];
 
       logger.debug(
         {
@@ -2142,7 +2142,7 @@ export class Pipeline {
           }
         } else if (this.deps.getDefaultSystemPrompt) {
           // No custom agent - fetch default fresh
-          logger.debug("Fetching default pippa prompt from database");
+          logger.debug("Fetching default siri prompt from database");
           const defaultPrompt = await this.deps.getDefaultSystemPrompt();
           if (defaultPrompt) {
             baseIdentity = defaultPrompt.content;
@@ -2156,7 +2156,7 @@ export class Pipeline {
             );
           } else {
             logger.warn(
-              "Default pippa prompt not found in database, using fallback",
+              "Default siri prompt not found in database, using fallback",
             );
           }
         } else {

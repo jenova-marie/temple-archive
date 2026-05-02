@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/agent",
+  "name": "@siri/agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.53",
-    "@pippa/observability": "workspace:*",
-    "@pippa/types": "workspace:*",
+    "@siri/observability": "workspace:*",
+    "@siri/types": "workspace:*",
     "ai": "^5.0.116"
   },
   "devDependencies": {

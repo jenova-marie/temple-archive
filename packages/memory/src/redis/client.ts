@@ -5,7 +5,7 @@
  */
 
 import { Redis, type RedisOptions } from 'ioredis'
-import { getLogger } from '@pippa/observability'
+import { getLogger } from '@siri/observability'
 
 export interface RedisClientConfig {
   /** Redis connection URL (e.g., redis://localhost:6379 or redis://:password@localhost:6379) */

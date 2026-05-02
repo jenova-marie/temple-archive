@@ -1,10 +1,10 @@
 /**
- * Tool definitions for Pippa
+ * Tool definitions for Siri
  */
 
 import { z } from 'zod'
 import { tool } from 'ai'
-import { getLogger, withSpan } from '@pippa/observability'
+import { getLogger, withSpan } from '@siri/observability'
 
 /**
  * Log user's mood

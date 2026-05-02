@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import { LLMEvaluator, type EvaluationMode } from "../src/LLMEvaluator.js";
 import { StubEvaluator } from "../src/StubEvaluator.js";
-import type { AssembledContext } from "@pippa/types";
+import type { AssembledContext } from "@siri/types";
 
 const createTraceContext = () => ({
   requestId: `req_${Date.now()}`,

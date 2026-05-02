@@ -13,11 +13,11 @@ import type {
   AgentResponse,
   AgentError,
   ToolDefinition,
-} from '@pippa/types'
-import type { StreamChunk, ToolCall } from '@pippa/types'
-import type { TraceContext } from '@pippa/types'
-import { ok, err, type Result } from '@pippa/types'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+} from '@siri/types'
+import type { StreamChunk, ToolCall } from '@siri/types'
+import type { TraceContext } from '@siri/types'
+import { ok, err, type Result } from '@siri/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 
 /**
  * Configuration for VercelAIAgentProvider

@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/tools",
+  "name": "@siri/tools",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -20,11 +20,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@pippa/db": "workspace:*",
-    "@pippa/memory": "workspace:*",
-    "@pippa/observability": "workspace:*",
-    "@pippa/shared": "workspace:^",
-    "@pippa/types": "workspace:*",
+    "@siri/db": "workspace:*",
+    "@siri/memory": "workspace:*",
+    "@siri/observability": "workspace:*",
+    "@siri/shared": "workspace:^",
+    "@siri/types": "workspace:*",
     "ai": "^5.0.116",
     "zod": "^4.2.1"
   },

@@ -105,7 +105,7 @@ jobs:
           REGISTRY: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/
           TAG: ${{ env.ENV }}
           AGENT_API_PORT: "61664"
-          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/pippa
+          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/siri
 
       - name: Notify build failure
         if: failure()
@@ -116,7 +116,7 @@ jobs:
           streams: ci
           type: build
           action: failure
-          service: pippa
+          service: siri
           instance: seshat
           environment: ${{ env.ENV }}
 
@@ -135,7 +135,7 @@ jobs:
           streams: eda
           type: deploy
           action: deploy_container
-          service: pippa
+          service: siri
           instance: seshat
           zone: ${{ env.AWS_REGION }}
           environment: ${{ env.ENV }}

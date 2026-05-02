@@ -20,9 +20,9 @@ import type {
   StoreError,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger } from '@pippa/observability'
+} from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger } from '@siri/observability'
 
 interface StoredRelation {
   from: string

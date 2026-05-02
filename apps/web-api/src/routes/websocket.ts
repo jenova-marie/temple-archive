@@ -9,9 +9,9 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { WebSocket } from "@fastify/websocket";
 import { transcriptionRepository } from "../db/index.js";
 import { transcribeAudio } from "../services/groq.js";
-import { getLogger, withSpan } from "@pippa/observability";
+import { getLogger, withSpan } from "@siri/observability";
 import { nanoid } from "nanoid";
-import type { ClientMessage, ServerMessage } from "@pippa/shared";
+import type { ClientMessage, ServerMessage } from "@siri/shared";
 
 function createTraceContext(requestId: string, userId?: string) {
   return {

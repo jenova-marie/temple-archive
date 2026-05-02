@@ -1,11 +1,11 @@
-# @pippa/memory
+# @siri/memory
 
 Multi-tier memory orchestration for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @pippa/memory
+pnpm add @siri/memory
 ```
 
 ## Overview
@@ -22,13 +22,13 @@ This package implements a tiered memory system for contextual conversations:
 ## Quick Start
 
 ```typescript
-import { MemoryOrchestrator } from '@pippa/memory'
+import { MemoryOrchestrator } from '@siri/memory'
 import {
   InMemoryContextStore,
   InMemorySessionStore,
   InMemoryKnowledgeStore,
   InMemoryVectorStore,
-} from '@pippa/memory/stubs'
+} from '@siri/memory/stubs'
 
 // Create with stub implementations (development/testing)
 const memory = new MemoryOrchestrator(
@@ -158,7 +158,7 @@ import {
   InMemoryKnowledgeStore,  // L3 stub
   InMemoryVectorStore,     // L4 stub
   InMemoryArchiveStore,    // S3 stub
-} from '@pippa/memory/stubs'
+} from '@siri/memory/stubs'
 ```
 
 ### InMemoryContextStore (L1)
@@ -215,7 +215,7 @@ await store.search(queryEmbedding, {
 
 ## Metrics
 
-The package records metrics via `@pippa/observability`:
+The package records metrics via `@siri/observability`:
 
 - `memory_cache_hits_total{tier}` - Cache hits per tier
 - `memory_cache_misses_total{tier}` - Cache misses per tier

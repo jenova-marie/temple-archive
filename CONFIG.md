@@ -1,8 +1,8 @@
-# Pippa Agent Configuration Guide
+# Siri Agent Configuration Guide
 
-This document describes all configuration options for Pippa Agent. Configuration can be provided via:
+This document describes all configuration options for Siri Agent. Configuration can be provided via:
 
-1. **YAML file** (`pippa.agent.yaml`) - Base configuration, version-controlled
+1. **YAML file** (`siri.agent.yaml`) - Base configuration, version-controlled
 2. **Environment variables** - Override YAML values, used for secrets and deployment-specific settings
 
 ## Configuration Loading Order
@@ -22,7 +22,7 @@ YAML values support environment variable interpolation:
 apiKey: ${ANTHROPIC_API_KEY}
 
 # With default value
-url: ${DATABASE_URL:-postgresql://localhost:5432/pippa}
+url: ${DATABASE_URL:-postgresql://localhost:5432/siri}
 ```
 
 ---
@@ -156,7 +156,7 @@ PostgreSQL configuration for the L2 persistence tier. Stores conversation histor
 
 | Setting | Type | Default | Env Var | Description |
 |---------|------|---------|---------|-------------|
-| `url` | string | `"postgresql://postgres:postgres@localhost:5432/pippa"` | `DATABASE_URL` | PostgreSQL connection string. |
+| `url` | string | `"postgresql://postgres:postgres@localhost:5432/siri"` | `DATABASE_URL` | PostgreSQL connection string. |
 | `ssl` | boolean \| object | - | `DATABASE_SSL` | SSL mode. `true`, `false`, or `{ rejectUnauthorized: false }` for self-signed certs. |
 
 **Example:**
@@ -257,7 +257,7 @@ Tracing and metrics configuration for observability.
 ```yaml
 observability:
   otlpEndpoint: http://jaeger:4318
-  serviceName: pippa-agent
+  serviceName: siri-agent
 ```
 
 **Effect:**
@@ -331,7 +331,7 @@ JWT authentication configuration for API endpoints.
 auth:
   zitadel:
     issuer: https://auth.example.com
-    audience: pippa-api@my-project
+    audience: siri-api@my-project
 ```
 
 **Effect:**
@@ -363,7 +363,7 @@ meetingApi:
 
 ### `memory` - Memory System Configuration
 
-The memory system is the core of Pippa's knowledge and context management.
+The memory system is the core of Siri's knowledge and context management.
 
 #### Top-Level Memory Settings
 
@@ -550,7 +550,7 @@ memory:
 ## Complete Example Configuration
 
 ```yaml
-# pippa.agent.yaml - Production configuration example
+# siri.agent.yaml - Production configuration example
 
 app:
   nodeEnv: production
@@ -585,7 +585,7 @@ qdrant:
 
 observability:
   otlpEndpoint: ${OTEL_ENDPOINT}
-  serviceName: pippa-agent
+  serviceName: siri-agent
 
 crisis:
   thresholdHigh: 7

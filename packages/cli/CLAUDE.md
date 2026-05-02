@@ -26,7 +26,7 @@ pnpm clean
 
 This is part of a pnpm monorepo. From the monorepo root:
 ```bash
-pnpm --filter @pippa/cli build
+pnpm --filter @siri/cli build
 ```
 
 ## Architecture

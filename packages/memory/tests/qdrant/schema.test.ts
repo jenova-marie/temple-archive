@@ -10,7 +10,7 @@ import {
 } from "../../src/qdrant/schema.js";
 
 // Mock observability
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),
@@ -25,7 +25,7 @@ describe("qdrant/schema", () => {
   describe("constants", () => {
     it("has correct collection name from env or default", () => {
       // COLLECTION_NAME reads from QDRANT_COLLECTION_NAME env var, defaulting to 'messages'
-      // In test environment, it may be set to a different value (e.g., 'pippa')
+      // In test environment, it may be set to a different value (e.g., 'siri')
       const expectedName = process.env.QDRANT_COLLECTION_NAME ?? "messages";
       expect(COLLECTION_NAME).toBe(expectedName);
     });

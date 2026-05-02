@@ -8,8 +8,8 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok } from '@pippa/types'
+} from '@siri/types'
+import { ok } from '@siri/types'
 
 export class NoOpCrisisDetector implements ICrisisDetector {
   async detect(

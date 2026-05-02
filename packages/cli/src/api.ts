@@ -1,5 +1,5 @@
 /**
- * API Client for Pippa Agent
+ * API Client for Siri Agent
  *
  * Handles streaming responses from the Vercel AI SDK UI Message Stream format
  * (produced by pipeUIMessageStreamToResponse)

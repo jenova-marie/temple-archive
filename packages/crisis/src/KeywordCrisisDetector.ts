@@ -12,9 +12,9 @@ import type {
   CrisisError,
   TraceContext,
   Result,
-} from "@pippa/types";
-import { ok } from "@pippa/types";
-import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+} from "@siri/types";
+import { ok } from "@siri/types";
+import { getLogger, withSpan, pipelineMetrics } from "@siri/observability";
 import { CRISIS_PATTERNS, type CrisisPattern } from "./patterns.js";
 
 export interface KeywordCrisisDetectorConfig {

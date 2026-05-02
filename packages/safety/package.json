@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/safety",
+  "name": "@siri/safety",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@pippa/types": "workspace:*",
-    "@pippa/observability": "workspace:*"
+    "@siri/types": "workspace:*",
+    "@siri/observability": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

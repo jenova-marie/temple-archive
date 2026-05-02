@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { InMemoryMem0Store } from '../src/stubs/InMemoryMem0Store.js'
-import type { TraceContext } from '@pippa/types'
+import type { TraceContext } from '@siri/types'
 
 // Mock trace context
 const mockCtx: TraceContext = {

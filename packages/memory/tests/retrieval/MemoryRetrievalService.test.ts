@@ -7,11 +7,11 @@ import { MemoryRetrievalService } from '../../src/retrieval/MemoryRetrievalServi
 import type { Neo4jKnowledgeStore } from '../../src/stores/Neo4jKnowledgeStore.js'
 import type { DeepMemoryService } from '../../src/deepmemory/DeepMemoryService.js'
 import type { MiniLMEmbeddingProvider } from '../../src/embeddings/MiniLMProvider.js'
-import type { TraceContext, Entity } from '@pippa/types'
-import { ok, err } from '@pippa/types'
+import type { TraceContext, Entity } from '@siri/types'
+import { ok, err } from '@siri/types'
 
 // Mock observability
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

@@ -10,9 +10,9 @@
  */
 
 import { readFileSync, existsSync } from 'fs'
-import type { LocaleData, LocaleDataMap } from '@pippa/types'
-import { getLogger } from '@pippa/observability'
-import { containerPath, ContainerPaths } from '@pippa/shared/server'
+import type { LocaleData, LocaleDataMap } from '@siri/types'
+import { getLogger } from '@siri/observability'
+import { containerPath, ContainerPaths } from '@siri/shared/server'
 
 /** Default locale code */
 const DEFAULT_LOCALE_CODE = 'US'

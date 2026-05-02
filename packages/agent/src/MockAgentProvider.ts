@@ -10,9 +10,9 @@ import type {
   StreamChunk,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+} from '@siri/types'
+import { ok } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 
 export interface MockAgentProviderConfig {
   /** Simulated delay in ms */

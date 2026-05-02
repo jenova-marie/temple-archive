@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { VercelAIAgentProvider } from '../src/VercelAIAgentProvider.js'
-import type { AgentInput, TraceContext, Message } from '@pippa/types'
+import type { AgentInput, TraceContext, Message } from '@siri/types'
 
 // Mock observability
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

@@ -1,11 +1,11 @@
-# @pippa/agent
+# @siri/agent
 
 AI agent provider and system prompt builder for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @pippa/agent
+pnpm add @siri/agent
 ```
 
 ## Overview
@@ -19,7 +19,7 @@ This package provides:
 ## Quick Start
 
 ```typescript
-import { buildSystemPrompt, MockAgentProvider } from '@pippa/agent'
+import { buildSystemPrompt, MockAgentProvider } from '@siri/agent'
 
 // Build a context-aware system prompt
 const systemPrompt = buildSystemPrompt(assembledContext, crisisCheck)
@@ -210,8 +210,8 @@ class MockAgentProvider implements IAgentProvider {
 ## Usage Example
 
 ```typescript
-import { buildSystemPrompt, MockAgentProvider } from '@pippa/agent'
-import type { AssembledContext, CrisisCheckResult } from '@pippa/types'
+import { buildSystemPrompt, MockAgentProvider } from '@siri/agent'
+import type { AssembledContext, CrisisCheckResult } from '@siri/types'
 
 const context: AssembledContext = {
   messages: [/* recent messages */],

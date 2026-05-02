@@ -15,8 +15,8 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
-import { getLogger } from "@pippa/observability";
-import { containerPath, ContainerPaths } from "@pippa/shared/server";
+import { getLogger } from "@siri/observability";
+import { containerPath, ContainerPaths } from "@siri/shared/server";
 import type { MCPServerConfig, MCPConfigFile } from "./MCPToolManager.js";
 
 /**

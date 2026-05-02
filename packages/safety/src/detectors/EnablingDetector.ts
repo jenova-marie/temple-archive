@@ -13,8 +13,8 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk'
-import type { TraceContext, SafetyViolation } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+import type { TraceContext, SafetyViolation } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 
 export type EnablingType =
   | 'glorification'

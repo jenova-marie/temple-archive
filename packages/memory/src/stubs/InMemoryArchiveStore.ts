@@ -9,9 +9,9 @@ import type {
   StoreError,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+} from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 
 export class InMemoryArchiveStore implements IArchiveStore {
   private archives: Map<string, ArchivedConversation> = new Map()

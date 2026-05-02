@@ -28,9 +28,9 @@ import type {
   Entity,
   UserProfile,
   Mem0SearchResult,
-} from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+} from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 import { deduplicateFactsWithScores } from './semanticDedup.js'
 
 export interface MemoryOrchestratorConfig {
@@ -195,7 +195,7 @@ export class MemoryOrchestrator {
 
       // Get previous session summaries (only if L2 retrieval enabled)
       const l2RetrievalEnabled = process.env.ENABLE_L2_RETRIEVAL !== 'false'
-      let previousSessions: import('@pippa/types').SessionSummary[] = []
+      let previousSessions: import('@siri/types').SessionSummary[] = []
 
       if (l2RetrievalEnabled) {
         const summariesResult = await this.l2.getSessionSummaries(conversationId, 5, ctx)
@@ -424,10 +424,10 @@ export class MemoryOrchestrator {
 
   private assembleContext(
     messages: Message[],
-    userProfile: import('@pippa/types').UserProfile | null,
+    userProfile: import('@siri/types').UserProfile | null,
     sessionState: SessionState,
-    previousSessions: import('@pippa/types').SessionSummary[],
-    semanticMatches: import('@pippa/types').SemanticMatch[],
+    previousSessions: import('@siri/types').SessionSummary[],
+    semanticMatches: import('@siri/types').SemanticMatch[],
     relatedEntities?: Entity[],
     displayName?: string,
     mem0Memories?: Mem0SearchResult[]

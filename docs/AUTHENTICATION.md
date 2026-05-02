@@ -1,10 +1,10 @@
 # Authentication
 
-Pippa uses Zitadel for OIDC authentication, with a bypass mode for local development.
+Siri uses Zitadel for OIDC authentication, with a bypass mode for local development.
 
 ## The Problem
 
-Pippa stores personal, sensitive data - conversations about mental health, relationships, struggles. This data must be protected. Only you should see your conversations with Pippa.
+Siri stores personal, sensitive data - conversations about mental health, relationships, struggles. This data must be protected. Only you should see your conversations with Siri.
 
 Authentication answers the question: "Who is making this request?" Without it, anyone with the URL could access anyone's data. With weak auth, attackers could impersonate users, steal tokens, or hijack sessions.
 

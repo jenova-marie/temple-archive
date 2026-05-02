@@ -44,40 +44,40 @@ importers:
       '@opentelemetry/core':
         specifier: ^2.2.0
         version: 2.2.0(@opentelemetry/api@1.9.0)
-      '@pippa/agent':
+      '@siri/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@pippa/config':
+      '@siri/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@pippa/crisis':
+      '@siri/crisis':
         specifier: workspace:*
         version: link:../../packages/crisis
-      '@pippa/db':
+      '@siri/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@pippa/evaluation':
+      '@siri/evaluation':
         specifier: workspace:*
         version: link:../../packages/evaluation
-      '@pippa/mem0':
+      '@siri/mem0':
         specifier: workspace:*
         version: link:../../packages/mem0
-      '@pippa/memory':
+      '@siri/memory':
         specifier: workspace:*
         version: link:../../packages/memory
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@pippa/pipeline':
+      '@siri/pipeline':
         specifier: workspace:*
         version: link:../../packages/pipeline
-      '@pippa/safety':
+      '@siri/safety':
         specifier: workspace:*
         version: link:../../packages/safety
-      '@pippa/tools':
+      '@siri/tools':
         specifier: workspace:*
         version: link:../../packages/tools
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../../packages/types
       ai:
@@ -132,16 +132,16 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.1
         version: 11.2.0
-      '@pippa/db':
+      '@siri/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../../packages/observability
-      '@pippa/shared':
+      '@siri/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../../packages/types
       '@t3-oss/env-core':
@@ -199,7 +199,7 @@ importers:
       '@assistant-ui/react-markdown':
         specifier: ^0.11.9
         version: 0.11.9(@assistant-ui/react@0.11.53(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3)))(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      '@pippa/shared':
+      '@siri/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@radix-ui/react-alert-dialog':
@@ -341,10 +341,10 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^2.0.53
         version: 2.0.56(zod@4.2.1)
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       ai:
@@ -360,7 +360,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       chalk:
@@ -410,10 +410,10 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@4.2.1)
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
@@ -426,10 +426,10 @@ importers:
 
   packages/db:
     dependencies:
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       drizzle-orm:
@@ -460,10 +460,10 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@4.2.1)
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
@@ -476,10 +476,10 @@ importers:
 
   packages/mem0:
     dependencies:
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       nanoid:
@@ -498,10 +498,10 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@4.2.1)
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       '@qdrant/js-client-rest':
@@ -548,7 +548,7 @@ importers:
         specifier: ^1.9.0
         version: 1.9.0
     devDependencies:
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       typescript:
@@ -563,31 +563,31 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@4.2.1)
-      '@pippa/agent':
+      '@siri/agent':
         specifier: workspace:*
         version: link:../agent
-      '@pippa/crisis':
+      '@siri/crisis':
         specifier: workspace:*
         version: link:../crisis
-      '@pippa/evaluation':
+      '@siri/evaluation':
         specifier: workspace:*
         version: link:../evaluation
-      '@pippa/memory':
+      '@siri/memory':
         specifier: workspace:*
         version: link:../memory
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/safety':
+      '@siri/safety':
         specifier: workspace:*
         version: link:../safety
-      '@pippa/shared':
+      '@siri/shared':
         specifier: workspace:^
         version: link:../shared
-      '@pippa/tools':
+      '@siri/tools':
         specifier: workspace:*
         version: link:../tools
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
@@ -603,10 +603,10 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.71.2
         version: 0.71.2(zod@4.2.1)
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
     devDependencies:
@@ -635,19 +635,19 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.25.2(hono@4.11.3)(zod@4.2.1)
-      '@pippa/db':
+      '@siri/db':
         specifier: workspace:*
         version: link:../db
-      '@pippa/memory':
+      '@siri/memory':
         specifier: workspace:*
         version: link:../memory
-      '@pippa/observability':
+      '@siri/observability':
         specifier: workspace:*
         version: link:../observability
-      '@pippa/shared':
+      '@siri/shared':
         specifier: workspace:^
         version: link:../shared
-      '@pippa/types':
+      '@siri/types':
         specifier: workspace:*
         version: link:../types
       ai:

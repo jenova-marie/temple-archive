@@ -1,10 +1,10 @@
 /**
- * @pippa/config
+ * @siri/config
  *
- * Centralized configuration management for Pippa Agent.
+ * Centralized configuration management for Siri Agent.
  *
  * Features:
- * - YAML config file support (pippa.agent.yaml)
+ * - YAML config file support (siri.agent.yaml)
  * - Environment variable interpolation (${VAR} and ${VAR:-default})
  * - Environment variable overrides
  * - Strict Zod validation with sensible defaults
@@ -16,7 +16,7 @@
  *
  * @example
  * ```typescript
- * import { loadConfig, type Config } from '@pippa/config'
+ * import { loadConfig, type Config } from '@siri/config'
  *
  * const config = loadConfig()
  * console.log(config.app.port) // 3333

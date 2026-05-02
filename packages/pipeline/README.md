@@ -1,11 +1,11 @@
-# @pippa/pipeline
+# @siri/pipeline
 
 Main orchestrator for the RecoverySky Agent message processing pipeline.
 
 ## Installation
 
 ```bash
-pnpm add @pippa/pipeline
+pnpm add @siri/pipeline
 ```
 
 ## Overview
@@ -22,9 +22,9 @@ This package coordinates the complete message processing flow:
 ## Quick Start
 
 ```typescript
-import { Pipeline } from '@pippa/pipeline'
-import { MemoryOrchestrator } from '@pippa/memory'
-import { KeywordCrisisDetector } from '@pippa/crisis'
+import { Pipeline } from '@siri/pipeline'
+import { MemoryOrchestrator } from '@siri/memory'
+import { KeywordCrisisDetector } from '@siri/crisis'
 // ... other imports
 
 const pipeline = new Pipeline({
@@ -310,10 +310,10 @@ pnpm typecheck
 
 ## Dependencies
 
-- [@pippa/types](../types) - Shared types
-- [@pippa/observability](../observability) - Logging/tracing
-- [@pippa/memory](../memory) - Memory orchestration
-- [@pippa/crisis](../crisis) - Crisis detection
-- [@pippa/safety](../safety) - Safety validation
-- [@pippa/agent](../agent) - Agent provider
-- [@pippa/evaluation](../evaluation) - Response evaluation
+- [@siri/types](../types) - Shared types
+- [@siri/observability](../observability) - Logging/tracing
+- [@siri/memory](../memory) - Memory orchestration
+- [@siri/crisis](../crisis) - Crisis detection
+- [@siri/safety](../safety) - Safety validation
+- [@siri/agent](../agent) - Agent provider
+- [@siri/evaluation](../evaluation) - Response evaluation

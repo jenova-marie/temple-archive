@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Package Overview
 
-`@pippa/safety` is a response safety validation package for the RecoverySky Agent system. It validates AI-generated responses before they reach users, detecting PII, medical advice, enabling language, and harmful content.
+`@siri/safety` is a response safety validation package for the RecoverySky Agent system. It validates AI-generated responses before they reach users, detecting PII, medical advice, enabling language, and harmful content.
 
 This is part of a pnpm monorepo (`recoverysky-agent`) and depends on sibling packages:
-- `@pippa/types` - Type definitions including `ISafetyValidator`, `SafetyValidationResult`, `SafetyViolation`
-- `@pippa/observability` - Logging (`getLogger`), tracing (`withSpan`), and metrics (`pipelineMetrics`)
+- `@siri/types` - Type definitions including `ISafetyValidator`, `SafetyValidationResult`, `SafetyViolation`
+- `@siri/observability` - Logging (`getLogger`), tracing (`withSpan`), and metrics (`pipelineMetrics`)
 
 ## Common Commands
 
@@ -25,12 +25,12 @@ pnpm clean
 
 ## Architecture
 
-The package exports a single class `StubSafetyValidator` implementing the `ISafetyValidator` interface from `@pippa/types`.
+The package exports a single class `StubSafetyValidator` implementing the `ISafetyValidator` interface from `@siri/types`.
 
 **Current implementation** (`src/StubSafetyValidator.ts`): A stub with basic regex pattern matching for SSN and medical dosage detection. Designed for testing and as a scaffold for the production implementation.
 
 **Key patterns:**
-- Uses `Result<T, E>` pattern from `@pippa/types` for error handling (returns `ok(value)` or `err(error)`)
+- Uses `Result<T, E>` pattern from `@siri/types` for error handling (returns `ok(value)` or `err(error)`)
 - All validation wrapped in OpenTelemetry spans via `withSpan()`
 - Metrics recorded via `pipelineMetrics.safetyViolations`
 - Mock injection support (`addMockViolation`/`clearMockViolations`) for testing

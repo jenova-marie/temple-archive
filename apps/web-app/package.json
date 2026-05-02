@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/web-app",
+  "name": "@siri/web-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -17,7 +17,7 @@
     "@assistant-ui/react": "0.11.53",
     "@assistant-ui/react-ai-sdk": "^1.1.20",
     "@assistant-ui/react-markdown": "^0.11.9",
-    "@pippa/shared": "workspace:*",
+    "@siri/shared": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",

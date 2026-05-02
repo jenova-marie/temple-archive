@@ -1,6 +1,6 @@
 # Memory Tiers
 
-Pippa uses a 4-tier memory architecture, each optimized for different access patterns and use cases.
+Siri uses a 4-tier memory architecture, each optimized for different access patterns and use cases.
 
 ## The Problem
 
@@ -16,7 +16,7 @@ Neither approach creates the feeling of talking to someone who *knows* you.
 
 Different types of memory serve different purposes. Human memory works this way too - we have immediate working memory, episodic recall of specific events, semantic understanding of concepts, and intuitive pattern recognition.
 
-Pippa mirrors this with four tiers, each optimized for a specific retrieval pattern:
+Siri mirrors this with four tiers, each optimized for a specific retrieval pattern:
 
 - **L1 (Redis)** - Working memory. What did we *just* talk about? Sub-10ms access to the active conversation.
 - **L2 (PostgreSQL)** - Episodic memory. The full history of every conversation, searchable and permanent.
@@ -27,7 +27,7 @@ The key insight: we don't need *all* memory for every request. We need the *righ
 
 ## Why This Matters
 
-This architecture enables conversations that feel continuous across days, weeks, months. Pippa remembers that you mentioned John last week. She knows your therapy appointments are on Thursdays. She recalls that work stress triggers your anxiety.
+This architecture enables conversations that feel continuous across days, weeks, months. Siri remembers that you mentioned John last week. She knows your therapy appointments are on Thursdays. She recalls that work stress triggers your anxiety.
 
 The tiered approach keeps response times snappy (<200ms to first token) while maintaining this deep contextual awareness. It's the difference between a stateless chatbot and a companion who actually *knows* you.
 
@@ -217,7 +217,7 @@ We could consolidate L2 and L4 into PostgreSQL with pgvector. The trade-off:
 - **Slower**: pgvector is good, but Qdrant is purpose-built for vector search with better indexing (HNSW).
 - **Coupling**: Mixing vector workloads with transactional workloads can cause resource contention.
 
-For Pippa's scale, Qdrant's performance advantage and dedicated resource isolation justify the operational complexity.
+For Siri's scale, Qdrant's performance advantage and dedicated resource isolation justify the operational complexity.
 
 ### Why Redis Instead of Application Memory?
 
@@ -252,4 +252,4 @@ USE_STUBS=true pnpm dev   # Uses stubs (default)
 USE_STUBS=false pnpm dev  # Uses real services (requires docker-compose)
 ```
 
-Stubs are exported from `@pippa/memory/stubs`.
+Stubs are exported from `@siri/memory/stubs`.

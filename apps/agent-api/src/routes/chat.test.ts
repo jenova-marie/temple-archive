@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createChatRouter } from './chat.js'
 import type { Request, Response } from 'express'
-import type { Pipeline, PreflightResult } from '@pippa/pipeline'
-import type { CrisisCheckResult } from '@pippa/types'
+import type { Pipeline, PreflightResult } from '@siri/pipeline'
+import type { CrisisCheckResult } from '@siri/types'
 
 // Mock observability
-vi.mock('@pippa/observability', () => ({
+vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),
@@ -28,7 +28,7 @@ vi.mock('ai', () => ({
   }))),
   stepCountIs: vi.fn((count: number) => ({ count })),
   pipeUIMessageStreamToResponse: vi.fn(),
-  // Required by @pippa/tools for tool definitions
+  // Required by @siri/tools for tool definitions
   tool: vi.fn((config) => config),
 }))
 

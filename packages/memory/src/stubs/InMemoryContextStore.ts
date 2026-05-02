@@ -9,9 +9,9 @@ import type {
   StoreError,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok } from '@pippa/types'
-import { getLogger, withSpan } from '@pippa/observability'
+} from '@siri/types'
+import { ok } from '@siri/types'
+import { getLogger, withSpan } from '@siri/observability'
 
 interface SessionData {
   state: SessionState

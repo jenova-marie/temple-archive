@@ -1,5 +1,5 @@
 /**
- * @pippa/db
+ * @siri/db
  *
  * PostgreSQL database layer using Drizzle ORM.
  * Provides schema definitions, database client, and store implementations.

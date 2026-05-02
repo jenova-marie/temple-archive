@@ -22,8 +22,8 @@ import type {
   ICrisisEvaluator,
   ISafetyValidator,
   IEvaluator,
-} from "@pippa/types";
-import { getDefaultPipelineConfig } from "@pippa/types";
+} from "@siri/types";
+import { getDefaultPipelineConfig } from "@siri/types";
 import {
   MemoryOrchestrator,
   InMemoryContextStore,
@@ -75,14 +75,14 @@ import {
   MemoryPromptStore,
   MemoryPromptGenerator,
   loadMemoryPromptConfig,
-} from "@pippa/memory";
+} from "@siri/memory";
 import {
   createMem0Client,
   Mem0Store,
   InMemoryMem0Store,
   checkMem0Health,
-} from "@pippa/mem0";
-import type { IMem0Store } from "@pippa/types";
+} from "@siri/mem0";
+import type { IMem0Store } from "@siri/types";
 import {
   setMemoryToolProviders,
   setBootstrapOrchestrator,
@@ -96,32 +96,32 @@ import {
   shutdownMcpTools,
   loadMcpConfig,
   isMcpEnabled,
-} from "@pippa/tools";
+} from "@siri/tools";
 import {
   createDatabaseClient,
   PostgresSessionStore,
   UserCacheStore,
-} from "@pippa/db";
+} from "@siri/db";
 import {
   KeywordCrisisDetector,
   NoOpCrisisDetector,
   StubCrisisHandler,
   DeepCrisisEvaluator,
   WebhookCrisisHandler,
-} from "@pippa/crisis";
-import { StubSafetyValidator, SafetyValidator } from "@pippa/safety";
-import { MockAgentProvider, VercelAIAgentProvider } from "@pippa/agent";
+} from "@siri/crisis";
+import { StubSafetyValidator, SafetyValidator } from "@siri/safety";
+import { MockAgentProvider, VercelAIAgentProvider } from "@siri/agent";
 import {
   StubEvaluator,
   NoOpEvaluator,
   LLMEvaluator,
   type EvaluationMode,
-} from "@pippa/evaluation";
-import { Pipeline, type PipelineDependencies } from "@pippa/pipeline";
-import { getLogger } from "@pippa/observability";
-import { SystemPromptRepository, UserRepository } from "@pippa/db";
+} from "@siri/evaluation";
+import { Pipeline, type PipelineDependencies } from "@siri/pipeline";
+import { getLogger } from "@siri/observability";
+import { SystemPromptRepository, UserRepository } from "@siri/db";
 
-import type { UserProfile } from "@pippa/types";
+import type { UserProfile } from "@siri/types";
 
 export interface RequestUserData {
   userId: string;
@@ -699,7 +699,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
   if (memoryToolAccess !== "off" && !useStubs) {
     // Set up memory tool providers so tools can access the knowledge store
     // This needs to be set before the pipeline uses the tools
-    let currentTraceContext: import("@pippa/types").TraceContext | null = null;
+    let currentTraceContext: import("@siri/types").TraceContext | null = null;
 
     setMemoryToolProviders(
       () => knowledgeStore,
@@ -986,7 +986,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
   if (systemPromptRepo) {
     const repo = systemPromptRepo; // Capture for closure
     setSystemPromptRefreshFn(async () => {
-      const result = await repo.findActive("pippa");
+      const result = await repo.findActive("siri");
       if (result.ok && result.value) {
         baseIdentity = result.value.content;
         return {
@@ -1125,7 +1125,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     },
     // getDefaultSystemPrompt: same priority - disk first, then database
     getDefaultSystemPrompt: async () => {
-      const name = "pippa";
+      const name = "siri";
 
       // 1. Check for prompt file on disk first
       // Try multiple locations to handle both dev (tsx) and production (dist/)
@@ -1158,10 +1158,10 @@ export function createContainer(options: ContainerConfig = {}): Container {
 
       // 2. Fall back to database
       if (systemPromptRepo) {
-        logger.debug("Looking up default pippa prompt in database");
-        const result = await systemPromptRepo.findActive("pippa");
+        logger.debug("Looking up default siri prompt in database");
+        const result = await systemPromptRepo.findActive("siri");
         if (!result.ok) {
-          logger.error({ error: result.error }, "Database error looking up default pippa prompt");
+          logger.error({ error: result.error }, "Database error looking up default siri prompt");
           return null;
         }
         if (result.value) {
@@ -1169,7 +1169,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
             source: "database",
             promptId: result.value.id,
             contentLength: result.value.content.length,
-          }, "Found default pippa prompt in database");
+          }, "Found default siri prompt in database");
           return {
             id: result.value.id,
             name: result.value.name,
@@ -1178,7 +1178,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
         }
       }
 
-      logger.debug("No default pippa prompt found (disk or database)");
+      logger.debug("No default siri prompt found (disk or database)");
       return null;
     },
   };
@@ -1220,7 +1220,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     if (systemPromptRepo) {
       logger.info("Fetching base identity from database...");
       initTasks.push(
-        systemPromptRepo.findActive("pippa").then((result) => {
+        systemPromptRepo.findActive("siri").then((result) => {
           if (!result.ok) {
             logger.error(
               { error: result.error },
@@ -1236,7 +1236,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
             );
           } else {
             logger.warn(
-              "No active pippa prompt found in database, using default",
+              "No active siri prompt found in database, using default",
             );
           }
         }),

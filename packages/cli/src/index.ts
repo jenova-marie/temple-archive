@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Pippa CLI
+ * Siri CLI
  *
- * Command-line interface for interacting with the Pippa Agent API
+ * Command-line interface for interacting with the Siri Agent API
  */
 
 import { Command } from 'commander'
@@ -15,16 +15,16 @@ import { healthCommand, metricsCommand } from './commands/health.js'
 const program = new Command()
 
 program
-  .name('pippa')
-  .description('CLI for the Pippa Agent API')
+  .name('siri')
+  .description('CLI for the Siri Agent API')
   .version('0.1.0')
 
 // Chat command - send a single message
 program
   .command('chat')
-  .description('Send a message to Pippa')
+  .description('Send a message to Siri')
   .argument('[message]', 'Message to send (omit for interactive mode)')
-  .option('-a, --agent <name>', 'Agent/persona to use', 'pippa')
+  .option('-a, --agent <name>', 'Agent/persona to use', 'siri')
   .option('-v, --verbose', 'Show conversation ID')
   .option('-m, --metrics', 'Show execution metrics (timing, tokens, etc.)')
   .action(async (message: string | undefined, options: ChatOptions) => {
@@ -39,7 +39,7 @@ program
 program
   .command('interactive', { isDefault: true })
   .description('Start an interactive chat session')
-  .option('-a, --agent <name>', 'Agent/persona to use', 'pippa')
+  .option('-a, --agent <name>', 'Agent/persona to use', 'siri')
   .option('-m, --metrics', 'Show execution metrics (timing, tokens, etc.)')
   .action(async (options: ChatOptions) => {
     await interactiveChat(options)
@@ -72,13 +72,13 @@ configCmd
   .description('Set a configuration value')
   .addHelpText('after', `
 Available keys:
-  apiUrl   API server URL (e.g., https://pippa.example.com)
+  apiUrl   API server URL (e.g., https://siri.example.com)
   userId   Your user identifier
 
 Examples:
-  pippa config set apiUrl https://pippa.example.com
-  pippa config set apiUrl http://localhost:3000
-  pippa config set userId my-user-id
+  siri config set apiUrl https://siri.example.com
+  siri config set apiUrl http://localhost:3000
+  siri config set userId my-user-id
 `)
   .action(setConfigValue)
 

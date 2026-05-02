@@ -34,7 +34,7 @@ The pipeline is also the natural place for cross-cutting concerns: logging, trac
 
 ## Why This Matters
 
-The pipeline is the backbone of Pippa. Every conversation flows through it. Its design determines:
+The pipeline is the backbone of Siri. Every conversation flows through it. Its design determines:
 
 - **Latency** - How fast does the first token appear?
 - **Reliability** - What happens when a stage fails?
@@ -65,7 +65,7 @@ A well-designed pipeline is invisible to users but essential to developers. It's
 │   │  1. REQUEST RECEIVED                                                  │  │
 │   │                                                                       │  │
 │   │     POST /api/v1/chat                                                │  │
-│   │     { messages: [...], guide: "pippa" }                              │  │
+│   │     { messages: [...], guide: "siri" }                              │  │
 │   │                                                                       │  │
 │   └────────────────────────────────┬─────────────────────────────────────┘  │
 │                                    │                                         │

@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/mem0",
+  "name": "@siri/mem0",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -23,8 +23,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@pippa/observability": "workspace:*",
-    "@pippa/types": "workspace:*",
+    "@siri/observability": "workspace:*",
+    "@siri/types": "workspace:*",
     "nanoid": "^5.1.6"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@
  * providing the agent with richer context about what was discussed.
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 import type {
   L3EntityWithObservations,
   EnrichedL3Entity,
@@ -16,7 +16,7 @@ import type {
   TraceContext,
   Result,
   StoreError,
-} from '@pippa/types'
+} from '@siri/types'
 
 /**
  * Interface for session store with message retrieval capability.

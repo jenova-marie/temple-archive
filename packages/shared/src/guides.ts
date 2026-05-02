@@ -12,8 +12,8 @@ export interface Guide {
  */
 export const GUIDES: Guide[] = [
   {
-    id: "pippa",
-    name: "Pippa",
+    id: "siri",
+    name: "Siri",
     description: "Your personal AI companion",
   },
 ];
@@ -21,4 +21,4 @@ export const GUIDES: Guide[] = [
 /**
  * Default guide ID
  */
-export const DEFAULT_GUIDE_ID = "pippa";
+export const DEFAULT_GUIDE_ID = "siri";

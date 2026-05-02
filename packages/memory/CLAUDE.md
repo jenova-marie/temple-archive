@@ -34,19 +34,19 @@ L4 (Qdrant)    → Semantic vector search, 5-20ms
 
 - `MemoryOrchestrator` - Main orchestrator class (src/MemoryOrchestrator.ts)
 - `AssembledContext` - Combined result containing messages, userProfile, sessionState, previousSessions, semanticMatches
-- `IContextStore`, `ISessionStore`, `IKnowledgeStore`, `IVectorStore` - Store interfaces from `@pippa/types`
+- `IContextStore`, `ISessionStore`, `IKnowledgeStore`, `IVectorStore` - Store interfaces from `@siri/types`
 
 ### Store Implementations
 
 Currently only in-memory stubs exist (src/stubs/). Production implementations (Redis, PostgreSQL, Neo4j, Qdrant) are planned.
 
 Stubs are exported from two paths:
-- `@pippa/memory` - Main exports including stubs
-- `@pippa/memory/stubs` - Stubs-only subpath export
+- `@siri/memory` - Main exports including stubs
+- `@siri/memory/stubs` - Stubs-only subpath export
 
 ## Dependencies
 
-- `@pippa/types` - Shared interfaces (Result, Message, store interfaces)
-- `@pippa/observability` - Logging (`getLogger`), tracing (`withSpan`), metrics (`pipelineMetrics`)
+- `@siri/types` - Shared interfaces (Result, Message, store interfaces)
+- `@siri/observability` - Logging (`getLogger`), tracing (`withSpan`), metrics (`pipelineMetrics`)
 
 Uses the `Result<T, E>` pattern with `ok()` and `err()` helpers from types package.

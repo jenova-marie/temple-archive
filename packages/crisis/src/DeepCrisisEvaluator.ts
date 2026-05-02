@@ -16,9 +16,9 @@ import type {
   DetectedPattern,
   TraceContext,
   Result,
-} from "@pippa/types";
-import { ok, err } from "@pippa/types";
-import { getLogger, withSpan, pipelineMetrics } from "@pippa/observability";
+} from "@siri/types";
+import { ok, err } from "@siri/types";
+import { getLogger, withSpan, pipelineMetrics } from "@siri/observability";
 
 export interface DeepCrisisEvaluatorConfig {
   /** Model to use for evaluation (default: claude-3-haiku-20240307) */

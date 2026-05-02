@@ -1,10 +1,10 @@
 /**
- * Pippa Agent API
+ * Siri Agent API
  *
- * Express server for the Pippa AI companion agent
+ * Express server for the Siri AI companion agent
  */
 
-import { loadConfig, type Config } from "@pippa/config";
+import { loadConfig, type Config } from "@siri/config";
 
 // Load configuration (YAML + env vars)
 // This must happen before other imports that might read process.env
@@ -17,7 +17,7 @@ import {
   initializeObservability,
   shutdownObservability,
   getLogger,
-} from "@pippa/observability";
+} from "@siri/observability";
 import { createContainer } from "./container.js";
 import { createChatRouter } from "./routes/chat.js";
 import { createHealthRouter } from "./routes/health.js";
@@ -159,7 +159,7 @@ const server = app.listen(port, () => {
     AUTH_ENABLED: auth ? "true" : "false",
   };
 
-  logger.info(startupInfo, "Pippa Agent API started");
+  logger.info(startupInfo, "Siri Agent API started");
 });
 
 // Graceful shutdown

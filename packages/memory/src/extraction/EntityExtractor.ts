@@ -14,9 +14,9 @@ import type {
   Result,
   CanonicalType,
   SourceEntry,
-} from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+} from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
 
 /**

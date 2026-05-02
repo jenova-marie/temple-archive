@@ -15,9 +15,9 @@ import {
   type UIMessage,
 } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
-import type { PipelineInput, TraceContext } from "@pippa/types";
-import type { Pipeline } from "@pippa/pipeline";
-import { getLogger } from "@pippa/observability";
+import type { PipelineInput, TraceContext } from "@siri/types";
+import type { Pipeline } from "@siri/pipeline";
+import { getLogger } from "@siri/observability";
 import {
   agentTools,
   getMemoryTools,
@@ -27,7 +27,7 @@ import {
   setMem0ToolTraceContext,
   clearMem0ToolTraceContext,
   getMcpTools,
-} from "@pippa/tools";
+} from "@siri/tools";
 
 /** Default model for agent processing - can be overridden via AGENT_MODEL env var */
 const DEFAULT_AGENT_MODEL = "claude-sonnet-4-20250514";
@@ -69,7 +69,7 @@ const chatBodySchema = z
           .passthrough(),
       )
       .min(1),
-    /** Optional agent/persona (system prompt) to use instead of default pippa */
+    /** Optional agent/persona (system prompt) to use instead of default siri */
     agent: z.string().optional(),
     /** User's locale code (ISO 3166-1 alpha-2, e.g., 'US', 'DE'). Defaults to 'US'. */
     locale: z.string().length(2).optional(),
@@ -162,7 +162,7 @@ function extractLastUserMessage(
   return null;
 }
 
-import type { UserProfile } from "@pippa/types";
+import type { UserProfile } from "@siri/types";
 
 interface RequestUserData {
   userId: string;
@@ -427,7 +427,7 @@ export function createChatRouter({
           const emergencyStream = streamText({
             model: anthropic(getAgentModel()),
             system:
-              "You are Pippa. The user may be in crisis. Respond with care and compassion.",
+              "You are Siri. The user may be in crisis. Respond with care and compassion.",
             messages: [{ role: "user", content: lastUserMessage }],
             maxOutputTokens: 500,
           });

@@ -29,7 +29,7 @@ These insights become observations in L3, attached to relevant entities, searcha
 
 ## Why This Matters
 
-The Memory Reflector transforms Pippa from a listener into an understander.
+The Memory Reflector transforms Siri from a listener into an understander.
 
 Without reflection, the agent processes conversations transactionally. Each message is extracted, stored, forgotten. The agent has memory but not *understanding*.
 
@@ -43,7 +43,7 @@ This is the difference between a chatbot and a companion.
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        Memory Reflector                                      │
 │                                                                             │
-│  "Hey Pippa, work has been really stressful lately. My manager keeps        │
+│  "Hey Siri, work has been really stressful lately. My manager keeps        │
 │   piling on deadlines and I haven't been sleeping well."                    │
 │                                                                             │
 └───────────────────────────────────┬─────────────────────────────────────────┘

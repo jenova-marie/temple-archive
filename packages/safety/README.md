@@ -1,11 +1,11 @@
-# @pippa/safety
+# @siri/safety
 
 Response safety validation for the RecoverySky Agent system.
 
 ## Installation
 
 ```bash
-pnpm add @pippa/safety
+pnpm add @siri/safety
 ```
 
 ## Overview
@@ -20,7 +20,7 @@ This package validates AI-generated responses to ensure they meet safety require
 ## Quick Start
 
 ```typescript
-import { StubSafetyValidator } from '@pippa/safety'
+import { StubSafetyValidator } from '@siri/safety'
 
 const validator = new StubSafetyValidator()
 
@@ -96,7 +96,7 @@ The stub implementation detects:
 ## Usage in Pipeline
 
 ```typescript
-import { StubSafetyValidator } from '@pippa/safety'
+import { StubSafetyValidator } from '@siri/safety'
 
 const safety = new StubSafetyValidator()
 

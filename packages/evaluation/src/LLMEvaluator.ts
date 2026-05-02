@@ -21,9 +21,9 @@ import type {
   AssembledContext,
   TraceContext,
   Result,
-} from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+} from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 import { StubEvaluator } from './StubEvaluator.js'
 
 export type EvaluationMode = 'all' | `sample:${number}` | 'on_demand'

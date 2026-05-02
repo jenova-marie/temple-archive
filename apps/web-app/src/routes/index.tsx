@@ -30,7 +30,7 @@ function ChatPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                  Pippa
+                  Siri
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   Chat to help you find recovery meetings and explore

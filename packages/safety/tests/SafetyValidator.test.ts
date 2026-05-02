@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import { SafetyValidator } from "../src/SafetyValidator.js";
-import type { AssembledContext } from "@pippa/types";
+import type { AssembledContext } from "@siri/types";
 
 const createTraceContext = () => ({
   requestId: `req_${Date.now()}`,

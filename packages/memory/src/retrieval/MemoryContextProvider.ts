@@ -5,8 +5,8 @@
  * This allows swapping between legacy and L3 retrieval via configuration.
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import type { TraceContext } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
+import type { TraceContext } from '@siri/types'
 import type { MemoryRetrievalService, RetrievalOptions } from './MemoryRetrievalService.js'
 import type { ContextStrategy } from '../deepmemory/DeepMemoryService.js'
 

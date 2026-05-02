@@ -1,5 +1,5 @@
 {
-  "name": "@pippa/crisis",
+  "name": "@siri/crisis",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
-    "@pippa/observability": "workspace:*",
-    "@pippa/types": "workspace:*"
+    "@siri/observability": "workspace:*",
+    "@siri/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

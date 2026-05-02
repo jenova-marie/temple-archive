@@ -155,7 +155,7 @@ export async function chatCommand(message: string, options: ChatOptions): Promis
       // Stop spinner on first text and print header
       if (firstDelta) {
         spinner.stop()
-        process.stdout.write('\n' + chalk.magenta('Pippa: '))
+        process.stdout.write('\n' + chalk.magenta('Siri: '))
         firstDelta = false
       }
       // Stream text in real-time
@@ -169,7 +169,7 @@ export async function chatCommand(message: string, options: ChatOptions): Promis
       // No text received
       spinner.stop()
       console.log()
-      console.log(chalk.magenta('Pippa:'), response.response || '(no response)')
+      console.log(chalk.magenta('Siri:'), response.response || '(no response)')
       console.log()
     }
 
@@ -194,7 +194,7 @@ export async function interactiveChat(options: ChatOptions = {}): Promise<void> 
   const { default: inquirer } = await import('inquirer')
 
   console.log()
-  console.log(chalk.magenta.bold('Pippa Chat'))
+  console.log(chalk.magenta.bold('Siri Chat'))
   console.log(chalk.gray(`Conversation: ${getConversationId()}`))
   console.log(chalk.gray(`User: ${getUserId()}`))
   if (options.agent) {
@@ -243,7 +243,7 @@ export async function interactiveChat(options: ChatOptions = {}): Promise<void> 
       const response = await sendMessage(message, { agent: options.agent }, (delta) => {
         if (firstDelta) {
           spinner.stop()
-          process.stdout.write('\n' + chalk.magenta('Pippa: '))
+          process.stdout.write('\n' + chalk.magenta('Siri: '))
           firstDelta = false
         }
         process.stdout.write(delta)

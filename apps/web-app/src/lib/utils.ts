@@ -1,2 +1,2 @@
 // Re-export cn from shared package
-export { cn } from '@pippa/shared'
+export { cn } from '@siri/shared'

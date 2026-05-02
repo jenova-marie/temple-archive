@@ -18,8 +18,8 @@ import type {
   SemanticMatch,
   Entity,
   UserProfile,
-} from "@pippa/types";
-import { getLogger, withSpan } from "@pippa/observability";
+} from "@siri/types";
+import { getLogger, withSpan } from "@siri/observability";
 
 export interface MemoryPromptConfig {
   /** Number of recent messages to analyze (default: 1 = current exchange only) */
@@ -81,7 +81,7 @@ const NARRATIVIZATION_PROMPT = `
 {userContext}
 
 ** Agent Context **
-- **Name**: Pippa
+- **Name**: Siri
 - **Pronouns**: you/yours
 - **Locale**: US
 

@@ -2,10 +2,10 @@
  * Mem0 Types and Interface
  *
  * Types for the Mem0 memory system (L5).
- * Designed to be portable - can later be moved to @pippa/types.
+ * Designed to be portable - can later be moved to @siri/types.
  */
 
-import type { Result, StoreError, TraceContext } from '@pippa/types'
+import type { Result, StoreError, TraceContext } from '@siri/types'
 
 // ============================================================================
 // Mem0 API Types (matching FastAPI wrapper)

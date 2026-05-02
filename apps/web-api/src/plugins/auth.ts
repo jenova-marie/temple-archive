@@ -8,7 +8,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
-import { getLogger } from "@pippa/observability";
+import { getLogger } from "@siri/observability";
 
 /**
  * Zitadel JWT claims
@@ -165,7 +165,7 @@ async function authPlugin(
     fastify.addHook("onRequest", async (request) => {
       request.user = {
         id: "dev-user",
-        email: "dev@pippa.app",
+        email: "dev@siri.app",
         name: "Development User",
         roles: ["admin"],
         claims: { sub: "dev-user" } as ZitadelClaims,

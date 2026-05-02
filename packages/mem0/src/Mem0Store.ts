@@ -5,9 +5,9 @@
  * Implements IMem0Store interface with full error mapping.
  */
 
-import type { Result, StoreError, TraceContext } from '@pippa/types'
-import { ok, err } from '@pippa/types'
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
+import type { Result, StoreError, TraceContext } from '@siri/types'
+import { ok, err } from '@siri/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
 import type { Mem0HttpClient } from './client.js'
 import { Mem0ApiError } from './client.js'
 import type {

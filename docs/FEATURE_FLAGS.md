@@ -1,10 +1,10 @@
 # Feature Flags
 
-Comprehensive reference for all Pippa feature flags. Feature flags provide runtime control over system behavior without code changes.
+Comprehensive reference for all Siri feature flags. Feature flags provide runtime control over system behavior without code changes.
 
 ## The Problem
 
-A complex system like Pippa has many moving parts:
+A complex system like Siri has many moving parts:
 - Multiple memory tiers (L1-L4)
 - Crisis detection at multiple levels
 - Entity extraction and reflection

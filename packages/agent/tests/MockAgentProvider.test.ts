@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MockAgentProvider } from "../src/MockAgentProvider.js";
-import type { AgentInput, TraceContext, Message } from "@pippa/types";
+import type { AgentInput, TraceContext, Message } from "@siri/types";
 
 // Mock observability
-vi.mock("@pippa/observability", () => ({
+vi.mock("@siri/observability", () => ({
   getLogger: () => ({
     child: () => ({
       debug: vi.fn(),

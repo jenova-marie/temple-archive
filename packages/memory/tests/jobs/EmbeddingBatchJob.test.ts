@@ -11,8 +11,8 @@ import type { Neo4jKnowledgeStore } from '../../src/stores/Neo4jKnowledgeStore.j
 import type { QdrantVectorStore } from '../../src/stores/QdrantVectorStore.js'
 import type { MiniLMEmbeddingProvider } from '../../src/embeddings/MiniLMProvider.js'
 import type { OpenAIEmbeddingProvider } from '../../src/providers/OpenAIEmbeddingProvider.js'
-import type { TraceContext } from '@pippa/types'
-import { ok, err } from '@pippa/types'
+import type { TraceContext } from '@siri/types'
+import { ok, err } from '@siri/types'
 
 function createTraceContext(): TraceContext {
   return {

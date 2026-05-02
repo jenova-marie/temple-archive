@@ -7,9 +7,9 @@
  * For high-precision semantic search, use OpenAI embeddings in L4 (Qdrant).
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import type { Result } from '@pippa/types'
-import { ok, err } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
+import type { Result } from '@siri/types'
+import { ok, err } from '@siri/types'
 
 // Dynamic import for @xenova/transformers (ESM)
 let pipeline: typeof import('@xenova/transformers').pipeline | null = null

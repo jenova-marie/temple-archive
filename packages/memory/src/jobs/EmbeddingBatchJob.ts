@@ -7,8 +7,8 @@
  * Runs on a configurable interval (default 30 seconds).
  */
 
-import { getLogger, withSpan, pipelineMetrics } from '@pippa/observability'
-import type { TraceContext } from '@pippa/types'
+import { getLogger, withSpan, pipelineMetrics } from '@siri/observability'
+import type { TraceContext } from '@siri/types'
 import type { MiniLMEmbeddingProvider } from '../embeddings/MiniLMProvider.js'
 import type { OpenAIEmbeddingProvider } from '../providers/OpenAIEmbeddingProvider.js'
 import type { Neo4jKnowledgeStore } from '../stores/Neo4jKnowledgeStore.js'
