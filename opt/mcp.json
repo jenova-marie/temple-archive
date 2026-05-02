@@ -17,7 +17,7 @@
     },
     "searxng-web-search": {
       "type": "http",
-      "url": "http://mcp-searxng:3100/mcp",
+      "url": "http://searxng.rso:3100/mcp",
       "description": "Use SearXNG for web searches when the user asks questions about current events, needs up-to-date information, wants to look something up online, or when you need to verify facts. This is your primary web search capability.",
       "tools": ["searxng_web_search", "web_url_read"]
     },
