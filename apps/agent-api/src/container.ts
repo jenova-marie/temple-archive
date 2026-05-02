@@ -549,7 +549,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
       knowledgeStore,
       {
         mode: extractionMode,
-        model: process.env.ENTITY_EXTRACTION_MODEL || "claude-3-haiku-20240307",
+        model: process.env.ENTITY_EXTRACTION_MODEL || "claude-haiku-4-5",
         enabledTypes: enabledTypes as Array<
           | "person"
           | "place"
@@ -572,7 +572,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info(
       {
         mode: extractionMode,
-        model: process.env.ENTITY_EXTRACTION_MODEL || "claude-3-haiku-20240307",
+        model: process.env.ENTITY_EXTRACTION_MODEL || "claude-haiku-4-5",
         types: enabledTypes.length,
         minImportance: process.env.ENTITY_MIN_IMPORTANCE || "0.3",
         inferRelationships: process.env.ENTITY_INFER_RELATIONSHIPS !== "false",

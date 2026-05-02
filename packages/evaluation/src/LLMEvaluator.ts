@@ -31,7 +31,7 @@ export type EvaluationMode = 'all' | `sample:${number}` | 'on_demand'
 export interface LLMEvaluatorConfig {
   /** Evaluation mode. Default: 'on_demand' */
   mode?: EvaluationMode
-  /** LLM model to use. Default: 'claude-3-haiku-20240307' */
+  /** LLM model to use. Default: 'claude-haiku-4-5' */
   model?: string
   /** Minimum crisis level to trigger on-demand evaluation. Default: 4 */
   minCrisisLevelToTrigger?: number
@@ -45,7 +45,7 @@ export interface LLMEvaluatorConfig {
 
 const DEFAULT_CONFIG: Required<LLMEvaluatorConfig> = {
   mode: 'on_demand',
-  model: 'claude-3-haiku-20240307',
+  model: 'claude-haiku-4-5',
   minCrisisLevelToTrigger: 4,
   minStubScoreToSkip: 0.7,
   maxTokens: 512,

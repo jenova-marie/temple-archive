@@ -162,7 +162,7 @@ const entityExtractionSchema = z.object({
   inferRelationships: booleanString.optional(),
 }).optional().transform((val) => ({
   mode: val?.mode ?? "all",
-  model: val?.model ?? "claude-3-haiku-20240307",
+  model: val?.model ?? "claude-haiku-4-5",
   types: val?.types ?? [
     "person",
     "place",
@@ -240,7 +240,7 @@ const compactionSchema = z.object({
   enabled: val?.enabled ?? true,
   threshold: val?.threshold ?? 30,
   batchSize: val?.batchSize ?? 15,
-  model: val?.model ?? "claude-3-haiku-20240307",
+  model: val?.model ?? "claude-haiku-4-5",
   maxTokens: val?.maxTokens ?? 512,
   timeoutMs: val?.timeoutMs ?? 15000,
 }))
@@ -272,7 +272,7 @@ const memorySchema = z.object({
   toolAccess: val?.toolAccess ?? "read",
   entityExtraction: val?.entityExtraction ?? {
     mode: "all",
-    model: "claude-3-haiku-20240307",
+    model: "claude-haiku-4-5",
     types: ["person", "place", "event", "emotion", "trigger", "coping_strategy", "milestone", "medication"],
     minImportance: 0.3,
     inferRelationships: true,
@@ -307,7 +307,7 @@ const memorySchema = z.object({
     enabled: true,
     threshold: 30,
     batchSize: 15,
-    model: "claude-3-haiku-20240307",
+    model: "claude-haiku-4-5",
     maxTokens: 512,
     timeoutMs: 15000,
   },

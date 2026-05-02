@@ -62,7 +62,7 @@ export class MemoryCacheDeduplicator implements IMemoryCacheDeduplicator {
   ) {
     this.model = config.extractionModel === 'sonnet'
       ? 'claude-sonnet-4-20250514'
-      : 'claude-3-haiku-20240307'
+      : 'claude-haiku-4-5'
     this.defaultLimit = config.cacheLimit === 'all' ? 100 :
                         config.cacheLimit === 'none' ? 0 :
                         config.cacheLimit

@@ -61,7 +61,7 @@ const DEFAULT_CONFIG: MemoryPromptConfig = {
   maxTtlMinutes: 60,
   l4SearchLimit: 5,
   l3SearchHops: 1,
-  model: "claude-3-haiku-20240307",
+  model: "claude-haiku-4-5",
 };
 
 const QUERY_GENERATION_PROMPT = `Analyze this conversation exchange and generate 1-3 semantic search queries to find relevant memories from past conversations.

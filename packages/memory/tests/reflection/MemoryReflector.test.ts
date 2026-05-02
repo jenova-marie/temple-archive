@@ -143,7 +143,7 @@ describe('MemoryReflector', () => {
       expect(config.insightLimit).toBe(10)
       expect(config.entityLimit).toBe(5)
       expect(config.minConfidence).toBe(0.5)
-      expect(config.model).toBe('claude-3-haiku-20240307')
+      expect(config.model).toBe('claude-haiku-4-5')
     })
 
     it('merges provided config with defaults', () => {
@@ -158,7 +158,7 @@ describe('MemoryReflector', () => {
       expect(config.insightLimit).toBe(20)
       expect(config.minConfidence).toBe(0.7)
       expect(config.entityLimit).toBe(5) // default preserved
-      expect(config.model).toBe('claude-3-haiku-20240307') // default preserved
+      expect(config.model).toBe('claude-haiku-4-5') // default preserved
     })
   })
 
@@ -173,7 +173,7 @@ describe('MemoryReflector', () => {
 
       expect(anthropic.messages.create).toHaveBeenCalledTimes(1)
       const callArgs = anthropic.messages.create.mock.calls[0][0]
-      expect(callArgs.model).toBe('claude-3-haiku-20240307')
+      expect(callArgs.model).toBe('claude-haiku-4-5')
       expect(callArgs.max_tokens).toBe(1024)
       expect(callArgs.system).toContain('memory curator')
       expect(callArgs.messages[0].content).toContain('Hello, I prefer morning meetings.')

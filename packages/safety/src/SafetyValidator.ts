@@ -29,7 +29,7 @@ import { EnablingDetector } from "./detectors/EnablingDetector.js";
 export interface SafetyValidatorConfig {
   /** Enable LLM-based detection for medical/enabling. Default: true */
   enableLLMDetection?: boolean;
-  /** LLM model to use. Default: 'claude-3-haiku-20240307' */
+  /** LLM model to use. Default: 'claude-haiku-4-5' */
   llmModel?: string;
   /** Redact PII in sanitized output. Default: true */
   redactPII?: boolean;
@@ -41,7 +41,7 @@ export interface SafetyValidatorConfig {
 
 const DEFAULT_CONFIG: Required<SafetyValidatorConfig> = {
   enableLLMDetection: true,
-  llmModel: "claude-3-haiku-20240307",
+  llmModel: "claude-haiku-4-5",
   redactPII: true,
   blockOnFailedSanitization: true,
   parallelLLMDetection: true,

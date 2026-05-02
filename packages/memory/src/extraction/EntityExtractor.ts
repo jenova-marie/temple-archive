@@ -130,7 +130,7 @@ export interface ExtractionError {
  */
 export const DEFAULT_EXTRACTOR_CONFIG: EntityExtractorConfig = {
   mode: 'all',
-  model: 'claude-3-haiku-20240307',
+  model: 'claude-haiku-4-5',
   enabledTypes: ['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication'],
   minImportance: 0.3,
   inferRelationships: true,

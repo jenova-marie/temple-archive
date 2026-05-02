@@ -96,7 +96,7 @@ export interface MemoryReflectorConfig {
   entityLimit?: number
   /** Minimum confidence to persist (default: 0.5) */
   minConfidence?: number
-  /** Model to use for reflection (default: claude-3-haiku-20240307) */
+  /** Model to use for reflection (default: claude-haiku-4-5) */
   model?: string
 }
 
@@ -104,7 +104,7 @@ const DEFAULT_CONFIG: Required<MemoryReflectorConfig> = {
   insightLimit: 10,
   entityLimit: 5,
   minConfidence: 0.5,
-  model: 'claude-3-haiku-20240307',
+  model: 'claude-haiku-4-5',
 }
 
 /**

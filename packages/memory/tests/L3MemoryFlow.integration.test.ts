@@ -535,7 +535,7 @@ describe.skipIf(shouldSkip)('L3 Memory Flow Integration', () => {
         store,
         {
           mode: 'all' as ExtractionMode,
-          model: 'claude-3-haiku-20240307',
+          model: 'claude-haiku-4-5',
           enabledTypes: ['person', 'place', 'emotion'],
           minImportance: 0.3,
           inferRelationships: true,

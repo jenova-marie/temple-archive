@@ -21,7 +21,7 @@ import { ok, err } from "@siri/types";
 import { getLogger, withSpan, pipelineMetrics } from "@siri/observability";
 
 export interface DeepCrisisEvaluatorConfig {
-  /** Model to use for evaluation (default: claude-3-haiku-20240307) */
+  /** Model to use for evaluation (default: claude-haiku-4-5) */
   model?: string;
   /** Maximum tokens for response (default: 512) */
   maxTokens?: number;
@@ -92,7 +92,7 @@ export class DeepCrisisEvaluator implements ICrisisEvaluator {
   constructor(client: Anthropic, config?: DeepCrisisEvaluatorConfig) {
     this.client = client;
     this.config = {
-      model: config?.model ?? "claude-3-haiku-20240307",
+      model: config?.model ?? "claude-haiku-4-5",
       maxTokens: config?.maxTokens ?? 512,
       timeoutMs: config?.timeoutMs ?? 5000,
     };

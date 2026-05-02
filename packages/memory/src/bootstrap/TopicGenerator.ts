@@ -64,7 +64,7 @@ export class TopicGenerator implements ITopicGenerator {
   ) {
     this.model = config.extractionModel === 'sonnet'
       ? 'claude-sonnet-4-20250514'
-      : 'claude-3-haiku-20240307'
+      : 'claude-haiku-4-5'
   }
 
   async generateSearchPhrases(

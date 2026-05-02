@@ -467,7 +467,7 @@ describe('DEFAULT_COMPACTION_CONFIG', () => {
     expect(DEFAULT_COMPACTION_CONFIG.enabled).toBe(true)
     expect(DEFAULT_COMPACTION_CONFIG.threshold).toBe(30)
     expect(DEFAULT_COMPACTION_CONFIG.batchSize).toBe(15)
-    expect(DEFAULT_COMPACTION_CONFIG.model).toBe('claude-3-haiku-20240307')
+    expect(DEFAULT_COMPACTION_CONFIG.model).toBe('claude-haiku-4-5')
     expect(DEFAULT_COMPACTION_CONFIG.maxTokens).toBe(512)
     expect(DEFAULT_COMPACTION_CONFIG.timeoutMs).toBe(15000)
   })

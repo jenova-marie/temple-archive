@@ -31,7 +31,7 @@ export interface CompactionConfig {
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   threshold: 30,
   batchSize: 15,
-  model: 'claude-3-haiku-20240307',
+  model: 'claude-haiku-4-5',
   maxTokens: 512,
   timeoutMs: 15000,
   enabled: true,
