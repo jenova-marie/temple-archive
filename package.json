@@ -12,7 +12,7 @@
   "scripts": {
     "build": "pnpm -r --filter=!agent-api build",
     "build:all": "pnpm -r build",
-    "build:docker:local": "DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t recoverysky-agent .",
+    "build:docker:local": "DOCKER_BUILDKIT=1 docker build --secret id=npmrc,src=$HOME/.npmrc -t ninshubur .",
     "dev": "CONTAINER_ROOT=./opt pnpm -r --parallel --filter './apps/*' dev",
     "dev:docker": "pnpm -r --parallel --filter './apps/*' dev",
     "start": "pnpm --filter @siri/agent-api start",

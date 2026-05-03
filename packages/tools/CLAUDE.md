@@ -25,7 +25,7 @@ pnpm clean
 
 ## Architecture
 
-This package is part of the `recoverysky-agent` monorepo. It exports tool definitions that are consumed by the agent package.
+This package is part of the `ninshubur` monorepo. It exports tool definitions that are consumed by the agent package.
 
 **Key files:**
 - `src/definitions.ts` - All tool definitions using `tool()` from Vercel AI SDK with Zod schemas

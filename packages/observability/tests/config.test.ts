@@ -121,7 +121,7 @@ describe("config utilities", () => {
 
     it("returns default when SERVICE_NAME is not set", () => {
       delete process.env.SERVICE_NAME;
-      expect(getServiceName()).toBe("recoverysky-agent");
+      expect(getServiceName()).toBe("ninshubur");
     });
   });
 

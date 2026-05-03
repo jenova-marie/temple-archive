@@ -486,7 +486,7 @@ ENABLE_POSTFLIGHT_EMBEDDINGS=true # Message embeddings for L4
 
 # Observability
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-OTEL_SERVICE_NAME=recoverysky-agent
+OTEL_SERVICE_NAME=ninshubur
 
 # Crisis Response
 CRISIS_WEBHOOK_URL=          # Webhook for crisis alerts

@@ -110,7 +110,7 @@ const observabilitySchema = z.object({
   serviceName: z.string().optional(),
 }).optional().transform((val) => ({
   otlpEndpoint: val?.otlpEndpoint,
-  serviceName: val?.serviceName ?? "recoverysky-agent",
+  serviceName: val?.serviceName ?? "ninshubur",
 }))
 
 const crisisSchema = z.object({

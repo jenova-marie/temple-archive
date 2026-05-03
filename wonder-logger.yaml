@@ -2,7 +2,7 @@
 # See: https://github.com/jenova-marie/wonder-logger
 
 service:
-  name: ${SERVICE_NAME:-recoverysky-agent}
+  name: ${SERVICE_NAME:-ninshubur}
   version: ${npm_package_version:-0.1.0}
   environment: ${NODE_ENV:-development}
 
@@ -27,7 +27,7 @@ logger:
 
     # Memory transport for runtime log inspection
     - type: memory
-      name: ${SERVICE_NAME:-recoverysky-agent}
+      name: ${SERVICE_NAME:-ninshubur}
       maxSize: 10000
       level: debug
 

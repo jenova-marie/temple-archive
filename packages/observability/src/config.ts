@@ -55,7 +55,7 @@ export function isMetricsEnabled(): boolean {
  * Get service name
  */
 export function getServiceName(): string {
-  return process.env.SERVICE_NAME || 'recoverysky-agent'
+  return process.env.SERVICE_NAME || 'ninshubur'
 }
 
 /**

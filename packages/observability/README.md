@@ -53,7 +53,7 @@ pipelineMetrics.memoryCacheHits.add(1, { tier: 'L1' })
 
 ```bash
 # Service identification
-SERVICE_NAME=recoverysky-agent
+SERVICE_NAME=ninshubur
 SERVICE_VERSION=1.0.0
 NODE_ENV=development
 
@@ -80,9 +80,9 @@ In test environments (`NODE_ENV=test`), the package automatically:
 import { getMemoryLogs, clearMemoryLogs } from '@siri/observability'
 
 // In tests
-const logs = getMemoryLogs('recoverysky-agent')
+const logs = getMemoryLogs('ninshubur')
 expect(logs).toContainEqual(expect.objectContaining({ msg: 'Expected message' }))
-clearMemoryLogs('recoverysky-agent')
+clearMemoryLogs('ninshubur')
 ```
 
 ## API Reference

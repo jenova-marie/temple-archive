@@ -251,7 +251,7 @@ Tracing and metrics configuration for observability.
 | Setting | Type | Default | Env Var | Description |
 |---------|------|---------|---------|-------------|
 | `otlpEndpoint` | string | - | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (e.g., `http://localhost:4318`). |
-| `serviceName` | string | `"recoverysky-agent"` | `OTEL_SERVICE_NAME` | Service name for traces and metrics. |
+| `serviceName` | string | `"ninshubur"` | `OTEL_SERVICE_NAME` | Service name for traces and metrics. |
 
 **Example:**
 ```yaml

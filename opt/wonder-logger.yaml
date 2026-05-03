@@ -27,7 +27,7 @@ logger:
 
     # Memory transport for runtime log inspection
     - type: memory
-      name: ${SERVICE_NAME:-recoverysky-agent}
+      name: ${SERVICE_NAME:-ninshubur}
       maxSize: 10000
       level: debug
 

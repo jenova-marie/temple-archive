@@ -39,7 +39,7 @@ This is a thin wrapper package with two source files:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVICE_NAME` | `recoverysky-agent` | Service identifier for logs/traces |
+| `SERVICE_NAME` | `ninshubur` | Service identifier for logs/traces |
 | `LOG_LEVEL` | `info` | trace/debug/info/warn/error/fatal/silent |
 | `OTEL_ENABLED` | `true` | Enable OpenTelemetry tracing |
 | `OTEL_METRICS_ENABLED` | `true` | Enable Prometheus metrics |

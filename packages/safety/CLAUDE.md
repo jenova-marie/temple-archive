@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `@siri/safety` is a response safety validation package for the RecoverySky Agent system. It validates AI-generated responses before they reach users, detecting PII, medical advice, enabling language, and harmful content.
 
-This is part of a pnpm monorepo (`recoverysky-agent`) and depends on sibling packages:
+This is part of a pnpm monorepo (`ninshubur`) and depends on sibling packages:
 - `@siri/types` - Type definitions including `ISafetyValidator`, `SafetyValidationResult`, `SafetyViolation`
 - `@siri/observability` - Logging (`getLogger`), tracing (`withSpan`), and metrics (`pipelineMetrics`)
 
