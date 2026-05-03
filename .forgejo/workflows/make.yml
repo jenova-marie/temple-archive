@@ -13,6 +13,7 @@ permissions:
 env:
   ENV: "prod"
   AWS_REGION: us-east-1
+  STACK: "agents"
 
 jobs:
   upload-opt:
@@ -127,15 +128,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Trigger deployment
-        uses: ./.forgejo/actions/webhook
-        with:
-          webhook_url: https://webhook.rso/webhooks
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
-          streams: eda
-          type: deploy
-          action: deploy_container
-          service: siri
-          instance: seshat
-          zone: ${{ env.AWS_REGION }}
-          environment: ${{ env.ENV }}
+      - name: Deploy to swarm
+        run: |
+          set -euxo pipefail
+                                                                                                                        
+          eval $(ssh-agent -s)
+          echo "${{ secrets.RUNNER_SSH_PRIVATE_KEY }}" | base64 -d | ssh-add -
+
+          ssh -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o LogLevel=ERROR \
+              ec2-user@klotho.prod.rso "swarm restart ${{ env.STACK }} ${{ github.event.repository.name }}"
+
+          eval $(ssh-agent -k)
+
