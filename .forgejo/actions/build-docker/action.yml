@@ -1,0 +1,115 @@
+name: "Build Docker"
+description: "Build and push Docker image to AWS ECR via OIDC"
+
+inputs:
+  aws-role-arn:
+    description: "AWS IAM role ARN for OIDC authentication"
+    required: true
+  aws-region:
+    description: "AWS region for ECR"
+    required: true
+  aws-account-id:
+    description: "AWS account ID for ECR registry"
+    required: true
+  image-name:
+    description: "ECR repository/image name"
+    required: true
+  image-tag:
+    description: "Docker image tag (e.g., dev, staging, prod)"
+    required: true
+  platform:
+    description: "Target platform for Docker build"
+    required: false
+    default: "linux/arm64"
+  context:
+    description: "Docker build context path"
+    required: false
+    default: "."
+  dockerfile:
+    description: "Path to Dockerfile"
+    required: false
+    default: "Dockerfile"
+  latest:
+    description: "Also tag image as 'latest'"
+    required: false
+    default: "false"
+  npmrc-path:
+    description: "Path to .npmrc file for Docker build secret"
+    required: false
+    default: ".npmrc"
+
+outputs:
+  image:
+    description: "Full image URI with tag"
+    value: ${{ steps.meta.outputs.tags }}
+  digest:
+    description: "Image digest"
+    value: ${{ steps.build.outputs.digest || steps.build-no-npmrc.outputs.digest }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure AWS Credentials via OIDC
+      uses: https://github.com/aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-role-arn }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Set up Docker Buildx
+      uses: https://github.com/docker/setup-buildx-action@v3
+
+    - name: Extract metadata
+      id: meta
+      uses: https://github.com/docker/metadata-action@v5
+      with:
+        images: ${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}
+        tags: |
+          type=raw,value=${{ inputs.image-tag }}
+          type=raw,value=latest,enable=${{ inputs.latest == 'true' }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: https://github.com/aws-actions/amazon-ecr-login@v2
+      env:
+        AWS_REGION: ${{ inputs.aws-region }}
+
+    - name: Check for .npmrc
+      id: npmrc
+      shell: bash
+      run: |
+        if [[ -f "${{ github.workspace }}/${{ inputs.npmrc-path }}" ]]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "No .npmrc found, building without private registry secrets"
+        fi
+
+    - name: Build and Push Docker Image (with npmrc)
+      id: build
+      if: steps.npmrc.outputs.exists == 'true'
+      uses: https://github.com/docker/build-push-action@v5
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        platforms: ${{ inputs.platform }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        secret-files: |
+          npmrc=${{ github.workspace }}/${{ inputs.npmrc-path }}
+        cache-from: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache
+        cache-to: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache,mode=max
+
+    - name: Build and Push Docker Image (without npmrc)
+      id: build-no-npmrc
+      if: steps.npmrc.outputs.exists != 'true'
+      uses: https://github.com/docker/build-push-action@v5
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        platforms: ${{ inputs.platform }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache
+        cache-to: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache,mode=max

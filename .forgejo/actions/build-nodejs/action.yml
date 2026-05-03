@@ -1,0 +1,80 @@
+name: "Build Node.js"
+description: "Setup pnpm, Node.js, install dependencies, and build"
+
+inputs:
+  node:
+    description: "Node.js version to use"
+    required: false
+    default: "22"
+  pnpm:
+    description: "pnpm version to use"
+    required: false
+    default: "10.11.0"
+  tests:
+    description: "Run unit tests with pnpm test"
+    required: false
+    default: "false"
+  coverage:
+    description: "Run tests with coverage and upload as artifact"
+    required: false
+    default: "false"
+  forgejo-auth-token:
+    description: "Forgejo auth token for private npm registries"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup pnpm
+      uses: https://github.com/pnpm/action-setup@v2
+      with:
+        version: ${{ inputs.pnpm }}
+
+    - name: Setup Node.js
+      uses: https://github.com/actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node }}
+        cache: "pnpm"
+
+    - name: Create .npmrc in project directory
+      shell: bash
+      run: |
+        cat > .npmrc << 'EOF'
+        strict-ssl=false
+        //git.rso/api/packages/trex/npm/:_authToken=${{ inputs.forgejo-auth-token }}
+        //git.rso/api/packages/jenova-marie/npm/:_authToken=${{ inputs.forgejo-auth-token }}
+        //git.rso/api/packages/recoverysky-org/npm/:_authToken=${{ inputs.forgejo-auth-token }}
+        @dt70s:registry=https://git.rso/api/packages/dt70s/npm/
+        @recoverysky-org:registry=https://git.rso/api/packages/recoverysky-org/npm/
+        @jenova-marie:registry=https://git.rso/api/packages/jenova-marie/npm/
+        @trex-ts:registry=https://git.rso/api/packages/trex/npm/
+        EOF
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Build source
+      shell: bash
+      run: pnpm build
+
+    - name: Run unit tests
+      if: ${{ inputs.tests == 'true' && inputs.coverage != 'true' }}
+      shell: bash
+      run: pnpm test
+
+    - name: Run tests with coverage
+      if: ${{ inputs.coverage == 'true' }}
+      shell: bash
+      run: pnpm test:coverage
+
+    # Store coverage as artifact in Forgejo
+    - name: Upload coverage artifact
+      if: ${{ inputs.coverage == 'true' }}
+      uses: actions/upload-artifact@v3
+      env:
+        NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
+      with:
+        name: coverage-report
+        path: coverage/
+        retention-days: 30

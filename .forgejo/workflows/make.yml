@@ -1,72 +1,44 @@
-name: Build & Push Docker Images to AWS ECR
-
+name: Build & Push Docker Image to AWS ECR
 on:
   push:
-    branches:
-      - cmd
-      - prod
-
+    branches-ignore:
+      - root
+  workflow_dispatch: # Allows manual triggering
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read
-
 env:
-  ENV: "prod"
-  AWS_REGION: us-east-1
   STACK: "agents"
-
 jobs:
-  upload-opt:
-    runs-on: builder
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Upload opt/ to rsync.net
-        run: |
-          set -euxo pipefail
-
-          # Start ssh-agent and load key
-          eval $(ssh-agent -s)
-          echo "${{ secrets.RSYNC_SSH_PRIVATE_KEY }}" | ssh-add -
-          ssh-add -l
-
-          # Setup known_hosts
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan ${{ secrets.RSYNC_HOST }} >> ~/.ssh/known_hosts
-
-          # Rsync upload
-          rsync -avz --times \
-            --exclude='._*' \
-            --exclude='.DS_Store' \
-            --exclude='__MACOSX' \
-            --mkpath \
-            opt/ \
-            ${{ secrets.RSYNC_USER }}@${{ secrets.RSYNC_HOST }}:recoverysky/containers/${{ env.ENV }}/${{ github.event.repository.name }}/
-
-          # Cleanup
-          eval $(ssh-agent -k)
-
   docker-build-and-push:
     runs-on: builder
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0 # Need full history to find branch
 
-      - name: Check for build relevant file changes
-        id: build_filter
-        uses: ./.forgejo/actions/check-build-changes
+      - uses: ./.forgejo/actions/check-build-changes
+        id: changes
         with:
           before-ref: ${{ github.event.before }}
           current-sha: ${{ github.sha }}
 
-      - name: Create .npmrc in project directory
-        if: steps.build_filter.outputs.build_required == 'true'
+      - uses: ./.forgejo/actions/detect-aws-env
+        id: aws-env
+
+      - uses: ./.forgejo/actions/rsync-opt
+        with:
+          ssh-private-key: ${{ secrets.RSYNC_SSH_PRIVATE_KEY }}
+          rsync-host: ${{ secrets.RSYNC_HOST }}
+          rsync-user: ${{ secrets.RSYNC_USER }}
+          env: ${{ steps.aws-env.outputs.env }}
+          repo-name: ${{ github.event.repository.name }}
+
+      - name: Create .npmrc for Docker build
+        if: steps.changes.outputs.build_required == 'true'
         run: |
-          cat > .npmrc << 'EOF'
+          cat > ${{ github.workspace }}/.npmrc << 'EOF'
           strict-ssl=false
           //git.rso/api/packages/trex/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
           //git.rso/api/packages/jenova-marie/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
@@ -76,57 +48,16 @@ jobs:
           @jenova-marie:registry=http://git.rso/api/packages/jenova-marie/npm/
           @trex-ts:registry=http://git.rso/api/packages/trex/npm/
           EOF
-          sed -i 's/^[[:space:]]*//' .npmrc
-          echo "=== Generated .npmrc ==="
-          cat .npmrc
 
-      - name: Configure AWS Credentials via OIDC
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: ./.forgejo/actions/build-docker
+        if: steps.changes.outputs.build_required == 'true'
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Set up Docker Buildx
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Amazon ECR
-        if: steps.build_filter.outputs.build_required == 'true'
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push all images
-        if: steps.build_filter.outputs.build_required == 'true'
-        uses: docker/bake-action@v4
-        with:
-          files: ./docker-bake.hcl
-          push: true
-        env:
-          REGISTRY: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/
-          TAG: ${{ env.ENV }}
-          AGENT_API_PORT: "61664"
-          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/siri
-
-      - name: Notify build failure
-        if: failure()
-        uses: ./.forgejo/actions/webhook
-        with:
-          webhook_url: https://webhook.rso/webhooks
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
-          streams: ci
-          type: build
-          action: failure
-          service: siri
-          instance: seshat
-          environment: ${{ env.ENV }}
-
-  deploy:
-    runs-on: builder
-    needs: [upload-opt, docker-build-and-push]
-    if: success()
-    steps:
-      - uses: actions/checkout@v4
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.aws-env.outputs.aws-region }}
+          aws-account-id: ${{ secrets.AWS_ID }}
+          image-name: ${{ github.event.repository.name }}
+          image-tag: ${{ steps.aws-env.outputs.env }}
+          latest: "true"
 
       - name: Deploy to swarm
         run: |
@@ -142,3 +73,15 @@ jobs:
 
           eval $(ssh-agent -k)
 
+      - name: Notify build failure
+        if: failure()
+        uses: ./.forgejo/actions/webhook
+        with:
+          webhook_url: https://webhook.rso/webhooks
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          streams: ci
+          type: build
+          action: failure
+          service: ${{ github.event.repository.name }}
+          environment: ${{ steps.aws-env.outputs.env }}
+          instance: ${{ env.INSTANCE }}

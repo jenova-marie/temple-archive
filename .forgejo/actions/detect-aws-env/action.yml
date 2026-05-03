@@ -1,0 +1,55 @@
+name: "Detect AWS Environment"
+description: "Determine AWS environment and region from branch or tag push"
+
+outputs:
+  env:
+    description: "Detected environment (dev, staging, prod)"
+    value: ${{ steps.env.outputs.env }}
+  aws-region:
+    description: "AWS region for the environment"
+    value: ${{ steps.env.outputs.aws-region }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Determine environment from branch
+      id: env
+      shell: bash
+      run: |
+        set -euxo pipefail
+
+        echo "=== Debug info ==="
+        echo "github.ref: ${{ github.ref }}"
+        echo "github.ref_name: ${{ github.ref_name }}"
+        echo "HEAD commit: $(git rev-parse HEAD)"
+
+        echo "=== All remote branches ==="
+        git branch -r || echo "Failed to list remote branches"
+
+        echo "=== Branches containing HEAD ==="
+        git branch -r --contains HEAD || echo "No branches found containing HEAD"
+
+        # Find which branch (dev/staging/prod) contains this commit
+        BRANCH=$(git branch -r --contains HEAD | grep -oE '(dev|staging|prod)' | head -1 || true)
+
+        echo "=== Detected BRANCH: '$BRANCH' ==="
+
+        if [ -z "$BRANCH" ]; then
+          echo "::error::Could not determine branch (dev/staging/prod) for this commit"
+          exit 1
+        fi
+
+        # Set AWS region based on branch
+        case "$BRANCH" in
+          dev)     AWS_REGION="us-east-2" ;;
+          staging) AWS_REGION="us-west-2" ;;
+          cmd)    AWS_REGION="us-east-2" ;;
+          prod)    AWS_REGION="us-east-1" ;;
+          *)       AWS_REGION="us-east-2" ;;
+        esac
+
+        echo "Detected branch: $BRANCH, AWS region: $AWS_REGION"
+
+        # Set outputs
+        echo "env=$BRANCH" >> $GITHUB_OUTPUT
+        echo "aws-region=$AWS_REGION" >> $GITHUB_OUTPUT

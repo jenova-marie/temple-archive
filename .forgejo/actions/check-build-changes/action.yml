@@ -5,7 +5,7 @@ inputs:
   patterns-file:
     description: "Path to the patterns file"
     required: false
-    default: ".make-build-patterns"
+    default: ".check-build-changes"
   before-ref:
     description: "The before commit reference"
     required: true

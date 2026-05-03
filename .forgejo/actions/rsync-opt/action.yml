@@ -1,0 +1,57 @@
+name: "Rsync Opt"
+description: "Upload opt/ directory to rsync.net via SSH"
+
+inputs:
+  ssh-private-key:
+    description: "SSH private key for rsync.net authentication"
+    required: true
+  rsync-host:
+    description: "rsync.net host"
+    required: true
+  rsync-user:
+    description: "rsync.net username"
+    required: true
+  env:
+    description: "Environment name (dev, staging, prod)"
+    required: true
+  repo-name:
+    description: "Repository name for remote path"
+    required: true
+  source-path:
+    description: "Local source path to upload"
+    required: false
+    default: "opt/"
+  remote-base-path:
+    description: "Base path on remote server"
+    required: false
+    default: "recoverysky/containers"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload to rsync.net
+      shell: bash
+      run: |
+        set -euxo pipefail
+
+        # Start ssh-agent and load key
+        eval $(ssh-agent -s)
+        echo "${{ inputs.ssh-private-key }}" | ssh-add -
+        ssh-add -l
+
+        # Setup known_hosts
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        ssh-keyscan ${{ inputs.rsync-host }} >> ~/.ssh/known_hosts
+
+        # Rsync upload
+        rsync -avz --times \
+          --exclude='._*' \
+          --exclude='.DS_Store' \
+          --exclude='__MACOSX' \
+          --mkpath \
+          ${{ inputs.source-path }} \
+          ${{ inputs.rsync-user }}@${{ inputs.rsync-host }}:${{ inputs.remote-base-path }}/${{ inputs.env }}/${{ inputs.repo-name }}/
+
+        # Cleanup
+        eval $(ssh-agent -k)
