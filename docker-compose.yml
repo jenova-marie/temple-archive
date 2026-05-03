@@ -133,7 +133,7 @@ services:
     networks:
       - recoverysky
     ports:
-      - "${WEB_APP_PORT}:80"
+      - "${WEB_APP_PORT}:61665"
     environment:
       - AGENT_API_PORT=${AGENT_API_PORT}
       - WEB_APP_PORT=${WEB_APP_PORT}
