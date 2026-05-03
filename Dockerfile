@@ -116,6 +116,7 @@ COPY --from=builder /app/packages/cli/package.json ./packages/cli/
 COPY --from=builder /app/packages/config/package.json ./packages/config/
 COPY --from=builder /app/packages/mem0/package.json ./packages/mem0/
 COPY --from=builder /app/packages/rag/package.json ./packages/rag/
+COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/apps/agent-api/package.json ./apps/agent-api/
 
 # Install production dependencies with cache mount and npmrc secret
@@ -138,6 +139,7 @@ COPY --from=builder /app/packages/cli/dist ./packages/cli/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 COPY --from=builder /app/packages/mem0/dist ./packages/mem0/dist
 COPY --from=builder /app/packages/rag/dist ./packages/rag/dist
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/agent-api/dist ./apps/agent-api/dist
 
 # Set ownership
