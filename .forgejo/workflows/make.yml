@@ -49,27 +49,65 @@ jobs:
           @trex-ts:registry=http://git.rso/api/packages/trex/npm/
           EOF
 
-      - uses: ./.forgejo/actions/build-docker
+      # Multi-stage Dockerfile produces three distinct images. Build each
+      # stage separately, push to its own ECR repo. Cache is target-scoped
+      # so the three builds don't fight over the same cache key.
+
+      - name: Build & Push agent-api (Node :61664)
         if: steps.changes.outputs.build_required == 'true'
+        uses: ./.forgejo/actions/build-docker
         with:
           aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ steps.aws-env.outputs.aws-region }}
           aws-account-id: ${{ secrets.AWS_ID }}
-          image-name: ${{ github.event.repository.name }}
+          image-name: siri-agent-api
           image-tag: ${{ steps.aws-env.outputs.env }}
           latest: "true"
+          target: agent-api
+
+      - name: Build & Push web-api (Node :61665)
+        if: steps.changes.outputs.build_required == 'true'
+        uses: ./.forgejo/actions/build-docker
+        with:
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.aws-env.outputs.aws-region }}
+          aws-account-id: ${{ secrets.AWS_ID }}
+          image-name: siri-web-api
+          image-tag: ${{ steps.aws-env.outputs.env }}
+          latest: "true"
+          target: web-api
+
+      - name: Build & Push web-app (nginx :80, SPA)
+        if: steps.changes.outputs.build_required == 'true'
+        uses: ./.forgejo/actions/build-docker
+        with:
+          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.aws-env.outputs.aws-region }}
+          aws-account-id: ${{ secrets.AWS_ID }}
+          image-name: siri-web-app
+          image-tag: ${{ steps.aws-env.outputs.env }}
+          latest: "true"
+          target: web-app
+          # AGENT_API_PORT is consumed by the web-app-builder stage and
+          # baked into the Vite bundle (see Dockerfile lines 73-74). The
+          # SPA's runtime fetches anonymous-chat at :61664 directly.
+          build-args: |
+            AGENT_API_PORT=61664
 
       - name: Deploy to swarm
         run: |
           set -euxo pipefail
-                                                                                                                        
+
           eval $(ssh-agent -s)
           echo "${{ secrets.RUNNER_SSH_PRIVATE_KEY }}" | base64 -d | ssh-add -
 
           ssh -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o LogLevel=ERROR \
-              ec2-user@klotho.prod.rso "swarm restart ${{ env.STACK }} ${{ github.event.repository.name }}"
+              ec2-user@klotho.prod.rso \
+              "swarm restart ${{ env.STACK }} siri-agent-api && \
+               swarm restart ${{ env.STACK }} siri-web-api && \
+               swarm restart ${{ env.STACK }} siri-web-app"
 
           eval $(ssh-agent -k)
 

@@ -37,6 +37,14 @@ inputs:
     description: "Path to .npmrc file for Docker build secret"
     required: false
     default: ".npmrc"
+  target:
+    description: "Multi-stage Dockerfile target (e.g. agent-api, web-api, web-app). Empty = default (last stage)."
+    required: false
+    default: ""
+  build-args:
+    description: "Newline-separated docker --build-arg KEY=VALUE pairs (e.g. AGENT_API_PORT=61664)"
+    required: false
+    default: ""
 
 outputs:
   image:
@@ -92,13 +100,15 @@ runs:
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile }}
         platforms: ${{ inputs.platform }}
+        target: ${{ inputs.target }}
+        build-args: ${{ inputs.build-args }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         secret-files: |
           npmrc=${{ github.workspace }}/${{ inputs.npmrc-path }}
-        cache-from: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache
-        cache-to: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache,mode=max
+        cache-from: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache${{ inputs.target != '' && format('-{0}', inputs.target) || '' }}
+        cache-to: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache${{ inputs.target != '' && format('-{0}', inputs.target) || '' }},mode=max
 
     - name: Build and Push Docker Image (without npmrc)
       id: build-no-npmrc
@@ -108,8 +118,10 @@ runs:
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile }}
         platforms: ${{ inputs.platform }}
+        target: ${{ inputs.target }}
+        build-args: ${{ inputs.build-args }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache
-        cache-to: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache,mode=max
+        cache-from: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache${{ inputs.target != '' && format('-{0}', inputs.target) || '' }}
+        cache-to: type=registry,ref=${{ inputs.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.image-name }}:cache${{ inputs.target != '' && format('-{0}', inputs.target) || '' }},mode=max
