@@ -42,6 +42,7 @@ COPY packages/cli/package.json ./packages/cli/
 COPY packages/config/package.json ./packages/config/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/mem0/package.json ./packages/mem0/
+COPY packages/rag/package.json ./packages/rag/
 COPY apps/agent-api/package.json ./apps/agent-api/
 COPY apps/web-api/package.json ./apps/web-api/
 COPY apps/web-app/package.json ./apps/web-app/
@@ -114,6 +115,7 @@ COPY --from=builder /app/packages/pipeline/package.json ./packages/pipeline/
 COPY --from=builder /app/packages/cli/package.json ./packages/cli/
 COPY --from=builder /app/packages/config/package.json ./packages/config/
 COPY --from=builder /app/packages/mem0/package.json ./packages/mem0/
+COPY --from=builder /app/packages/rag/package.json ./packages/rag/
 COPY --from=builder /app/apps/agent-api/package.json ./apps/agent-api/
 
 # Install production dependencies with cache mount and npmrc secret
@@ -135,6 +137,7 @@ COPY --from=builder /app/packages/pipeline/dist ./packages/pipeline/dist
 COPY --from=builder /app/packages/cli/dist ./packages/cli/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 COPY --from=builder /app/packages/mem0/dist ./packages/mem0/dist
+COPY --from=builder /app/packages/rag/dist ./packages/rag/dist
 COPY --from=builder /app/apps/agent-api/dist ./apps/agent-api/dist
 
 # Set ownership
