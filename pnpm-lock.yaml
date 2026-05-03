@@ -1831,7 +1831,7 @@ packages:
     engines: {node: '>=8'}
 
   '@jenova-marie/ts-rust-result@2.2.16':
-    resolution: {integrity: sha512-JV/gz/COEdzQcTE4wSuiKFx1r/2Ybs/YPOWNDB2FhjI+pHql860q10KBoVp1gUU1/OF80OQm7SgEH19V4Xy/QA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fts-rust-result/-/2.2.16/ts-rust-result-2.2.16.tgz}
+    resolution: {integrity: sha512-JV/gz/COEdzQcTE4wSuiKFx1r/2Ybs/YPOWNDB2FhjI+pHql860q10KBoVp1gUU1/OF80OQm7SgEH19V4Xy/QA==, tarball: http://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fts-rust-result/-/2.2.16/ts-rust-result-2.2.16.tgz}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -1840,7 +1840,7 @@ packages:
         optional: true
 
   '@jenova-marie/wonder-logger@2.0.16':
-    resolution: {integrity: sha512-q9UzK6UtcD09Bb6hQXXpfK9caWSf+lLfTCq+GMOHC4lYRvs0hAJJZA6jpiSd6oNROWdK7M/iJ6FzscMP55aUXA==, tarball: https://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fwonder-logger/-/2.0.16/wonder-logger-2.0.16.tgz}
+    resolution: {integrity: sha512-q9UzK6UtcD09Bb6hQXXpfK9caWSf+lLfTCq+GMOHC4lYRvs0hAJJZA6jpiSd6oNROWdK7M/iJ6FzscMP55aUXA==, tarball: http://git.rso/api/packages/jenova-marie/npm/%40jenova-marie%2Fwonder-logger/-/2.0.16/wonder-logger-2.0.16.tgz}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -3067,7 +3067,7 @@ packages:
         optional: true
 
   '@trex-ts/core@1.1.8':
-    resolution: {integrity: sha512-rVRPxqt6Q6Rbh12Kinsg0Xmh0sBaEAqqFR3a6mkweQLRxrjHThxyez36D8+oHxB/Nr0eBjywfFGbbTXjiniJvg==, tarball: https://git.rso/api/packages/trex/npm/%40trex-ts%2Fcore/-/1.1.8/core-1.1.8.tgz}
+    resolution: {integrity: sha512-rVRPxqt6Q6Rbh12Kinsg0Xmh0sBaEAqqFR3a6mkweQLRxrjHThxyez36D8+oHxB/Nr0eBjywfFGbbTXjiniJvg==, tarball: http://git.rso/api/packages/trex/npm/%40trex-ts%2Fcore/-/1.1.8/core-1.1.8.tgz}
     engines: {node: '>=18.0.0'}
 
   '@types/aria-query@5.0.4':
