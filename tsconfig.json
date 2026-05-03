@@ -8,6 +8,7 @@
     { "path": "packages/db" },
     { "path": "packages/memory" },
     { "path": "packages/mem0" },
+    { "path": "packages/rag" },
     { "path": "packages/crisis" },
     { "path": "packages/safety" },
     { "path": "packages/tools" },

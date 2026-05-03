@@ -1,5 +1,5 @@
 {
-  "name": "@siri/tools",
+  "name": "@siri/rag",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,28 +9,32 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./stubs": {
+      "types": "./dist/stubs/index.d.ts",
+      "import": "./dist/stubs/index.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@qdrant/js-client-rest": "^1.16.2",
     "@siri/db": "workspace:*",
-    "@siri/memory": "workspace:*",
     "@siri/observability": "workspace:*",
-    "@siri/rag": "workspace:*",
-    "@siri/shared": "workspace:^",
     "@siri/types": "workspace:*",
-    "ai": "^5.0.116",
+    "drizzle-orm": "^0.38.3",
+    "pg": "^8.13.1",
     "zod": "^4.2.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.10",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.6"
   }
 }

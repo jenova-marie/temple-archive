@@ -125,6 +125,7 @@ apps/web-app (React frontend)
 | `db` | Drizzle ORM schema, PostgreSQL session store |
 | `memory` | Multi-tier memory orchestration (L1-L4), entity extraction, bootstrap system |
 | `mem0` | L5 Mem0 integration - fact extraction, deduplication, retrieval |
+| `rag` | Read-only client over ninshubur's wisdom archive (Qdrant + Postgres) |
 | `crisis` | Keyword-based crisis detection (<10ms), deep LLM evaluation, webhook alerting |
 | `safety` | PII detection, medical advice filtering, enabling language detection |
 | `tools` | Vercel AI SDK tool definitions (findMeetings, memory tools, literature search) |
@@ -309,6 +310,7 @@ Many features can be toggled via environment variables. When L5 is enabled, some
 | `ENABLE_DEEP_CRISIS_EVAL` | true | true | LLM-based crisis analysis |
 | `ENABLE_SAFETY_VALIDATION` | true | true | PII/medical/enabling detection |
 | `ENABLE_RESPONSE_EVALUATION` | true | true | LLM response quality scoring |
+| `ENABLE_RAG` | false | - | Read-only consumer of ninshubur's wisdom archive — adds `searchKnowledge` tool + `/api/v1/rag/*` routes. Requires `VOYAGE_API_KEY`, `NINSHUBUR_DATABASE_URL`, `NINSHUBUR_QDRANT_URL`. |
 
 ## Iris MCP
 

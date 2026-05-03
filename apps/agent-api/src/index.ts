@@ -21,6 +21,7 @@ import {
 import { createContainer } from "./container.js";
 import { createChatRouter } from "./routes/chat.js";
 import { createHealthRouter } from "./routes/health.js";
+import { createRagRouter } from "./routes/rag.js";
 import { tracingMiddleware } from "./middleware/tracing.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { getAuthMiddleware } from "./middleware/auth.js";
@@ -108,6 +109,22 @@ if (auth) {
     pipeline: container.pipeline,
     loadUserData: container.loadUserData,
   }));
+}
+
+// RAG API — read-only consumer of ninshubur's wisdom archive.
+// Only mounted when RAG is configured (ENABLE_RAG=true + voyage/ninshubur env).
+if (container.ragStore) {
+  if (auth) {
+    app.use(
+      "/api/v1/rag",
+      auth.required,
+      createRagRouter({ ragStore: container.ragStore }),
+    );
+    logger.info("Zitadel JWT authentication enabled for /api/v1/rag");
+  } else {
+    app.use("/api/v1/rag", createRagRouter({ ragStore: container.ragStore }));
+    logger.warn("RAG API mounted WITHOUT authentication");
+  }
 }
 
 // Error handling

@@ -320,6 +320,32 @@ const memorySchema = z.object({
 }))
 
 /**
+ * RAG (read-only consumer of ninshubur's wisdom archive).
+ *
+ * Connection details are read directly from env vars (NINSHUBUR_*,
+ * VOYAGE_API_KEY) at container init — they're not part of the YAML
+ * schema because they're sensitive (API keys, DB credentials).
+ *
+ * What lives here is the safe-to-version-control behavior:
+ * collection names, default scope, default limit, etc.
+ */
+const ragSchema = z.object({
+  enabled: booleanString.optional(),
+  voyageModel: z.string().optional(),
+  qdrantCollectionMessages: z.string().optional(),
+  qdrantCollectionGroups: z.string().optional(),
+  defaultScope: z.enum(["messages", "groups"]).optional(),
+  defaultLimit: z.coerce.number().optional(),
+}).optional().transform((val) => ({
+  enabled: val?.enabled ?? false,
+  voyageModel: val?.voyageModel ?? "voyage-3.5",
+  qdrantCollectionMessages: val?.qdrantCollectionMessages ?? "ninshubur_messages",
+  qdrantCollectionGroups: val?.qdrantCollectionGroups ?? "ninshubur_groups",
+  defaultScope: val?.defaultScope ?? "groups",
+  defaultLimit: val?.defaultLimit ?? 10,
+}))
+
+/**
  * Zod schema for Siri Agent configuration.
  * All fields have sensible defaults to allow minimal configuration.
  */
@@ -337,6 +363,7 @@ export const configSchema = z.object({
   auth: authSchema,
   meetingApi: meetingApiSchema,
   memory: memorySchema,
+  rag: ragSchema,
 }).transform((val) => ({
   app: val.app ?? {
     nodeEnv: "development" as const,
@@ -356,6 +383,7 @@ export const configSchema = z.object({
   auth: val.auth,
   meetingApi: val.meetingApi,
   memory: val.memory,
+  rag: val.rag,
 }))
 
 /**

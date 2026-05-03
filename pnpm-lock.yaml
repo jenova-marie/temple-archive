@@ -44,6 +44,9 @@ importers:
       '@opentelemetry/core':
         specifier: ^2.2.0
         version: 2.2.0(@opentelemetry/api@1.9.0)
+      '@qdrant/js-client-rest':
+        specifier: ^1.16.2
+        version: 1.16.2(typescript@5.9.3)
       '@siri/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -71,6 +74,9 @@ importers:
       '@siri/pipeline':
         specifier: workspace:*
         version: link:../../packages/pipeline
+      '@siri/rag':
+        specifier: workspace:*
+        version: link:../../packages/rag
       '@siri/safety':
         specifier: workspace:*
         version: link:../../packages/safety
@@ -598,6 +604,43 @@ importers:
         specifier: ^2.1.6
         version: 2.1.9(@types/node@24.10.4)(jsdom@27.3.0)(lightningcss@1.30.2)
 
+  packages/rag:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.71.2
+        version: 0.71.2(zod@4.2.1)
+      '@qdrant/js-client-rest':
+        specifier: ^1.16.2
+        version: 1.16.2(typescript@5.9.3)
+      '@siri/db':
+        specifier: workspace:*
+        version: link:../db
+      '@siri/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@siri/types':
+        specifier: workspace:*
+        version: link:../types
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(@types/react@19.2.7)(pg@8.16.3)(react@19.2.3)
+      pg:
+        specifier: ^8.13.1
+        version: 8.16.3
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.16.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.6
+        version: 2.1.9(@types/node@24.10.4)(jsdom@27.3.0)(lightningcss@1.30.2)
+
   packages/safety:
     dependencies:
       '@anthropic-ai/sdk':
@@ -644,6 +687,9 @@ importers:
       '@siri/observability':
         specifier: workspace:*
         version: link:../observability
+      '@siri/rag':
+        specifier: workspace:*
+        version: link:../rag
       '@siri/shared':
         specifier: workspace:^
         version: link:../shared
@@ -9005,7 +9051,7 @@ snapshots:
 
   '@types/pg-pool@2.0.6':
     dependencies:
-      '@types/pg': 8.15.5
+      '@types/pg': 8.16.0
 
   '@types/pg@8.15.5':
     dependencies:
@@ -9217,14 +9263,6 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 5.4.21(@types/node@22.19.3)(lightningcss@1.30.2)
-
-  '@vitest/mocker@2.1.9(vite@5.4.21(@types/node@24.10.4)(lightningcss@1.30.2))':
-    dependencies:
-      '@vitest/spy': 2.1.9
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 5.4.21(@types/node@24.10.4)(lightningcss@1.30.2)
 
   '@vitest/mocker@4.0.16(vite@7.3.0(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -12632,7 +12670,7 @@ snapshots:
   vitest@2.1.9(@types/node@24.10.4)(jsdom@27.3.0)(lightningcss@1.30.2):
     dependencies:
       '@vitest/expect': 2.1.9
-      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@24.10.4)(lightningcss@1.30.2))
+      '@vitest/mocker': 2.1.9(vite@5.4.21(@types/node@22.19.3)(lightningcss@1.30.2))
       '@vitest/pretty-format': 2.1.9
       '@vitest/runner': 2.1.9
       '@vitest/snapshot': 2.1.9

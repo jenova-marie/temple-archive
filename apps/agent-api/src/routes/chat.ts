@@ -22,6 +22,9 @@ import {
   agentTools,
   getMemoryTools,
   getMem0Tools,
+  getRagTools,
+  setRagToolTraceContext,
+  clearRagToolTraceContext,
   setMemoryToolTraceContext,
   clearMemoryToolTraceContext,
   setMem0ToolTraceContext,
@@ -472,12 +475,18 @@ export function createChatRouter({
         setMemoryToolTraceContext(traceContext);
       }
 
+      // RAG tools (read-only consumer of ninshubur's wisdom archive)
+      setRagToolTraceContext(traceContext);
+
       // Build tools: L5 Mem0 tools take precedence over L3/L4 tools
       const memoryTools = l5MemoryEnabled
         ? getMem0Tools()
         : memoryToolAccess !== "off"
           ? getMemoryTools(memoryToolAccess)
           : {};
+
+      // RAG tools (empty if RAG is disabled or store not initialized)
+      const ragToolsMap = getRagTools();
 
       // Get MCP tools (external MCP servers like fetch, filesystem, etc.)
       const mcpTools = getMcpTools();
@@ -491,6 +500,7 @@ export function createChatRouter({
       const tools = {
         ...(toolsEnabled ? agentTools : {}),
         ...memoryTools,
+        ...ragToolsMap,
         ...mcpTools,
       };
 
@@ -659,6 +669,8 @@ export function createChatRouter({
           } else if (memoryToolAccess !== "off") {
             clearMemoryToolTraceContext();
           }
+          // Clean up RAG tool trace context (always set above)
+          clearRagToolTraceContext();
         });
     } catch (error) {
       // Properly extract error details for logging

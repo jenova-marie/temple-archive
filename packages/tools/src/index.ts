@@ -14,6 +14,16 @@ export {
   clearMem0ToolTraceContext,
 } from "./mem0Tools.js";
 
+// RAG tools (read-only consumer of ninshubur's wisdom archive)
+export {
+  searchKnowledge,
+  ragTools,
+  getRagTools,
+  setRagToolStore,
+  setRagToolTraceContext,
+  clearRagToolTraceContext,
+} from "./ragTools.js";
+
 // Legacy L3/L4 memory tools (kept for hybrid mode)
 export {
   recallMemory,

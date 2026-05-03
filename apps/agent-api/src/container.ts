@@ -82,6 +82,15 @@ import {
   InMemoryMem0Store,
   checkMem0Health,
 } from "@siri/mem0";
+import {
+  RagStore,
+  VoyageClient,
+  createNinshuburDb,
+  resolveNinshuburSsl,
+  type IRagStore,
+  type NinshuburDbHandle,
+} from "@siri/rag";
+import { QdrantClient } from "@qdrant/js-client-rest";
 import type { IMem0Store } from "@siri/types";
 import {
   setMemoryToolProviders,
@@ -89,6 +98,7 @@ import {
   setSystemPromptRefreshFn,
   setClearConversationFn,
   setMem0ToolStore,
+  setRagToolStore,
   type MemoryToolAccessLevel,
   // MCP tools
   MCPToolManager,
@@ -133,6 +143,8 @@ export interface RequestUserData {
 export interface Container {
   pipeline: Pipeline;
   config: PipelineConfig;
+  /** RAG store (read-only consumer of ninshubur) — undefined if disabled. */
+  ragStore?: IRagStore;
   /** Initialize async services (Qdrant collection, etc). Call after creation. */
   init: () => Promise<void>;
   /** Graceful shutdown - stops background jobs, closes connections. */
@@ -293,6 +305,75 @@ export function createContainer(options: ContainerConfig = {}): Container {
   if (mem0Store) {
     setMem0ToolStore(mem0Store);
     logger.info("Mem0 tools enabled");
+  }
+
+  // RAG (read-only consumer of ninshubur's wisdom archive).
+  // Enabled when ENABLE_RAG=true AND VOYAGE_API_KEY + NINSHUBUR_DATABASE_URL +
+  // NINSHUBUR_QDRANT_URL are set. siri does not write here.
+  let ragStore: IRagStore | undefined;
+  let ninshuburDbHandle: NinshuburDbHandle | undefined;
+  const ragEnabled =
+    process.env.ENABLE_RAG === "true" &&
+    !!process.env.VOYAGE_API_KEY &&
+    !!process.env.NINSHUBUR_DATABASE_URL &&
+    !!process.env.NINSHUBUR_QDRANT_URL;
+
+  if (ragEnabled && !useStubs) {
+    try {
+      const voyage = new VoyageClient({
+        apiKey: process.env.VOYAGE_API_KEY!,
+        defaultModel: process.env.VOYAGE_MODEL ?? "voyage-3.5",
+      });
+      const ragQdrant = new QdrantClient({
+        url: process.env.NINSHUBUR_QDRANT_URL!,
+        ...(process.env.NINSHUBUR_QDRANT_API_KEY
+          ? { apiKey: process.env.NINSHUBUR_QDRANT_API_KEY }
+          : {}),
+      });
+      ninshuburDbHandle = createNinshuburDb({
+        connectionString: process.env.NINSHUBUR_DATABASE_URL!,
+        ssl: resolveNinshuburSsl(process.env.NINSHUBUR_DATABASE_SSL),
+      });
+      ragStore = new RagStore({
+        db: ninshuburDbHandle.db,
+        qdrant: ragQdrant,
+        voyage,
+        collectionMessages:
+          process.env.NINSHUBUR_QDRANT_COLLECTION_MESSAGES ??
+          "ninshubur_messages",
+        collectionGroups:
+          process.env.NINSHUBUR_QDRANT_COLLECTION_GROUPS ?? "ninshubur_groups",
+        defaultScope:
+          (process.env.RAG_DEFAULT_SCOPE as "messages" | "groups") ?? "groups",
+        defaultLimit: parseInt(process.env.RAG_DEFAULT_LIMIT ?? "10", 10),
+      });
+      setRagToolStore(ragStore);
+      logger.info(
+        {
+          ninshuburQdrantUrl: process.env.NINSHUBUR_QDRANT_URL,
+          collectionMessages:
+            process.env.NINSHUBUR_QDRANT_COLLECTION_MESSAGES ??
+            "ninshubur_messages",
+          collectionGroups:
+            process.env.NINSHUBUR_QDRANT_COLLECTION_GROUPS ??
+            "ninshubur_groups",
+        },
+        "RAG enabled — connected to ninshubur's archive",
+      );
+    } catch (err) {
+      logger.error(
+        { err },
+        "Failed to initialize RAG; searchKnowledge tool will be unavailable",
+      );
+      ragStore = undefined;
+      ninshuburDbHandle = undefined;
+    }
+  } else if (process.env.ENABLE_RAG === "true") {
+    logger.warn(
+      "ENABLE_RAG=true but VOYAGE_API_KEY/NINSHUBUR_DATABASE_URL/NINSHUBUR_QDRANT_URL not set — RAG disabled",
+    );
+  } else {
+    logger.info("RAG disabled (ENABLE_RAG=false or not set)");
   }
 
   // Create memory orchestrator
@@ -1309,6 +1390,14 @@ export function createContainer(options: ContainerConfig = {}): Container {
       await shutdownMcpTools();
     }
 
+    // Close ninshubur DB pool if RAG was enabled
+    if (ninshuburDbHandle) {
+      logger.info("Closing ninshubur DB pool...");
+      await ninshuburDbHandle.close().catch((err) => {
+        logger.warn({ err }, "ninshubur DB pool close failed");
+      });
+    }
+
     logger.info("Container shutdown complete");
   };
 
@@ -1357,6 +1446,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
   return {
     pipeline,
     config: pipelineConfig,
+    ragStore,
     init,
     shutdown,
     loadUserData,

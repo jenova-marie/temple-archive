@@ -18,6 +18,7 @@
     { "path": "../../packages/tools" },
     { "path": "../../packages/agent" },
     { "path": "../../packages/evaluation" },
-    { "path": "../../packages/pipeline" }
+    { "path": "../../packages/pipeline" },
+    { "path": "../../packages/rag" }
   ]
 }
