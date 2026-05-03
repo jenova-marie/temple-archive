@@ -49,50 +49,46 @@ jobs:
           @trex-ts:registry=http://git.rso/api/packages/trex/npm/
           EOF
 
-      # Multi-stage Dockerfile produces three distinct images. Build each
-      # stage separately, push to its own ECR repo. Cache is target-scoped
-      # so the three builds don't fight over the same cache key.
+      # Single bake call builds agent-api, web-api, and web-app in parallel
+      # against one shared cache. Stages 1-3 (base/deps/builder) are shared
+      # across all three targets, so the cache hits hard once warm.
+      #
+      # Output (one ECR repo, three prefixed tags per env):
+      #   <ecr>/siri:agent-${TAG}  + agent-latest
+      #   <ecr>/siri:api-${TAG}    + api-latest
+      #   <ecr>/siri:app-${TAG}    + app-latest
 
-      - name: Build & Push agent-api (Node :61664)
+      - name: Configure AWS Credentials via OIDC
         if: steps.changes.outputs.build_required == 'true'
-        uses: ./.forgejo/actions/build-docker
+        uses: https://github.com/aws-actions/configure-aws-credentials@v4
         with:
-          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ steps.aws-env.outputs.aws-region }}
-          aws-account-id: ${{ secrets.AWS_ID }}
-          image-name: siri-agent-api
-          image-tag: ${{ steps.aws-env.outputs.env }}
-          latest: "true"
-          target: agent-api
 
-      - name: Build & Push web-api (Node :61665)
+      - name: Set up Docker Buildx
         if: steps.changes.outputs.build_required == 'true'
-        uses: ./.forgejo/actions/build-docker
-        with:
-          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ steps.aws-env.outputs.aws-region }}
-          aws-account-id: ${{ secrets.AWS_ID }}
-          image-name: siri-web-api
-          image-tag: ${{ steps.aws-env.outputs.env }}
-          latest: "true"
-          target: web-api
+        uses: https://github.com/docker/setup-buildx-action@v3
 
-      - name: Build & Push web-app (nginx :80, SPA)
+      - name: Login to Amazon ECR
         if: steps.changes.outputs.build_required == 'true'
-        uses: ./.forgejo/actions/build-docker
+        uses: https://github.com/aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push (docker buildx bake)
+        if: steps.changes.outputs.build_required == 'true'
+        uses: https://github.com/docker/bake-action@v5
+        env:
+          # docker-bake.hcl picks these up via `variable` blocks.
+          REGISTRY: ${{ secrets.AWS_ID }}.dkr.ecr.${{ steps.aws-env.outputs.aws-region }}.amazonaws.com/
+          TAG: ${{ steps.aws-env.outputs.env }}
+          AGENT_API_PORT: 61664
+          # Shared registry cache across all three targets — the heavy
+          # base/deps/builder stages get reused.
+          CACHE_REPO: ${{ secrets.AWS_ID }}.dkr.ecr.${{ steps.aws-env.outputs.aws-region }}.amazonaws.com/siri
         with:
-          aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ steps.aws-env.outputs.aws-region }}
-          aws-account-id: ${{ secrets.AWS_ID }}
-          image-name: siri-web-app
-          image-tag: ${{ steps.aws-env.outputs.env }}
-          latest: "true"
-          target: web-app
-          # AGENT_API_PORT is consumed by the web-app-builder stage and
-          # baked into the Vite bundle (see Dockerfile lines 73-74). The
-          # SPA's runtime fetches anonymous-chat at :61664 directly.
-          build-args: |
-            AGENT_API_PORT=61664
+          source: .
+          files: docker-bake.hcl
+          targets: default
+          push: true
 
       - name: Deploy to swarm
         run: |
