@@ -71,10 +71,10 @@ jobs:
           //git.rso/api/packages/trex/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
           //git.rso/api/packages/jenova-marie/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
           //git.rso/api/packages/recoverysky-org/npm/:_authToken=${{ secrets.FORGEJO_AUTH_TOKEN }}
-          @dt70s:registry=https://git.rso/api/packages/dt70s/npm/
-          @recoverysky-org:registry=https://git.rso/api/packages/recoverysky-org/npm/
-          @jenova-marie:registry=https://git.rso/api/packages/jenova-marie/npm/
-          @trex-ts:registry=https://git.rso/api/packages/trex/npm/
+          @dt70s:registry=http://git.rso/api/packages/dt70s/npm/
+          @recoverysky-org:registry=http://git.rso/api/packages/recoverysky-org/npm/
+          @jenova-marie:registry=http://git.rso/api/packages/jenova-marie/npm/
+          @trex-ts:registry=http://git.rso/api/packages/trex/npm/
           EOF
           sed -i 's/^[[:space:]]*//' .npmrc
           echo "=== Generated .npmrc ==="
