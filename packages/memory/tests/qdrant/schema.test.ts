@@ -30,8 +30,8 @@ describe("qdrant/schema", () => {
       expect(COLLECTION_NAME).toBe(expectedName);
     });
 
-    it("has correct vector size for OpenAI embeddings", () => {
-      expect(VECTOR_SIZE).toBe(1536);
+    it("has correct vector size for Voyage embeddings", () => {
+      expect(VECTOR_SIZE).toBe(1024);
     });
 
     it("uses Cosine distance metric", () => {

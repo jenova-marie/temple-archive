@@ -106,20 +106,20 @@ API keys for AI services. Always use environment variable interpolation for thes
 | Setting | Type | Default | Env Var | Description |
 |---------|------|---------|---------|-------------|
 | `anthropic.apiKey` | string | - | `ANTHROPIC_API_KEY` | Claude API key. Required for agent responses, crisis evaluation, and entity extraction. |
-| `openai.apiKey` | string | - | `OPENAI_API_KEY` | OpenAI API key. Required for embeddings (semantic search in L4). |
+| — | — | — | `VOYAGE_API_KEY` | Voyage AI key. Used for L4 message embeddings (`voyage-3.5`, 1024-dim) and RAG query embedding. Read directly from env, not via YAML. |
+| — | — | — | `VOYAGE_MODEL` | Voyage model override. Default `voyage-3.5`. |
+| `openai.apiKey` | string | - | `OPENAI_API_KEY` | (Legacy.) OpenAI API key. Only consulted if you opt in to the legacy `OpenAIEmbeddingProvider`. Default L4 path is Voyage. |
 
 **Example:**
 ```yaml
 ai:
   anthropic:
     apiKey: ${ANTHROPIC_API_KEY}
-  openai:
-    apiKey: ${OPENAI_API_KEY}
 ```
 
 **Effect:**
 - Without `ANTHROPIC_API_KEY`: Agent uses stub responses, no crisis evaluation
-- Without `OPENAI_API_KEY`: No semantic search, no L4 vector embeddings
+- Without `VOYAGE_API_KEY` (and `ENABLE_POSTFLIGHT_EMBEDDINGS=true`): L4 storage disabled, postflight skipped. L5 Mem0 still works.
 
 ---
 

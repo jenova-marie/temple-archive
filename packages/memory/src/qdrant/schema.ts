@@ -10,7 +10,7 @@ import { createHash } from "crypto";
 
 // Collection configuration constants
 export const COLLECTION_NAME = process.env.QDRANT_COLLECTION_NAME ?? "messages";
-export const VECTOR_SIZE = 1536; // OpenAI text-embedding-3-small dimensions
+export const VECTOR_SIZE = 1024; // Voyage voyage-3.5 dimensions
 export const DISTANCE_METRIC = "Cosine";
 
 // Search mode: 'hybrid' (dense + sparse BM25) or 'simple' (dense only)

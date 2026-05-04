@@ -170,7 +170,7 @@ All external services are injected via `apps/agent-api/src/container.ts`. Key en
 - `MEM0_API_URL` → Mem0 FastAPI endpoint (L5)
 - `ENABLE_L5_MEMORY=true` → Enable L5 as primary memory
 - `ANTHROPIC_API_KEY` → Real agent, crisis evaluator, entity extraction
-- `OPENAI_API_KEY` → Real embeddings for semantic search
+- `VOYAGE_API_KEY` → Voyage embeddings (voyage-3.5, 1024-dim) for L4 semantic search and RAG
 
 **L5 Memory Configuration:**
 ```bash

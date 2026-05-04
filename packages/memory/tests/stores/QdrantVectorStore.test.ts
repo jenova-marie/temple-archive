@@ -381,7 +381,7 @@ describe("QdrantVectorStore", () => {
 
       expect(mockClient.createCollection).toHaveBeenCalledWith("messages", {
         vectors: {
-          size: 1536,
+          size: 1024,
           distance: "Cosine",
           on_disk: true,
         },
@@ -410,7 +410,7 @@ describe("QdrantVectorStore", () => {
         expect.objectContaining({
           vectors: {
             [DENSE_VECTOR_NAME]: expect.objectContaining({
-              size: 1536,
+              size: 1024,
               distance: "Cosine",
               on_disk: true,
             }),

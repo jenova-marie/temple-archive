@@ -32,7 +32,7 @@ import {
   InMemoryVectorStore,
   RedisContextStore,
   createRedisClient,
-  OpenAIEmbeddingProvider,
+  VoyageEmbeddingProvider,
   QdrantVectorStore,
   createQdrantClient,
   Neo4jKnowledgeStore,
@@ -517,32 +517,34 @@ export function createContainer(options: ContainerConfig = {}): Container {
     evaluator = stubEvaluator;
   }
 
-  // Create embedding provider - requires OPENAI_API_KEY
-  // ENABLE_PREFLIGHT_EMBEDDINGS: Query embeddings for semantic search (default: true)
-  // ENABLE_POSTFLIGHT_EMBEDDINGS: Message embeddings for L4 storage (default: true)
-  const preflightEmbeddingsEnabled = process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== "false";
-  const postflightEmbeddingsEnabled = process.env.ENABLE_POSTFLIGHT_EMBEDDINGS !== "false";
+  // Create embedding provider - Voyage AI (voyage-3.5, 1024-dim).
+  // Both flags default OFF — explicit opt-in.
+  // ENABLE_PREFLIGHT_EMBEDDINGS: Query embeddings for legacy L4 semantic search.
+  // ENABLE_POSTFLIGHT_EMBEDDINGS: Message embeddings for L4 storage.
+  const preflightEmbeddingsEnabled = process.env.ENABLE_PREFLIGHT_EMBEDDINGS === "true";
+  const postflightEmbeddingsEnabled = process.env.ENABLE_POSTFLIGHT_EMBEDDINGS === "true";
   const needsEmbeddings = preflightEmbeddingsEnabled || postflightEmbeddingsEnabled;
   let embedding: IEmbeddingProvider | undefined;
 
   if (!needsEmbeddings) {
     logger.info("Embeddings disabled - no semantic search or L4 storage");
-  } else if (!useStubs && process.env.OPENAI_API_KEY) {
+  } else if (!useStubs && process.env.VOYAGE_API_KEY) {
     logger.info({
       preflight: preflightEmbeddingsEnabled,
       postflight: postflightEmbeddingsEnabled,
-    }, "Using OpenAIEmbeddingProvider");
-    embedding = new OpenAIEmbeddingProvider();
+      model: process.env.VOYAGE_MODEL ?? "voyage-3.5",
+    }, "Using VoyageEmbeddingProvider");
+    embedding = new VoyageEmbeddingProvider();
   } else if (!useStubs) {
-    logger.warn("OPENAI_API_KEY not set - embeddings disabled");
+    logger.warn("VOYAGE_API_KEY not set - embeddings disabled");
   }
 
-  // L3 Memory Embedding Batch Job
-  // Generates dual-store embeddings (L3: 384-dim MiniLM, L4: 1536-dim OpenAI)
-  // Controlled by EMBEDDING_BATCH_ENABLED env var (default: true when all stores available)
+  // L3 Memory Embedding Batch Job (legacy)
+  // Generates dual-store embeddings (L3: 384-dim MiniLM, L4: 1024-dim Voyage)
+  // Controlled by EMBEDDING_BATCH_ENABLED env var (default: false — opt-in legacy path)
   let embeddingBatchJob: EmbeddingBatchJob | undefined;
   let miniLMProvider: MiniLMEmbeddingProvider | undefined;
-  const embeddingBatchEnabled = process.env.EMBEDDING_BATCH_ENABLED !== "false";
+  const embeddingBatchEnabled = process.env.EMBEDDING_BATCH_ENABLED === "true";
   const neo4jL3Store =
     knowledgeStore instanceof Neo4jKnowledgeStore ? knowledgeStore : null;
 
@@ -565,7 +567,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
       neo4jL3Store,
       qdrantVectorStore,
       miniLMProvider,
-      embedding as OpenAIEmbeddingProvider,
+      embedding,
       {
         intervalMs: batchIntervalMs,
         batchSize,

@@ -232,7 +232,7 @@ When L5 is enabled (`ENABLE_L5_MEMORY=true`), it becomes the primary memory syst
 - Entity types: person, place, event, emotion, trigger, coping_strategy, milestone, medication
 
 ### Qdrant L4 Features
-- OpenAI embedding provider (text-embedding-3-small)
+- Voyage AI embedding provider (voyage-3.5, 1024-dim)
 - **Hybrid search** with dense vectors + BM25 sparse vectors
 - Semantic similarity search across conversation history
 - **Literature search** - semantic search through recovery literature collection

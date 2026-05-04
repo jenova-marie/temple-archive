@@ -89,7 +89,12 @@ export {
 } from './context/index.js'
 
 // Embedding providers
-export { OpenAIEmbeddingProvider, type OpenAIEmbeddingConfig } from './providers/index.js'
+export {
+  OpenAIEmbeddingProvider,
+  type OpenAIEmbeddingConfig,
+  VoyageEmbeddingProvider,
+  type VoyageEmbeddingConfig,
+} from './providers/index.js'
 
 // L3 Memory embeddings (local MiniLM)
 export {
