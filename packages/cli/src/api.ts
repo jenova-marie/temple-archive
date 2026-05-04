@@ -5,7 +5,8 @@
  * (produced by pipeUIMessageStreamToResponse)
  */
 
-import { getApiUrl, getConversationId, getUserId } from './config.js'
+import { getApiUrl, getConversationId } from './config.js'
+import { getAccessToken, refreshAccessToken } from './auth.js'
 
 /**
  * Options for sendMessage
@@ -102,6 +103,17 @@ export interface ApiError {
   statusCode: number
 }
 
+function postChat(apiUrl: string, body: string, token: string): Promise<Response> {
+  return fetch(`${apiUrl}/api/v1/chat`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  })
+}
+
 /**
  * Send a message and receive a streaming response
  * Parses UI Message Stream format from pipeUIMessageStreamToResponse()
@@ -122,29 +134,27 @@ export async function sendMessage(
 ): Promise<ChatResponse> {
   const apiUrl = getApiUrl()
   const conversationId = getConversationId()
+  const requestBody = JSON.stringify({
+    conversation_id: conversationId,
+    messages: [
+      {
+        role: 'user',
+        parts: [{ type: 'text', text: message }],
+        id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      },
+    ],
+    agent: options.agent,
+  } satisfies ChatRequest)
 
-  const response = await fetch(`${apiUrl}/api/v1/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // TODO: CLI auth — Auth0 is now mandatory on agent-api. The X-User-Id
-      // header is no longer honored; this header is preserved as a marker
-      // until a real token flow (device code, PAT, etc.) is wired up. CLI
-      // requests will get 401 until then.
-      'X-User-Id': getUserId(),
-    },
-    body: JSON.stringify({
-      conversation_id: conversationId,
-      messages: [
-        {
-          role: 'user',
-          parts: [{ type: 'text', text: message }],
-          id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        },
-      ],
-      agent: options.agent,
-    } satisfies ChatRequest),
-  })
+  // Try once with the cached token; on 401 refresh and retry once before
+  // surfacing the error. Anything else falls through to error handling.
+  let response = await postChat(apiUrl, requestBody, await getAccessToken())
+  if (response.status === 401) {
+    const retryToken = await refreshAccessToken().then((t) => t.accessToken).catch(() => null)
+    if (retryToken) {
+      response = await postChat(apiUrl, requestBody, retryToken)
+    }
+  }
 
   if (!response.ok) {
     // Non-streaming error response (e.g., 400, 401)
@@ -153,6 +163,9 @@ export async function sendMessage(
       message: response.statusText,
       statusCode: response.status,
     })) as ApiError
+    if (response.status === 401) {
+      throw new Error('Not authorized — run `siri login` to sign in.')
+    }
     throw new Error(`API Error (${error.statusCode}): ${error.message}`)
   }
 
