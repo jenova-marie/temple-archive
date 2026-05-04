@@ -12,8 +12,9 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { ColorPicker } from "@/components/ui/color-picker";
+import { Rosette } from "@/components/ui/rosette";
 import { cn } from "@/lib/utils";
-import { CloudIcon, GithubIcon, LogOutIcon, UserIcon } from "lucide-react";
+import { GithubIcon, LogOutIcon, UserIcon } from "lucide-react";
 import { version } from "../../package.json";
 
 export const Route = createRootRoute({
@@ -104,18 +105,20 @@ function RootLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-lg">
-        <nav className="container mx-auto flex h-16 items-center justify-between gap-4 px-4">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
+      {/* Header — Inanna's mark on the left, controls on the right. The
+          gold hairline rule below evokes the gilded edge of a tablet box. */}
+      <header className="sticky top-0 z-50 bg-background/85 backdrop-blur-lg">
+        <nav className="container mx-auto flex h-14 items-center justify-between gap-4 px-4">
+          {/* Mark only — Inanna's rosette is the brand. Version sits next
+              to it like a stamp on a tablet edge. */}
+          <div className="flex items-center gap-3">
             <Link
               to="/"
-              className="flex items-center gap-2 text-lg font-bold tracking-tight text-foreground transition-colors hover:text-primary"
+              className="group flex items-center gap-2 transition-colors"
+              title="Temple of Inanna's Light"
             >
-              <CloudIcon className="h-6 w-6 text-primary" />
-              <span>RecoverySky</span>
-              <span className="text-xs font-normal text-muted-foreground">
+              <Rosette className="h-5 w-5 text-gold transition-transform group-hover:rotate-45" />
+              <span className="text-[10px] font-normal uppercase tracking-[0.18em] text-muted-foreground/70">
                 v{version}
               </span>
             </Link>
@@ -123,10 +126,10 @@ function RootLayout() {
               href="https://github.com/recoverysky-org/recoverysky-app"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="text-muted-foreground/60 hover:text-foreground transition-colors"
               title="View source on GitHub"
             >
-              <GithubIcon className="h-5 w-5" />
+              <GithubIcon className="h-4 w-4" />
             </a>
           </div>
 
@@ -134,14 +137,15 @@ function RootLayout() {
           <div className="flex items-center gap-2">
             <ColorPicker />
             <ThemeToggle />
-            <div className="ml-2 h-6 w-px bg-border" />
+            <div className="ml-2 h-5 w-px bg-border" />
             <UserMenu />
           </div>
         </nav>
+        <div className="gold-rule mx-auto max-w-[64rem]" />
       </header>
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-5">
         <Outlet />
       </main>
     </div>
