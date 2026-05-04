@@ -17,7 +17,11 @@ export function MeetingGuide() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="h-[calc(100vh-12rem)]">
+      {/* Dynamic viewport unit (dvh) tracks the *visible* viewport height
+          on mobile — `vh` includes the URL bar's slot, which would push
+          the composer past the bottom edge. Mobile also stacks the hero
+          vertically (sm: breakpoint), so subtract a touch more there. */}
+      <div className="h-[calc(100dvh-15rem)] pb-[env(safe-area-inset-bottom)] sm:h-[calc(100dvh-12rem)]">
         <Thread />
       </div>
     </AssistantRuntimeProvider>
