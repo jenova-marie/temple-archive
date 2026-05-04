@@ -28,6 +28,7 @@
     "@siri/pipeline": "workspace:*",
     "@siri/rag": "workspace:*",
     "@siri/safety": "workspace:*",
+    "@siri/shared": "workspace:*",
     "@qdrant/js-client-rest": "^1.16.2",
     "@siri/tools": "workspace:*",
     "@siri/types": "workspace:*",

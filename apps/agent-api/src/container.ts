@@ -145,6 +145,8 @@ export interface Container {
   config: PipelineConfig;
   /** RAG store (read-only consumer of ninshubur) — undefined if disabled. */
   ragStore?: IRagStore;
+  /** Repo for the `system_prompts` table — undefined when DATABASE_URL is missing or USE_STUBS=true. */
+  systemPromptRepo?: SystemPromptRepository;
   /** Initialize async services (Qdrant collection, etc). Call after creation. */
   init: () => Promise<void>;
   /** Graceful shutdown - stops background jobs, closes connections. */
@@ -1452,6 +1454,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
     pipeline,
     config: pipelineConfig,
     ragStore,
+    systemPromptRepo: systemPromptRepo ?? undefined,
     init,
     shutdown,
     loadUserData,

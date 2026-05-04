@@ -20,6 +20,7 @@ import {
 } from "@siri/observability";
 import { createContainer } from "./container.js";
 import { createChatRouter } from "./routes/chat.js";
+import { createGuidesRouter } from "./routes/guides.js";
 import { createHealthRouter } from "./routes/health.js";
 import { createRagRouter } from "./routes/rag.js";
 import { tracingMiddleware } from "./middleware/tracing.js";
@@ -83,6 +84,20 @@ app.use("/api/v1/chat", auth.required, createChatRouter({
   loadUserData: container.loadUserData,
 }));
 logger.info("Auth0 JWT authentication enabled for /api/v1/chat");
+
+// Guides API — lists active system prompts as picker options for the SPA.
+if (container.systemPromptRepo) {
+  app.use(
+    "/api/v1/guides",
+    auth.required,
+    createGuidesRouter({ systemPromptRepo: container.systemPromptRepo }),
+  );
+  logger.info("Guides route mounted (/api/v1/guides)");
+} else {
+  logger.warn(
+    "Guides route NOT mounted — systemPromptRepo unavailable (DATABASE_URL missing or USE_STUBS=true)",
+  );
+}
 
 // RAG API — read-only consumer of ninshubur's wisdom archive.
 // Only mounted when RAG is configured (ENABLE_RAG=true + voyage/ninshubur env).

@@ -80,6 +80,9 @@ importers:
       '@siri/safety':
         specifier: workspace:*
         version: link:../../packages/safety
+      '@siri/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@siri/tools':
         specifier: workspace:*
         version: link:../../packages/tools

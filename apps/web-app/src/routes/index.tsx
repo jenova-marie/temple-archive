@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { MeetingGuide } from "@/components/chat/MeetingGuide";
 import { MessageCircleIcon } from "lucide-react";
-import { useChatStore, GUIDES } from "@/stores/chatStore";
+import { useChatStore } from "@/stores/chatStore";
 
 export const Route = createFileRoute("/")({
   component: ChatPage,
@@ -10,8 +11,15 @@ export const Route = createFileRoute("/")({
 function ChatPage() {
   const selectedGuideId = useChatStore((s) => s.selectedGuideId);
   const setGuide = useChatStore((s) => s.setGuide);
+  const guides = useChatStore((s) => s.guides);
+  const guidesLoading = useChatStore((s) => s.guidesLoading);
+  const loadGuides = useChatStore((s) => s.loadGuides);
 
+  // Load the live guides list from the API when the chat page mounts.
   // Auth is enforced by __root.tsx; this component only renders when authenticated.
+  useEffect(() => {
+    void loadGuides();
+  }, [loadGuides]);
 
   return (
     <div className="space-y-8">
@@ -46,9 +54,10 @@ function ChatPage() {
                 id="guide-select"
                 value={selectedGuideId}
                 onChange={(e) => setGuide(e.target.value)}
-                className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+                disabled={guidesLoading}
+                className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               >
-                {GUIDES.map((guide) => (
+                {guides.map((guide) => (
                   <option key={guide.id} value={guide.id}>
                     {guide.name}
                   </option>
