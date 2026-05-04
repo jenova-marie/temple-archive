@@ -166,14 +166,15 @@ export const clearConversation = tool({
       .describe("Optional reason for clearing the conversation"),
     confirmClear: z
       .boolean()
-      .default(true)
-      .describe("Confirm you want to clear the conversation"),
+      .optional()
+      .describe("Confirm you want to clear the conversation (default true)"),
   }),
   execute: async ({ reason, confirmClear }) => {
     return withSpan("tool.clearConversation", async () => {
       const logger = getLogger().child({ tool: "clearConversation", reason });
+      const resolvedConfirm = confirmClear ?? true;
 
-      if (!confirmClear) {
+      if (!resolvedConfirm) {
         return {
           success: false,
           message: "Clear cancelled - confirmClear was false.",

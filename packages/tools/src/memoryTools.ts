@@ -110,14 +110,16 @@ export const recallMemory = tool({
   inputSchema: z.object({
     query: z.string().describe('What to search for (name, topic, keyword)'),
     type: z.enum(['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication', 'any'])
-      .default('any')
-      .describe('Optional: filter by entity type'),
-    limit: z.number().min(1).max(20).default(10).describe('Maximum results to return'),
+      .optional()
+      .describe('Optional: filter by entity type (default "any")'),
+    limit: z.number().min(1).max(20).optional().describe('Maximum results to return (default 10)'),
   }),
   execute: async ({ query, type, limit }) => {
     return withSpan('tool.recallMemory', async () => {
       const logger = getLogger().child({ tool: 'recallMemory' })
-      logger.info({ query, type, limit }, 'Searching memory')
+      const resolvedType = type ?? 'any'
+      const resolvedLimit = limit ?? 10
+      logger.info({ query, type: resolvedType, limit: resolvedLimit }, 'Searching memory')
 
       try {
         const store = getKnowledgeStore()
@@ -137,12 +139,12 @@ export const recallMemory = tool({
         let entities = result.value
 
         // Filter by type if specified
-        if (type !== 'any') {
-          entities = entities.filter(e => e.type === type)
+        if (resolvedType !== 'any') {
+          entities = entities.filter(e => e.type === resolvedType)
         }
 
         // Limit results
-        entities = entities.slice(0, limit)
+        entities = entities.slice(0, resolvedLimit)
 
         // Format for Claude
         const memories = entities.map(e => ({
@@ -243,18 +245,19 @@ Use this to understand relationships, like:
 - What coping strategies are linked to certain triggers`,
   inputSchema: z.object({
     entityName: z.string().describe('Name of the entity to find connections for'),
-    depth: z.number().min(1).max(3).default(1).describe('How many relationship hops to traverse (1-3)'),
+    depth: z.number().min(1).max(3).optional().describe('How many relationship hops to traverse (1-3, default 1)'),
   }),
   execute: async ({ entityName, depth }) => {
     return withSpan('tool.getRelatedEntities', async () => {
       const logger = getLogger().child({ tool: 'getRelatedEntities' })
-      logger.info({ entityName, depth }, 'Getting related entities')
+      const resolvedDepth = depth ?? 1
+      logger.info({ entityName, depth: resolvedDepth }, 'Getting related entities')
 
       try {
         const store = getKnowledgeStore()
         const ctx = getTraceContext()
 
-        const result = await store.getRelatedEntities(entityName, depth, ctx)
+        const result = await store.getRelatedEntities(entityName, resolvedDepth, ctx)
 
         if (!result.ok) {
           return { success: false, related: [], message: 'Query failed.' }
@@ -304,12 +307,13 @@ Use this when you learn something significant that should be remembered, like:
     type: z.enum(['person', 'place', 'event', 'emotion', 'trigger', 'coping_strategy', 'milestone', 'medication', 'note'])
       .describe('Category of information'),
     context: z.string().describe('Details about this information and why it matters'),
-    importance: z.number().min(0).max(1).default(0.7).describe('How important is this? 0-1 scale'),
+    importance: z.number().min(0).max(1).optional().describe('How important is this? 0-1 scale (default 0.7)'),
   }),
   execute: async ({ name, type, context, importance }) => {
     return withSpan('tool.saveNote', async () => {
       const logger = getLogger().child({ tool: 'saveNote' })
-      logger.info({ name, type, importance }, 'Saving note')
+      const resolvedImportance = importance ?? 0.7
+      logger.info({ name, type, importance: resolvedImportance }, 'Saving note')
 
       try {
         const store = getKnowledgeStore()
@@ -323,7 +327,7 @@ Use this when you learn something significant that should be remembered, like:
           lastMentioned: Date.now(),
           properties: {
             context,
-            importance,
+            importance: resolvedImportance,
             userId: ctx.userId,
             source: 'agent_observation',
           },
@@ -528,12 +532,13 @@ Different from logObservation in that this is for explicit relationship creation
     fromEntity: z.string().describe('Source entity name'),
     toEntity: z.string().describe('Target entity name'),
     relationshipType: z.string().describe('Type of relationship'),
-    strength: z.number().min(0).max(1).default(0.5).describe('Relationship strength 0-1'),
+    strength: z.number().min(0).max(1).optional().describe('Relationship strength 0-1 (default 0.5)'),
     properties: z.record(z.string(), z.unknown()).optional().describe('Additional properties'),
   }),
   execute: async ({ fromEntity, toEntity, relationshipType, strength, properties }) => {
     return withSpan('tool.createRelationship', async () => {
       const logger = getLogger().child({ tool: 'createRelationship' })
+      const resolvedStrength = strength ?? 0.5
       logger.info({ fromEntity, toEntity, relationshipType }, 'Creating relationship')
 
       try {
@@ -544,7 +549,7 @@ Different from logObservation in that this is for explicit relationship creation
           fromEntity,
           toEntity,
           relationshipType,
-          { strength, ...properties, createdAt: Date.now() },
+          { strength: resolvedStrength, ...properties, createdAt: Date.now() },
           ctx
         )
 

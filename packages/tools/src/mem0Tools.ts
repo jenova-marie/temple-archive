@@ -78,19 +78,20 @@ export const searchMemories = tool({
 - Past conversations and context`,
   inputSchema: z.object({
     query: z.string().describe('What to search for'),
-    limit: z.number().min(1).max(20).default(5).describe('Max results to return'),
+    limit: z.number().min(1).max(20).optional().describe('Max results to return (default 5)'),
   }),
   execute: async ({ query, limit }) => {
     return withSpan('tool.searchMemories', async () => {
       const logger = getLogger().child({ tool: 'searchMemories' })
-      logger.info({ query, limit }, 'Searching memories')
+      const resolvedLimit = limit ?? 5
+      logger.info({ query, limit: resolvedLimit }, 'Searching memories')
 
       try {
         const store = getMem0Store()
         const ctx = getTraceContext()
         const userId = getUserId()
 
-        const result = await store.searchMemory(query, { userId, limit }, ctx)
+        const result = await store.searchMemory(query, { userId, limit: resolvedLimit }, ctx)
 
         if (!result.ok) {
           logger.warn({ error: result.error }, 'Memory search failed')
@@ -140,12 +141,13 @@ export const listMemories = tool({
 - The user asks "what do you know about me?"
 - You need a complete picture, not just search results`,
   inputSchema: z.object({
-    limit: z.number().min(1).max(50).default(20).describe('Max memories to return'),
+    limit: z.number().min(1).max(50).optional().describe('Max memories to return (default 20)'),
   }),
   execute: async ({ limit }) => {
     return withSpan('tool.listMemories', async () => {
       const logger = getLogger().child({ tool: 'listMemories' })
-      logger.info({ limit }, 'Listing memories')
+      const resolvedLimit = limit ?? 20
+      logger.info({ limit: resolvedLimit }, 'Listing memories')
 
       try {
         const store = getMem0Store()
@@ -164,7 +166,7 @@ export const listMemories = tool({
         }
 
         // Apply limit
-        const memories = result.value.slice(0, limit).map((m) => ({
+        const memories = result.value.slice(0, resolvedLimit).map((m) => ({
           id: m.id,
           memory: m.memory,
           createdAt: m.createdAt,

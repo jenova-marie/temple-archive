@@ -113,16 +113,16 @@ Returns the top-K most semantically relevant hits with scores and metadata.`,
       ),
     scope: z
       .enum(['messages', 'groups'])
-      .default('groups')
+      .optional()
       .describe(
-        'Granular individual messages vs. grouped teaching units. Groups are usually more useful — they carry summaries.',
+        'Granular individual messages vs. grouped teaching units. Defaults to "groups" — usually more useful since they carry summaries.',
       ),
     limit: z
       .number()
       .int()
       .min(1)
       .max(12)
-      .default(6)
+      .optional()
       .describe('How many hits to retrieve (1–12, default 6).'),
     category: z
       .string()
@@ -138,14 +138,22 @@ Returns the top-K most semantically relevant hits with scores and metadata.`,
   execute: async ({ query, scope, limit, category, channelId }) => {
     return withSpan('tool.searchKnowledge', async () => {
       const logger = getLogger().child({ tool: 'searchKnowledge' })
-      logger.info({ query, scope, limit, category, channelId }, 'Searching wisdom archive')
+      // Defaults applied here rather than via Zod .default() — keeps the
+      // streamed args shape stable for clients that strict-check the
+      // argsText delta sequence (e.g., assistant-ui).
+      const resolvedScope = scope ?? 'groups'
+      const resolvedLimit = limit ?? 6
+      logger.info(
+        { query, scope: resolvedScope, limit: resolvedLimit, category, channelId },
+        'Searching wisdom archive',
+      )
 
       try {
         const store = getRagStore()
         const ctx = getTraceContext()
 
         const result = await store.query(
-          { query, scope, limit, category, channelId },
+          { query, scope: resolvedScope, limit: resolvedLimit, category, channelId },
           ctx,
         )
 
@@ -167,7 +175,7 @@ Returns the top-K most semantically relevant hits with scores and metadata.`,
           count: formatted.length,
           message:
             formatted.length > 0
-              ? `Found ${formatted.length} relevant ${scope === 'groups' ? 'teachings' : 'messages'}.`
+              ? `Found ${formatted.length} relevant ${resolvedScope === 'groups' ? 'teachings' : 'messages'}.`
               : `No archive matches for "${query}".`,
         }
       } catch (error) {
