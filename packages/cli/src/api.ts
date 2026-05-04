@@ -9,14 +9,18 @@ import { getApiUrl, getConversationId } from './config.js'
 import { getAccessToken, refreshAccessToken } from './auth.js'
 
 /**
- * Options for sendMessage
+ * Options for sendMessage. The local field stays `agent` so the
+ * --agent CLI flag and existing callers don't break; we map it to
+ * the canonical wire field `guide` at request build time.
  */
 export interface SendMessageOptions {
   agent?: string
 }
 
 /**
- * Vercel AI SDK UIMessage format for requests
+ * Vercel AI SDK UIMessage format for requests. `guide` is the
+ * canonical field name used by the agent-api chat schema and the
+ * /api/v1/guides discovery endpoint.
  */
 export interface ChatRequest {
   conversation_id: string
@@ -26,7 +30,7 @@ export interface ChatRequest {
     parts?: Array<{ type: 'text'; text: string }>
     content?: string
   }>
-  agent?: string
+  guide?: string
 }
 
 export interface MemoryTierStats {
@@ -143,7 +147,7 @@ export async function sendMessage(
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       },
     ],
-    agent: options.agent,
+    guide: options.agent,
   } satisfies ChatRequest)
 
   // Try once with the cached token; on 401 refresh and retry once before

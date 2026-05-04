@@ -25,7 +25,7 @@ program
   .command('chat')
   .description('Send a message to Siri')
   .argument('[message]', 'Message to send (omit for interactive mode)')
-  .option('-a, --agent <name>', 'Agent/persona to use', 'siri')
+  .option('-a, --agent <name>', 'Guide/persona to use (matches a row in system_prompts.name)', 'pippa')
   .option('-v, --verbose', 'Show conversation ID')
   .option('-m, --metrics', 'Show execution metrics (timing, tokens, etc.)')
   .action(async (message: string | undefined, options: ChatOptions) => {
@@ -40,7 +40,7 @@ program
 program
   .command('interactive', { isDefault: true })
   .description('Start an interactive chat session')
-  .option('-a, --agent <name>', 'Agent/persona to use', 'siri')
+  .option('-a, --agent <name>', 'Guide/persona to use (matches a row in system_prompts.name)', 'pippa')
   .option('-m, --metrics', 'Show execution metrics (timing, tokens, etc.)')
   .action(async (options: ChatOptions) => {
     await interactiveChat(options)
