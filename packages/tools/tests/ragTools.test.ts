@@ -1,11 +1,13 @@
 /**
- * searchKnowledge — sourceUrl construction.
+ * searchKnowledge — sourceUrl + members construction.
  *
- * Verifies the formatter attaches a Discord deep link to each hit when
- * a guild ID is configured, and gracefully degrades to null / channel-
- * only links when info is missing. The archivist prompt relies on
- * `sourceUrl` being either a complete URL or null — half-built links
- * would mislead the model.
+ * Verifies the formatter:
+ *   - builds Discord deep links from hydrated guild/channel/thread/msg
+ *     (no env var, no setter)
+ *   - routes thread messages through `thread_id`, not `channel_id`
+ *   - exposes a `members` array on group hits with per-member URLs so
+ *     the archivist can pinpoint the exact message a quote came from
+ *   - degrades gracefully (sourceUrl: null) when info is missing
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -20,7 +22,6 @@ import type {
 import {
   searchKnowledge,
   setRagToolStore,
-  setRagToolDiscordGuildId,
   setRagToolTraceContext,
   clearRagToolTraceContext,
 } from "../src/ragTools.js";
@@ -39,8 +40,10 @@ vi.mock("@siri/observability", () => ({
 
 const GUILD = "111111111111111111";
 const CHANNEL = "222222222222222222";
-const MESSAGE = "333333333333333333";
-const FIRST_MESSAGE = "444444444444444444";
+const THREAD = "555555555555555555";
+const MESSAGE_A = "333333333333333333";
+const MESSAGE_B = "666666666666666666";
+const MESSAGE_C = "777777777777777777";
 
 class FakeStore implements IRagStore {
   constructor(private readonly results: RagResult[]) {}
@@ -65,11 +68,21 @@ const TRACE: TraceContext = {
 
 const ARGS = { query: "what did Siri say about courage" };
 
+interface Member {
+  messageId: string | null;
+  position: number | null;
+  author: string | null;
+  content: string | null;
+  sourceUrl: string | null;
+}
+
 interface FormattedHit {
   id: string;
   type: string;
   channelId: string | null;
+  threadId: string | null;
   sourceUrl: string | null;
+  members?: Member[];
   [k: string]: unknown;
 }
 
@@ -81,143 +94,211 @@ interface ToolResponse {
 }
 
 async function run(): Promise<ToolResponse> {
-  // The Vercel AI SDK's tool().execute signature carries a second
-  // toolCallOptions arg; the runtime tolerates omission in our flow
-  // since none of the helpers consume it. Cast through unknown so the
-  // tests stay terse.
   const exec = searchKnowledge.execute as unknown as (
     a: typeof ARGS,
   ) => Promise<ToolResponse>;
   return await exec(ARGS);
 }
 
-describe("searchKnowledge — sourceUrl", () => {
+describe("searchKnowledge — sourceUrl + members", () => {
   beforeEach(() => {
     setRagToolTraceContext(TRACE);
-    setRagToolDiscordGuildId(undefined);
   });
 
   afterEach(() => {
     clearRagToolTraceContext();
   });
 
-  it("builds a deep link for a message hit when guildId is set", async () => {
-    setRagToolDiscordGuildId(GUILD);
+  it("builds a deep link for a channel-rooted message hit", async () => {
     setRagToolStore(
       new FakeStore([
         {
           scopeType: "message",
-          scopeId: MESSAGE,
+          scopeId: MESSAGE_A,
           score: 0.9,
-          payload: { channel_id: CHANNEL },
-          hydrated: { id: MESSAGE, content: "...", author: "siri" },
+          payload: {},
+          hydrated: {
+            id: MESSAGE_A,
+            channel_id: CHANNEL,
+            thread_id: null,
+            guild_id: GUILD,
+            content: "...",
+            author: "siri",
+          },
         },
       ]),
     );
 
     const out = await run();
-    expect(out.success).toBe(true);
     expect(out.results[0]?.sourceUrl).toBe(
-      `https://discord.com/channels/${GUILD}/${CHANNEL}/${MESSAGE}`,
+      `https://discord.com/channels/${GUILD}/${CHANNEL}/${MESSAGE_A}`,
+    );
+    expect(out.results[0]?.threadId).toBeNull();
+  });
+
+  it("routes thread messages through thread_id, not channel_id", async () => {
+    setRagToolStore(
+      new FakeStore([
+        {
+          scopeType: "message",
+          scopeId: MESSAGE_A,
+          score: 0.9,
+          payload: {},
+          hydrated: {
+            id: MESSAGE_A,
+            channel_id: CHANNEL,
+            thread_id: THREAD,
+            guild_id: GUILD,
+            content: "...",
+            author: "siri",
+          },
+        },
+      ]),
+    );
+
+    const out = await run();
+    // Discord URLs for thread messages use the thread snowflake as the
+    // channel segment — using channel_id would land on the parent forum.
+    expect(out.results[0]?.sourceUrl).toBe(
+      `https://discord.com/channels/${GUILD}/${THREAD}/${MESSAGE_A}`,
     );
   });
 
-  it("uses first_message_id for a group hit", async () => {
-    setRagToolDiscordGuildId(GUILD);
+  it("emits a members array with per-member URLs for group hits", async () => {
     setRagToolStore(
       new FakeStore([
         {
           scopeType: "group",
           scopeId: "11111111-1111-1111-1111-111111111111",
           score: 0.85,
-          payload: { channel_id: CHANNEL, summary: "teaching" },
+          payload: { summary: "teaching" },
           hydrated: {
             id: "11111111-1111-1111-1111-111111111111",
             channel_id: CHANNEL,
+            thread_id: null,
+            guild_id: GUILD,
             summary: "teaching",
-            first_message_id: FIRST_MESSAGE,
+            members: [
+              {
+                messageId: MESSAGE_A,
+                position: 0,
+                author: "siri",
+                content: "first line",
+                createdAt: "2025-01-01T00:00:00Z",
+                threadId: null,
+              },
+              {
+                messageId: MESSAGE_B,
+                position: 1,
+                author: "siri",
+                content: "the actual quoted line lives here",
+                createdAt: "2025-01-01T00:00:30Z",
+                threadId: null,
+              },
+              {
+                messageId: MESSAGE_C,
+                position: 2,
+                author: "jenova",
+                content: "tail",
+                createdAt: "2025-01-01T00:01:00Z",
+                threadId: null,
+              },
+            ],
           },
         },
       ]),
     );
 
     const out = await run();
-    expect(out.results[0]?.sourceUrl).toBe(
-      `https://discord.com/channels/${GUILD}/${CHANNEL}/${FIRST_MESSAGE}`,
+    const hit = out.results[0]!;
+    expect(hit.members).toHaveLength(3);
+    expect(hit.members?.[1]?.sourceUrl).toBe(
+      `https://discord.com/channels/${GUILD}/${CHANNEL}/${MESSAGE_B}`,
+    );
+    // Group-level fallback points at first member.
+    expect(hit.sourceUrl).toBe(
+      `https://discord.com/channels/${GUILD}/${CHANNEL}/${MESSAGE_A}`,
     );
   });
 
-  it("falls back to a channel-only link when group has no first_message_id", async () => {
-    setRagToolDiscordGuildId(GUILD);
+  it("uses thread_id when group lives in a thread", async () => {
     setRagToolStore(
       new FakeStore([
         {
           scopeType: "group",
           scopeId: "22222222-2222-2222-2222-222222222222",
           score: 0.7,
-          payload: { channel_id: CHANNEL, summary: "..." },
+          payload: { summary: "..." },
           hydrated: {
             id: "22222222-2222-2222-2222-222222222222",
             channel_id: CHANNEL,
+            thread_id: THREAD,
+            guild_id: GUILD,
             summary: "...",
-            first_message_id: null,
+            members: [
+              {
+                messageId: MESSAGE_A,
+                position: 0,
+                author: "siri",
+                content: "thread message",
+                createdAt: "2025-01-01T00:00:00Z",
+                threadId: THREAD,
+              },
+            ],
           },
         },
       ]),
     );
 
     const out = await run();
+    expect(out.results[0]?.threadId).toBe(THREAD);
+    expect(out.results[0]?.members?.[0]?.sourceUrl).toBe(
+      `https://discord.com/channels/${GUILD}/${THREAD}/${MESSAGE_A}`,
+    );
+  });
+
+  it("falls back to channel-only group URL when members array is empty", async () => {
+    setRagToolStore(
+      new FakeStore([
+        {
+          scopeType: "group",
+          scopeId: "33333333-3333-3333-3333-333333333333",
+          score: 0.6,
+          payload: { summary: "..." },
+          hydrated: {
+            id: "33333333-3333-3333-3333-333333333333",
+            channel_id: CHANNEL,
+            thread_id: null,
+            guild_id: GUILD,
+            summary: "...",
+            members: [],
+          },
+        },
+      ]),
+    );
+
+    const out = await run();
+    expect(out.results[0]?.members).toEqual([]);
     expect(out.results[0]?.sourceUrl).toBe(
       `https://discord.com/channels/${GUILD}/${CHANNEL}`,
     );
   });
 
-  it("returns sourceUrl null when guildId is unset", async () => {
-    setRagToolDiscordGuildId(undefined);
+  it("returns sourceUrl null when guild_id is missing", async () => {
     setRagToolStore(
       new FakeStore([
         {
           scopeType: "message",
-          scopeId: MESSAGE,
+          scopeId: MESSAGE_A,
           score: 0.9,
           payload: { channel_id: CHANNEL },
-          hydrated: { id: MESSAGE, content: "x" },
-        },
-      ]),
-    );
-
-    const out = await run();
-    expect(out.results[0]?.sourceUrl).toBeNull();
-  });
-
-  it("returns sourceUrl null when channelId is missing", async () => {
-    setRagToolDiscordGuildId(GUILD);
-    setRagToolStore(
-      new FakeStore([
-        {
-          scopeType: "message",
-          scopeId: MESSAGE,
-          score: 0.9,
-          payload: {},
-          hydrated: { id: MESSAGE, content: "x" },
-        },
-      ]),
-    );
-
-    const out = await run();
-    expect(out.results[0]?.sourceUrl).toBeNull();
-  });
-
-  it("treats empty-string guildId as unset", async () => {
-    setRagToolDiscordGuildId("   ");
-    setRagToolStore(
-      new FakeStore([
-        {
-          scopeType: "message",
-          scopeId: MESSAGE,
-          score: 0.9,
-          payload: { channel_id: CHANNEL },
-          hydrated: { id: MESSAGE, content: "x" },
+          hydrated: {
+            id: MESSAGE_A,
+            channel_id: CHANNEL,
+            thread_id: null,
+            guild_id: null,
+            content: "x",
+          },
         },
       ]),
     );

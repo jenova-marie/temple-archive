@@ -20,7 +20,6 @@ export {
   ragTools,
   getRagTools,
   setRagToolStore,
-  setRagToolDiscordGuildId,
   setRagToolTraceContext,
   clearRagToolTraceContext,
 } from "./ragTools.js";

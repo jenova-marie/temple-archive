@@ -337,12 +337,6 @@ const ragSchema = z.object({
   qdrantCollectionGroups: z.string().optional(),
   defaultScope: z.enum(["messages", "groups"]).optional(),
   defaultLimit: z.coerce.number().optional(),
-  /**
-   * Discord guild (server) snowflake. When set, the searchKnowledge tool
-   * builds source URLs of the form `discord.com/channels/{guild}/{channel}/{msg}`
-   * so the archivist can link quotes back to their original message.
-   */
-  discordGuildId: z.string().optional(),
 }).optional().transform((val) => ({
   enabled: val?.enabled ?? false,
   voyageModel: val?.voyageModel ?? "voyage-3.5",
@@ -350,7 +344,6 @@ const ragSchema = z.object({
   qdrantCollectionGroups: val?.qdrantCollectionGroups ?? "ninshubur_groups",
   defaultScope: val?.defaultScope ?? "groups",
   defaultLimit: val?.defaultLimit ?? 10,
-  discordGuildId: val?.discordGuildId,
 }))
 
 /**

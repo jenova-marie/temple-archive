@@ -33,15 +33,23 @@ async function hydrateMessage(
   db: NinshuburDb,
   messageId: string,
 ): Promise<Record<string, unknown> | null> {
+  // Join channels so callers can build a Discord URL of the form
+  // `discord.com/channels/{guild_id}/{thread_id ?? channel_id}/{messageId}`.
+  // For thread messages the URL channel segment is the thread_id, not
+  // the parent channel — Discord routes by it directly.
   const rows = await db.execute(
     sql`
       SELECT m.id::text AS id,
+             m.channel_id,
+             m.thread_id,
+             c.guild_id,
              u.username AS author,
              m.created_at AS created_at,
              COALESCE(NULLIF(m.content, ''),
                       m.message_snapshots->0->>'content',
                       '') AS content
       FROM messages m
+      JOIN channels c ON c.id = m.channel_id
       LEFT JOIN users u ON u.id = m.author_id
       WHERE m.id = ${messageId}
       LIMIT 1
@@ -54,29 +62,45 @@ async function hydrateGroup(
   db: NinshuburDb,
   groupId: string,
 ): Promise<Record<string, unknown> | null> {
-  // The correlated subquery yields the snowflake of the earliest message
-  // inside the group's channel/time window, so consumers can build a
-  // Discord deep link to the start of the conversation. Returns NULL
-  // when the source messages are unavailable (snapshot lag, deletion);
-  // callers fall back to a channel-only link.
+  // Pull the group's metadata plus its constituent messages, ordered by
+  // `message_group_members.position`. Member messages carry their own
+  // snowflake + content + thread_id so consumers can build per-member
+  // Discord URLs and pinpoint the exact line a quote came from rather
+  // than always landing at the group's first message.
   const rows = await db.execute(
     sql`
       SELECT g.id::text AS id,
              g.channel_id,
+             g.thread_id,
              g.summary,
              g.started_at,
              g.ended_at,
              g.message_count,
-             (
-               SELECT m.id::text
-               FROM messages m
-               WHERE m.channel_id = g.channel_id
-                 AND m.created_at >= g.started_at
-                 AND m.created_at <= g.ended_at
-               ORDER BY m.created_at ASC
-               LIMIT 1
-             ) AS first_message_id
+             c.guild_id,
+             COALESCE(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'messageId', m.id,
+                     'position', mgm.position,
+                     'author', u.username,
+                     'content', COALESCE(NULLIF(m.content, ''),
+                                         m.message_snapshots->0->>'content',
+                                         ''),
+                     'createdAt', m.created_at,
+                     'threadId', m.thread_id
+                   )
+                   ORDER BY mgm.position ASC
+                 )
+                 FROM message_group_members mgm
+                 JOIN messages m ON m.id = mgm.message_id
+                 LEFT JOIN users u ON u.id = m.author_id
+                 WHERE mgm.group_id = g.id
+               ),
+               '[]'::json
+             ) AS members
       FROM message_groups g
+      JOIN channels c ON c.id = g.channel_id
       WHERE g.id = ${groupId}::uuid
       LIMIT 1
     `,

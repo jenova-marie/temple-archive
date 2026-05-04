@@ -18,7 +18,6 @@ import type { IRagStore, RagResult } from '@siri/rag'
 
 let ragStoreInstance: IRagStore | null = null
 let currentTraceContext: TraceContext | null = null
-let discordGuildId: string | undefined
 
 /**
  * Set the RAG store instance.
@@ -26,16 +25,6 @@ let discordGuildId: string | undefined
  */
 export function setRagToolStore(store: IRagStore): void {
   ragStoreInstance = store
-}
-
-/**
- * Set the Discord guild snowflake used to build source URLs in RAG
- * results. Called once during container initialization. When unset,
- * results carry `sourceUrl: null` and the archivist falls back to
- * name-only attribution.
- */
-export function setRagToolDiscordGuildId(guildId: string | undefined): void {
-  discordGuildId = guildId && guildId.trim().length > 0 ? guildId : undefined
 }
 
 /**
@@ -75,49 +64,94 @@ function asNonEmptyString(value: unknown): string | null {
 }
 
 /**
- * Build a Discord deep link if we have enough info, otherwise null.
- * Falls back to a channel-level link when the message snowflake is
- * unknown (e.g., group hits where the first-message lookup returned
- * NULL).
+ * Build a Discord deep link of the form
+ * `https://discord.com/channels/{guild}/{thread ?? channel}/{message?}`.
+ * For thread messages Discord routes by the thread snowflake, not the
+ * parent channel — using the thread_id is what makes the URL land at
+ * the right place. Returns null if we lack guild + channel info.
  */
 function buildSourceUrl(
-  guildId: string | undefined,
+  guildId: string | null,
   channelId: string | null,
+  threadId: string | null,
   messageId: string | null,
 ): string | null {
-  if (!guildId || !channelId) return null
+  const channelSegment = threadId ?? channelId
+  if (!guildId || !channelSegment) return null
   return messageId
-    ? `https://discord.com/channels/${guildId}/${channelId}/${messageId}`
-    : `https://discord.com/channels/${guildId}/${channelId}`
+    ? `https://discord.com/channels/${guildId}/${channelSegment}/${messageId}`
+    : `https://discord.com/channels/${guildId}/${channelSegment}`
+}
+
+/**
+ * Raw member rows come in as JSON from the hydrateGroup aggregation.
+ * Nothing in here is trusted — re-validate every field before exposing
+ * it to the model.
+ */
+interface RawMember {
+  messageId?: unknown
+  position?: unknown
+  author?: unknown
+  content?: unknown
+  createdAt?: unknown
+  threadId?: unknown
 }
 
 /**
  * Format a single hit for the model. Prefer hydrated source row over
  * the lighter Qdrant payload when available.
+ *
+ * Group hits emit a `members` array so the archivist can pinpoint the
+ * specific message a quote came from rather than always citing the
+ * first message of the group. Each member carries its own sourceUrl.
  */
-function formatResult(
-  r: RagResult,
-  guildId: string | undefined,
-): Record<string, unknown> {
+function formatResult(r: RagResult): Record<string, unknown> {
   if (r.scopeType === 'group') {
+    const guildId = asNonEmptyString(r.hydrated?.guild_id)
     const channelId =
       asNonEmptyString(r.hydrated?.channel_id) ??
       asNonEmptyString(r.payload.channel_id)
-    const firstMessageId = asNonEmptyString(r.hydrated?.first_message_id)
+    const groupThreadId = asNonEmptyString(r.hydrated?.thread_id)
+    const rawMembers = Array.isArray(r.hydrated?.members)
+      ? (r.hydrated?.members as RawMember[])
+      : []
+    const members = rawMembers.map((m) => {
+      const messageId = asNonEmptyString(m.messageId)
+      const memberThreadId = asNonEmptyString(m.threadId) ?? groupThreadId
+      return {
+        messageId,
+        position: typeof m.position === 'number' ? m.position : null,
+        author: asNonEmptyString(m.author),
+        content: typeof m.content === 'string' ? m.content : null,
+        createdAt: m.createdAt ?? null,
+        sourceUrl: buildSourceUrl(guildId, channelId, memberThreadId, messageId),
+      }
+    })
+    const firstMember = members[0] ?? null
     return {
       id: r.scopeId,
       type: 'teaching',
       score: r.score,
       summary: r.payload.summary ?? r.hydrated?.summary ?? null,
       channelId,
+      threadId: groupThreadId,
       startedAt: r.payload.started_at ?? r.hydrated?.started_at ?? null,
       endedAt: r.payload.ended_at ?? r.hydrated?.ended_at ?? null,
       messageCount: r.payload.message_count ?? r.hydrated?.message_count ?? null,
       categorySlugs: r.payload.category_slugs ?? null,
-      sourceUrl: buildSourceUrl(guildId, channelId, firstMessageId),
+      members,
+      // Group-level URL points at the first member as a fallback —
+      // archivist should prefer the specific member's sourceUrl when
+      // citing a particular line.
+      sourceUrl:
+        firstMember?.sourceUrl ?? buildSourceUrl(guildId, channelId, groupThreadId, null),
     }
   }
-  const channelId = asNonEmptyString(r.payload.channel_id)
+  const guildId = asNonEmptyString(r.hydrated?.guild_id)
+  const channelId =
+    asNonEmptyString(r.hydrated?.channel_id) ??
+    asNonEmptyString(r.payload.channel_id)
+  const threadId = asNonEmptyString(r.hydrated?.thread_id)
   const messageId = asNonEmptyString(r.hydrated?.id) ?? asNonEmptyString(r.scopeId)
   return {
     id: r.scopeId,
@@ -127,8 +161,9 @@ function formatResult(
     author: r.hydrated?.author ?? null,
     createdAt: r.hydrated?.created_at ?? r.payload.created_at ?? null,
     channelId,
+    threadId,
     categorySlugs: r.payload.category_slugs ?? null,
-    sourceUrl: buildSourceUrl(guildId, channelId, messageId),
+    sourceUrl: buildSourceUrl(guildId, channelId, threadId, messageId),
   }
 }
 
@@ -209,7 +244,7 @@ Returns the top-K most semantically relevant hits with scores and metadata.`,
           }
         }
 
-        const formatted = result.value.map((r) => formatResult(r, discordGuildId))
+        const formatted = result.value.map(formatResult)
         logger.info({ count: formatted.length }, 'Archive hits returned')
 
         return {

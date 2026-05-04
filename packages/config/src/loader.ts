@@ -148,9 +148,6 @@ const ENV_VAR_MAPPING: Record<string, string> = {
   MEMORY_REFLECTOR_INSIGHT_LIMIT: "memory.reflector.insightLimit",
   MEMORY_REFLECTOR_ENTITY_LIMIT: "memory.reflector.entityLimit",
   MEMORY_REFLECTOR_MIN_CONFIDENCE: "memory.reflector.minConfidence",
-
-  // RAG (read-only consumer of ninshubur)
-  NINSHUBUR_DISCORD_GUILD_ID: "rag.discordGuildId",
 }
 
 /**
