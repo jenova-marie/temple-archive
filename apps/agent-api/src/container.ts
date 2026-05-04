@@ -377,11 +377,10 @@ export function createContainer(options: ContainerConfig = {}): Container {
   }
 
   // Create memory orchestrator
-  // ENABLE_L3_QUERIES controls Neo4j entity lookups during retrieval (default: true when L5 disabled)
-  // When L5 is enabled, L3 queries are disabled by default
-  const l3QueriesEnabled = l5MemoryEnabled
-    ? process.env.ENABLE_L3_QUERIES === "true"
-    : process.env.ENABLE_L3_QUERIES !== "false";
+  // ENABLE_L3_QUERIES controls Neo4j entity lookups during retrieval.
+  // Defaults to OFF — L5 Mem0 is the primary memory path for most deployments.
+  // Set ENABLE_L3_QUERIES=true to opt in to legacy Neo4j entity retrieval.
+  const l3QueriesEnabled = process.env.ENABLE_L3_QUERIES === "true";
 
   if (!l3QueriesEnabled) {
     logger.info("L3 Neo4j queries disabled");
@@ -591,12 +590,11 @@ export function createContainer(options: ContainerConfig = {}): Container {
     );
   }
 
-  // Create entity extractor for knowledge graph
-  // Controlled by ENABLE_ENTITY_EXTRACTION master switch and ENTITY_EXTRACTION_MODE for fine-tuning
-  // When L5 (Mem0) is enabled, entity extraction is disabled by default (Mem0 handles fact extraction)
-  const entityExtractionEnabled = l5MemoryEnabled
-    ? process.env.ENABLE_ENTITY_EXTRACTION === "true"
-    : process.env.ENABLE_ENTITY_EXTRACTION !== "false";
+  // Create entity extractor for knowledge graph (Neo4j L3).
+  // Defaults to OFF — L5 Mem0 handles fact extraction for most deployments.
+  // Set ENABLE_ENTITY_EXTRACTION=true to opt in to legacy Neo4j extraction.
+  // ENTITY_EXTRACTION_MODE further fine-tunes once enabled.
+  const entityExtractionEnabled = process.env.ENABLE_ENTITY_EXTRACTION === "true";
   let entityExtractor: EntityExtractor | undefined;
   // If master switch is off or L5 handles extraction, treat as mode=none
   const extractionMode = entityExtractionEnabled
@@ -673,16 +671,21 @@ export function createContainer(options: ContainerConfig = {}): Container {
     logger.info("Entity extraction disabled (no ANTHROPIC_API_KEY)");
   }
 
-  // Memory Context Builder for pre-agent memory injection
-  // USE_L3_RETRIEVAL=true uses new L3 Memory retrieval system
-  // Otherwise falls back to legacy MEMORY_CONTEXT_MODE (default: 1 = template)
+  // Memory Context Builder for pre-agent memory injection.
+  //
+  // USE_L3_RETRIEVAL=true uses the new L3 Memory retrieval system.
+  // Otherwise falls back to legacy MEMORY_CONTEXT_MODE (default: 0 = off).
+  //
+  // Both paths are skipped automatically when MemoryPromptStore is configured
+  // (MEMORY_PROMPT_ENABLED=true) — that's the L5-driven, Haiku-narrativized,
+  // Redis-cached replacement for this entire subsystem. See Pipeline.ts.
   let memoryContextBuilder:
     | MemoryContextBuilder
     | L3MemoryContextProvider
     | undefined;
   const useL3Retrieval = process.env.USE_L3_RETRIEVAL === "true";
   const memoryContextMode = parseInt(
-    process.env.MEMORY_CONTEXT_MODE || "1",
+    process.env.MEMORY_CONTEXT_MODE || "0",
     10,
   ) as MemoryContextMode;
 

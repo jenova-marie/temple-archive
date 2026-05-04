@@ -51,8 +51,8 @@ Master switches for all major system features. Set to `false` to completely disa
 
 | Feature | Env Var | Default | Description |
 |---------|---------|---------|-------------|
-| Entity Extraction | `ENABLE_ENTITY_EXTRACTION` | `true` | Extract people, places, events from conversations |
-| L3 Extraction | `USE_L3_EXTRACTION` | `true` | Use rich Cadillac schema with observations |
+| Entity Extraction | `ENABLE_ENTITY_EXTRACTION` | `false` | Extract people, places, events into Neo4j L3 (opt-in legacy path) |
+| L3 Extraction | `USE_L3_EXTRACTION` | `true` | Use rich Cadillac schema with observations (only effective when entity extraction is enabled) |
 | L3 Retrieval | `USE_L3_RETRIEVAL` | `false` | Use new MemoryRetrievalService with Deep Memory |
 | Deep Memory | `DEEP_MEMORY_ENABLED` | `true` | Enrich entities with original conversation context |
 | Memory Bootstrap | `MEMORY_BOOTSTRAP_ENABLED` | `false` | Prime conversations with related past memories |
@@ -369,7 +369,7 @@ The memory system is the core of Siri's knowledge and context management.
 
 | Setting | Type | Default | Env Var | Description |
 |---------|------|---------|---------|-------------|
-| `contextMode` | number (0-3) | `1` | `MEMORY_CONTEXT_MODE` | Pre-agent memory contextualization mode. |
+| `contextMode` | number (0-3) | `0` | `MEMORY_CONTEXT_MODE` | Legacy L3 (Neo4j) pre-agent memory injection. `0=off, 1=template, 2=haiku, 3=hybrid`. Skipped automatically when `MEMORY_PROMPT_ENABLED=true` (the L5/Mem0 replacement path). Default `0` since most deployments use L5. |
 | `toolAccess` | `"off"` \| `"read"` \| `"write"` \| `"full"` | `"read"` | `MEMORY_TOOL_ACCESS` | Memory tools available to Claude. |
 
 **Context Modes:**
@@ -601,7 +601,7 @@ auth:
     audience: ${ZITADEL_AUDIENCE}
 
 memory:
-  contextMode: 1
+  contextMode: 0
   toolAccess: read
 
   entityExtraction:

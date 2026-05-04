@@ -60,7 +60,7 @@ export interface Subgraph {
  * Default configuration
  */
 export const DEFAULT_CONTEXT_CONFIG: MemoryContextBuilderConfig = {
-  mode: 1,
+  mode: 0,
   maxEntities: 10,
   maxRelationships: 15,
   traversalDepth: 2,

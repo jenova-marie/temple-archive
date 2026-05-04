@@ -100,7 +100,9 @@ export class MemoryOrchestrator {
       semanticSearchDays: 90,
       semanticScoreThreshold: 0.7,
       l3EntityLimit: 20,
-      enableL3Queries: true,
+      // L3 (Neo4j) queries default off. Most deployments use L5 Mem0 as
+      // primary memory; L3 must be explicitly opted in via container config.
+      enableL3Queries: false,
       enableL5Memory: false,
       l5MemoryLimit: 10,
       ...config,

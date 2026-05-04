@@ -64,7 +64,7 @@ describe("loadConfig", () => {
       expect(config.app.nodeEnv).toBe("development")
       expect(config.app.useStubs).toBe(true)
       expect(config.redis.url).toBe("redis://localhost:6379")
-      expect(config.memory.contextMode).toBe(1)
+      expect(config.memory.contextMode).toBe(0)
       expect(config.memory.toolAccess).toBe("read")
     })
   })

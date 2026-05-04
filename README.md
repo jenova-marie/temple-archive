@@ -478,11 +478,11 @@ ENABLE_L5_MEMORY=false       # Enable Mem0 as primary memory
 MEM0_API_URL=http://localhost:8000  # Mem0 FastAPI endpoint
 L5_MEMORY_LIMIT=10           # Max memories to retrieve
 
-# Feature Flags (auto-disabled when L5 enabled)
-ENABLE_L3_QUERIES=true       # Neo4j entity lookups
-ENABLE_ENTITY_EXTRACTION=true # LLM entity extraction
-ENABLE_PREFLIGHT_EMBEDDINGS=true  # Query embeddings for L4
-ENABLE_POSTFLIGHT_EMBEDDINGS=true # Message embeddings for L4
+# Feature Flags (legacy L3/L4 — opt-in; default off in L5-primary deployments)
+ENABLE_L3_QUERIES=false           # Neo4j entity lookups
+ENABLE_ENTITY_EXTRACTION=false    # LLM entity extraction to Neo4j
+ENABLE_PREFLIGHT_EMBEDDINGS=false # Query embeddings for L4 semantic search
+ENABLE_POSTFLIGHT_EMBEDDINGS=true # Message embeddings for L4 storage
 
 # Observability
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
@@ -495,7 +495,7 @@ CRISIS_THRESHOLD_HIGH=7
 CRISIS_THRESHOLD_CRITICAL=9
 
 # Active Memory System
-MEMORY_CONTEXT_MODE=1        # 0=off, 1=template, 2=haiku, 3=hybrid
+MEMORY_CONTEXT_MODE=0        # 0=off, 1=template, 2=haiku, 3=hybrid (legacy L3; auto-skipped when MEMORY_PROMPT_ENABLED=true)
 MEMORY_TOOL_ACCESS=read      # off, read, write, full
 
 # Entity Extraction

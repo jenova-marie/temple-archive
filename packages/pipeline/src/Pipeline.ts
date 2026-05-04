@@ -1273,8 +1273,11 @@ export class Pipeline {
     let queryEmbedding: number[] | null = null;
     let preprocessedQuery: string | undefined = undefined;
 
+    // Preflight embeddings (query embedding for L4 semantic search) default OFF.
+    // Most deployments use L5 Mem0 for retrieval — preflight embedding is a
+    // legacy L4 path; opt in with ENABLE_PREFLIGHT_EMBEDDINGS=true.
     if (
-      process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== "false" &&
+      process.env.ENABLE_PREFLIGHT_EMBEDDINGS === "true" &&
       this.deps.embedding
     ) {
       // Get preprocessing config from env
@@ -2295,9 +2298,9 @@ export class Pipeline {
           );
         }
 
-        // Build semantic search diagnostics
+        // Build semantic search diagnostics (default OFF — opt in via env)
         const preflightEmbeddingsEnabled =
-          process.env.ENABLE_PREFLIGHT_EMBEDDINGS !== "false";
+          process.env.ENABLE_PREFLIGHT_EMBEDDINGS === "true";
         const semanticSearch: SemanticSearchDiagnostics = {
           query: input.message,
           preprocessedQuery,

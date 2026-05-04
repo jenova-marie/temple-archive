@@ -268,7 +268,7 @@ const memorySchema = z.object({
   compaction: compactionSchema,
   reflector: memoryReflectorSchema,
 }).optional().transform((val) => ({
-  contextMode: val?.contextMode ?? 1,
+  contextMode: val?.contextMode ?? 0,
   toolAccess: val?.toolAccess ?? "read",
   entityExtraction: val?.entityExtraction ?? {
     mode: "all",

@@ -297,15 +297,15 @@ const result = await repo.findActive('siri')
 
 ## Feature Flags
 
-Many features can be toggled via environment variables. When L5 is enabled, some L3/L4 features are auto-disabled:
+Many features can be toggled via environment variables. The legacy L3/L4 toggles are now opt-in (default false) — most deployments use L5 Mem0 as the primary memory path:
 
-| Flag | Default | When L5 Enabled | Purpose |
-|------|---------|-----------------|---------|
-| `ENABLE_L5_MEMORY` | false | - | Master switch for Mem0 L5 |
-| `ENABLE_L3_QUERIES` | true | false | Neo4j entity lookups |
-| `ENABLE_ENTITY_EXTRACTION` | true | false | LLM entity extraction to Neo4j |
-| `ENABLE_PREFLIGHT_EMBEDDINGS` | true | false | Query embeddings for semantic search |
-| `ENABLE_POSTFLIGHT_EMBEDDINGS` | true | false | Message embeddings for L4 storage |
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `ENABLE_L5_MEMORY` | false | Master switch for Mem0 L5 (set true for typical deployments) |
+| `ENABLE_L3_QUERIES` | false | Neo4j entity lookups (legacy) |
+| `ENABLE_ENTITY_EXTRACTION` | false | LLM entity extraction to Neo4j (legacy) |
+| `ENABLE_PREFLIGHT_EMBEDDINGS` | false | Query embeddings for L4 semantic search (legacy) |
+| `ENABLE_POSTFLIGHT_EMBEDDINGS` | true | Message embeddings for L4 storage |
 | `ENABLE_CRISIS_DETECTION` | true | true | Keyword crisis detection |
 | `ENABLE_DEEP_CRISIS_EVAL` | true | true | LLM-based crisis analysis |
 | `ENABLE_SAFETY_VALIDATION` | true | true | PII/medical/enabling detection |
