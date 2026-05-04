@@ -62,6 +62,7 @@ describe('useMeetingGuideRuntime', () => {
       isAuthenticated: true,
       isLoading: false,
     })
+    useChatStore.setState({ selectedGuideId: 'sky' })
 
     renderHook(() => useMeetingGuideRuntime())
 
@@ -70,8 +71,13 @@ describe('useMeetingGuideRuntime', () => {
     const config = transportConstructorCalls[0]
     expect(config.api).toContain('/api/v1/chat')
     expect(config.headers.Authorization).toBe(`Bearer ${mockAccessToken}`)
-    expect(config.body.guide).toBe('sky')
-    expect(config.body.conversation_id).toBeDefined()
+    // Guide is read fresh from the store on every send via
+    // prepareSendMessagesRequest, so exercise that callback.
+    const built = config.prepareSendMessagesRequest({
+      messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+    })
+    expect(built.body.guide).toBe('sky')
+    expect(built.body.conversation_id).toBeDefined()
   })
 
   it('uses VITE_AUTH_CHAT_API_URL environment variable', () => {
@@ -93,7 +99,7 @@ describe('useMeetingGuideRuntime', () => {
     expect(config.api).toMatch(/\/api\/v1\/chat$/)
   })
 
-  it('includes selected guide in request body', () => {
+  it('includes selected guide in request body — and reflects live store changes', () => {
     useAuthStore.setState({
       user: { access_token: mockAccessToken } as any,
       isAuthenticated: true,
@@ -103,7 +109,22 @@ describe('useMeetingGuideRuntime', () => {
     renderHook(() => useMeetingGuideRuntime())
 
     expect(transportConstructorCalls.length).toBeGreaterThan(0)
-    expect(transportConstructorCalls[0].body.guide).toBe('siri')
+    const config = transportConstructorCalls[0]
+
+    // Fresh send picks up current store value
+    const firstSend = config.prepareSendMessagesRequest({
+      messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+    })
+    expect(firstSend.body.guide).toBe('siri')
+
+    // Switch guide AFTER the transport was constructed — the next send must
+    // use the updated value, not the closure-captured one. This is the
+    // dropdown-doesn't-take-effect bug we hit in production.
+    useChatStore.setState({ selectedGuideId: 'archivist' })
+    const secondSend = config.prepareSendMessagesRequest({
+      messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi 2' }] }],
+    })
+    expect(secondSend.body.guide).toBe('archivist')
   })
 
   it('generates unique conversation ID per hook instance', () => {
@@ -112,13 +133,20 @@ describe('useMeetingGuideRuntime', () => {
       isAuthenticated: true,
     })
 
-    renderHook(() => useMeetingGuideRuntime())
-    const firstConversationId = transportConstructorCalls[0].body.conversation_id
+    const first = renderHook(() => useMeetingGuideRuntime())
+    const firstSend = transportConstructorCalls[0].prepareSendMessagesRequest({
+      messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+    })
+    const firstConversationId = firstSend.body.conversation_id
 
-    // Clear and render again
+    // Clear and render again as a separate hook instance
     transportConstructorCalls.length = 0
+    first.unmount()
     renderHook(() => useMeetingGuideRuntime())
-    const secondConversationId = transportConstructorCalls[0].body.conversation_id
+    const secondSend = transportConstructorCalls[0].prepareSendMessagesRequest({
+      messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }],
+    })
+    const secondConversationId = secondSend.body.conversation_id
 
     // Each hook instance should have a different conversation ID
     expect(firstConversationId).not.toBe(secondConversationId)

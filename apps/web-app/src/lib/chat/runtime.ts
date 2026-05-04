@@ -16,11 +16,16 @@ const CHAT_API_URL =
 
 export function useMeetingGuideRuntime() {
   const user = useAuthStore((s) => s.user);
-  const selectedGuideId = useChatStore((s) => s.selectedGuideId);
 
   // Generate a unique conversation ID per page load
   const [conversationId] = useState(() => crypto.randomUUID());
 
+  // Build the transport ONCE per access-token + conversation. The selected
+  // guide is read fresh from the store on every send rather than captured
+  // by useMemo's closure — useChatRuntime caches the transport reference
+  // internally, so a stale closure would silently keep sending the old
+  // guide value even after the user picked a different one in the
+  // dropdown.
   const transport = useMemo(() => {
     const accessToken = useAuthStore.getState().getAccessToken();
 
@@ -34,25 +39,23 @@ export function useMeetingGuideRuntime() {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
-      body: {
-        guide: selectedGuideId,
-        conversation_id: conversationId,
-      },
       // Only send the latest user message - server fetches history from PostgreSQL
       // This reduces payload size and makes the server the source of truth
       prepareSendMessagesRequest: ({ messages }) => {
+        // Read the live guide selection at send time, not closure time.
+        const currentGuide = useChatStore.getState().selectedGuideId;
         // Find the last user message to send
         const lastUserMessage = messages.filter((m) => m.role === "user").slice(-1);
         return {
           body: {
             messages: lastUserMessage,
-            guide: selectedGuideId,
+            guide: currentGuide,
             conversation_id: conversationId,
           },
         };
       },
     });
-  }, [user?.access_token, selectedGuideId, conversationId]);
+  }, [user?.access_token, conversationId]);
 
   return useChatRuntime({ transport });
 }
