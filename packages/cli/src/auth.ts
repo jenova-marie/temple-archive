@@ -13,6 +13,30 @@
 import { Buffer } from 'node:buffer'
 import { clearAuth, getAuth, setAuth, type AuthTokens } from './config.js'
 
+/**
+ * Debug logging — gated behind SIRI_DEBUG_AUTH=1 or DEBUG=siri:auth.
+ * Writes to stderr so stdout JSON output stays clean when the CLI is
+ * piped. Tokens, device codes, and refresh tokens are redacted to
+ * tail-4 characters.
+ */
+const DEBUG_AUTH =
+  process.env.SIRI_DEBUG_AUTH === '1' ||
+  process.env.SIRI_DEBUG_AUTH === 'true' ||
+  (process.env.DEBUG?.split(/[\s,]+/).includes('siri:auth') ?? false)
+
+function debug(label: string, data?: Record<string, unknown>): void {
+  if (!DEBUG_AUTH) return
+  const payload = data ? ' ' + JSON.stringify(data) : ''
+  process.stderr.write(`[auth] ${label}${payload}\n`)
+}
+
+/** Redact a secret to its last 4 characters with a length hint. */
+function redact(secret: string | null | undefined): string {
+  if (!secret) return '<none>'
+  if (secret.length <= 4) return `<${secret.length}ch>`
+  return `…${secret.slice(-4)} (${secret.length}ch)`
+}
+
 export interface AuthConfig {
   issuer: string
   clientId: string
@@ -30,6 +54,19 @@ export const AUTH_CONFIG: AuthConfig = {
   // `offline_access` is what gets us the refresh_token.
   scope: process.env.SIRI_AUTH0_SCOPE ?? 'openid profile email offline_access',
 }
+
+debug('AUTH_CONFIG resolved', {
+  issuer: AUTH_CONFIG.issuer,
+  clientId: AUTH_CONFIG.clientId,
+  audience: AUTH_CONFIG.audience,
+  scope: AUTH_CONFIG.scope,
+  envOverrides: {
+    SIRI_AUTH0_ISSUER: !!process.env.SIRI_AUTH0_ISSUER,
+    SIRI_AUTH0_CLIENT_ID: !!process.env.SIRI_AUTH0_CLIENT_ID,
+    SIRI_AUTH0_AUDIENCE: !!process.env.SIRI_AUTH0_AUDIENCE,
+    SIRI_AUTH0_SCOPE: !!process.env.SIRI_AUTH0_SCOPE,
+  },
+})
 
 export interface DeviceCodeResponse {
   device_code: string
@@ -67,13 +104,21 @@ function deviceCodeUrl(): string {
  * verification URL on whatever device has a browser handy.
  */
 export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
+  const url = deviceCodeUrl()
   const body = new URLSearchParams({
     client_id: AUTH_CONFIG.clientId,
     audience: AUTH_CONFIG.audience,
     scope: AUTH_CONFIG.scope,
   })
 
-  const response = await fetch(deviceCodeUrl(), {
+  debug('requestDeviceCode → POST', {
+    url,
+    clientId: AUTH_CONFIG.clientId,
+    audience: AUTH_CONFIG.audience,
+    scope: AUTH_CONFIG.scope,
+  })
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
@@ -81,12 +126,23 @@ export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
 
   if (!response.ok) {
     const text = await response.text()
+    debug('requestDeviceCode ← error', { status: response.status, body: text })
     throw new Error(
       `Device code request failed (${response.status}): ${text}`,
     )
   }
 
-  return response.json() as Promise<DeviceCodeResponse>
+  const json = (await response.json()) as DeviceCodeResponse
+  debug('requestDeviceCode ← ok', {
+    status: response.status,
+    user_code: json.user_code,
+    verification_uri: json.verification_uri,
+    verification_uri_complete: json.verification_uri_complete,
+    device_code: redact(json.device_code),
+    expires_in: json.expires_in,
+    interval: json.interval,
+  })
+  return json
 }
 
 export interface PollOptions {
@@ -106,17 +162,31 @@ export async function pollForToken(
 ): Promise<AuthTokens> {
   let intervalSec = device.interval
   const deadline = Date.now() + device.expires_in * 1000
+  let attempt = 0
+
+  debug('pollForToken → start', {
+    intervalSec,
+    expires_in: device.expires_in,
+    deadline: new Date(deadline).toISOString(),
+  })
 
   while (Date.now() < deadline) {
     if (options.signal?.aborted) throw new Error('Login cancelled')
     options.onTick?.()
 
     await sleep(intervalSec * 1000, options.signal)
+    attempt += 1
 
     const body = new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
       device_code: device.device_code,
       client_id: AUTH_CONFIG.clientId,
+    })
+
+    debug('pollForToken → POST', {
+      attempt,
+      intervalSec,
+      remainingMs: deadline - Date.now(),
     })
 
     const response = await fetch(tokenUrl(), {
@@ -127,6 +197,16 @@ export async function pollForToken(
 
     if (response.ok) {
       const token = (await response.json()) as TokenResponse
+      debug('pollForToken ← success', {
+        attempt,
+        status: response.status,
+        token_type: token.token_type,
+        expires_in: token.expires_in,
+        scope: token.scope,
+        hasIdToken: !!token.id_token,
+        hasRefreshToken: !!token.refresh_token,
+        accessToken: redact(token.access_token),
+      })
       return tokensFromResponse(token)
     }
 
@@ -135,8 +215,19 @@ export async function pollForToken(
       | null
 
     if (!error) {
+      debug('pollForToken ← non-JSON error', {
+        attempt,
+        status: response.status,
+      })
       throw new Error(`Token poll failed (${response.status})`)
     }
+
+    debug('pollForToken ← error', {
+      attempt,
+      status: response.status,
+      error: error.error,
+      description: error.error_description,
+    })
 
     switch (error.error) {
       case 'authorization_pending':
@@ -144,6 +235,7 @@ export async function pollForToken(
       case 'slow_down':
         // Per RFC 8628: increase polling interval by 5s.
         intervalSec += 5
+        debug('pollForToken slow_down → bumped interval', { intervalSec })
         continue
       case 'expired_token':
         throw new Error('Device code expired before authorization completed')
@@ -174,12 +266,22 @@ export function persistTokens(tokens: AuthTokens): AuthTokens {
  * Caches the JWT payload so `whoami` doesn't need a network call.
  */
 function tokensFromResponse(response: TokenResponse): AuthTokens {
-  return {
+  const tokens: AuthTokens = {
     accessToken: response.access_token,
     refreshToken: response.refresh_token ?? null,
     expiresAt: Date.now() + response.expires_in * 1000,
     claims: decodeJwtClaims(response.id_token ?? response.access_token),
   }
+  debug('tokensFromResponse', {
+    expiresAt: new Date(tokens.expiresAt).toISOString(),
+    hasRefreshToken: !!tokens.refreshToken,
+    refreshToken: redact(tokens.refreshToken),
+    claimKeys: tokens.claims ? Object.keys(tokens.claims) : null,
+    sub: tokens.claims?.sub,
+    aud: tokens.claims?.aud,
+    iss: tokens.claims?.iss,
+  })
+  return tokens
 }
 
 /**
@@ -206,8 +308,17 @@ export function decodeJwtClaims(jwt: string): Record<string, unknown> | null {
 export async function refreshAccessToken(): Promise<AuthTokens> {
   const current = getAuth()
   if (!current?.refreshToken) {
+    debug('refreshAccessToken → no refresh token in store')
     throw new Error('No refresh token available — run `siri login` again')
   }
+
+  debug('refreshAccessToken → POST', {
+    url: tokenUrl(),
+    clientId: AUTH_CONFIG.clientId,
+    refreshToken: redact(current.refreshToken),
+    currentExpiresAt: new Date(current.expiresAt).toISOString(),
+    nowMs: Date.now(),
+  })
 
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -223,6 +334,7 @@ export async function refreshAccessToken(): Promise<AuthTokens> {
 
   if (!response.ok) {
     const text = await response.text()
+    debug('refreshAccessToken ← error', { status: response.status, body: text })
     throw new Error(`Token refresh failed (${response.status}): ${text}`)
   }
 
@@ -233,6 +345,11 @@ export async function refreshAccessToken(): Promise<AuthTokens> {
     ...tokensFromResponse(token),
     refreshToken: token.refresh_token ?? current.refreshToken,
   }
+  debug('refreshAccessToken ← ok', {
+    status: response.status,
+    rotatedRefreshToken: !!token.refresh_token,
+    newExpiresAt: new Date(refreshed.expiresAt).toISOString(),
+  })
   setAuth(refreshed)
   return refreshed
 }
@@ -246,13 +363,26 @@ export async function refreshAccessToken(): Promise<AuthTokens> {
 export async function getAccessToken(): Promise<string> {
   const current = getAuth()
   if (!current) {
+    debug('getAccessToken → no stored auth')
     throw new Error('Not logged in — run `siri login` first')
   }
 
   const skewMs = 30_000
-  if (current.expiresAt - skewMs > Date.now()) {
+  const remainingMs = current.expiresAt - Date.now()
+  if (remainingMs - skewMs > 0) {
+    debug('getAccessToken → cache hit', {
+      remainingMs,
+      expiresAt: new Date(current.expiresAt).toISOString(),
+      accessToken: redact(current.accessToken),
+    })
     return current.accessToken
   }
+
+  debug('getAccessToken → cache miss (expired or within skew)', {
+    remainingMs,
+    skewMs,
+    hasRefreshToken: !!current.refreshToken,
+  })
 
   if (!current.refreshToken) {
     throw new Error('Session expired — run `siri login` again')
@@ -263,6 +393,7 @@ export async function getAccessToken(): Promise<string> {
 }
 
 export function logout(): void {
+  debug('logout → clearing stored auth')
   clearAuth()
 }
 

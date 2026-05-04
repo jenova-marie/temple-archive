@@ -8,6 +8,17 @@
 import { getApiUrl, getConversationId } from './config.js'
 import { getAccessToken, refreshAccessToken } from './auth.js'
 
+const DEBUG_AUTH =
+  process.env.SIRI_DEBUG_AUTH === '1' ||
+  process.env.SIRI_DEBUG_AUTH === 'true' ||
+  (process.env.DEBUG?.split(/[\s,]+/).includes('siri:auth') ?? false)
+
+function debug(label: string, data?: Record<string, unknown>): void {
+  if (!DEBUG_AUTH) return
+  const payload = data ? ' ' + JSON.stringify(data) : ''
+  process.stderr.write(`[api] ${label}${payload}\n`)
+}
+
 /**
  * Options for sendMessage. The local field stays `agent` so the
  * --agent CLI flag and existing callers don't break; we map it to
@@ -152,11 +163,25 @@ export async function sendMessage(
 
   // Try once with the cached token; on 401 refresh and retry once before
   // surfacing the error. Anything else falls through to error handling.
+  debug('sendMessage → POST /api/v1/chat', {
+    apiUrl,
+    conversationId,
+    guide: options.agent,
+    bodyBytes: requestBody.length,
+  })
   let response = await postChat(apiUrl, requestBody, await getAccessToken())
+  debug('sendMessage ← initial response', { status: response.status })
   if (response.status === 401) {
-    const retryToken = await refreshAccessToken().then((t) => t.accessToken).catch(() => null)
+    debug('sendMessage 401 → attempting refresh + retry')
+    const retryToken = await refreshAccessToken()
+      .then((t) => t.accessToken)
+      .catch((err) => {
+        debug('sendMessage refresh failed', { error: String(err) })
+        return null
+      })
     if (retryToken) {
       response = await postChat(apiUrl, requestBody, retryToken)
+      debug('sendMessage ← retry response', { status: response.status })
     }
   }
 
