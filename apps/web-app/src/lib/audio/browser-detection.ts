@@ -42,5 +42,9 @@ export function getSupportedMimeType(): string | null {
 
 export function getSpeechRecognitionConstructor(): (new () => import('@/types/speech-recognition').SpeechRecognition) | null {
   if (typeof window === 'undefined') return null
-  return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null
+  // The browser's lib.dom SpeechRecognitionConstructor type doesn't fully
+  // satisfy our richer local interface; cast through unknown since at
+  // runtime it's the same global constructor.
+  const ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null
+  return ctor as unknown as (new () => import('@/types/speech-recognition').SpeechRecognition) | null
 }

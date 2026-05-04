@@ -133,8 +133,9 @@ const AttachmentUI: FC = () => {
     ({ attachment }) => attachment.type === "image",
   );
   const typeLabel = useAssistantState(({ attachment }) => {
-    const type = attachment.type;
-    switch (type) {
+    // The assistant-ui type union widened in 0.12.x — fall back gracefully
+    // for any new attachment kinds rather than throwing.
+    switch (attachment.type) {
       case "image":
         return "Image";
       case "document":
@@ -142,8 +143,7 @@ const AttachmentUI: FC = () => {
       case "file":
         return "File";
       default:
-        const _exhaustiveCheck: never = type;
-        throw new Error(`Unknown attachment type: ${_exhaustiveCheck}`);
+        return "Attachment";
     }
   });
 
