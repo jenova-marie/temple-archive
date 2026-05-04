@@ -99,6 +99,7 @@ import {
   setClearConversationFn,
   setMem0ToolStore,
   setRagToolStore,
+  setRagToolDiscordGuildId,
   type MemoryToolAccessLevel,
   // MCP tools
   MCPToolManager,
@@ -350,6 +351,8 @@ export function createContainer(options: ContainerConfig = {}): Container {
         defaultLimit: parseInt(process.env.RAG_DEFAULT_LIMIT ?? "10", 10),
       });
       setRagToolStore(ragStore);
+      const discordGuildId = process.env.NINSHUBUR_DISCORD_GUILD_ID;
+      setRagToolDiscordGuildId(discordGuildId);
       logger.info(
         {
           ninshuburQdrantUrl: process.env.NINSHUBUR_QDRANT_URL,
@@ -359,6 +362,7 @@ export function createContainer(options: ContainerConfig = {}): Container {
           collectionGroups:
             process.env.NINSHUBUR_QDRANT_COLLECTION_GROUPS ??
             "ninshubur_groups",
+          discordSourceLinks: !!discordGuildId,
         },
         "RAG enabled — connected to ninshubur's archive",
       );

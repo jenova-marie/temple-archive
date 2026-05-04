@@ -18,6 +18,7 @@ import type { IRagStore, RagResult } from '@siri/rag'
 
 let ragStoreInstance: IRagStore | null = null
 let currentTraceContext: TraceContext | null = null
+let discordGuildId: string | undefined
 
 /**
  * Set the RAG store instance.
@@ -25,6 +26,16 @@ let currentTraceContext: TraceContext | null = null
  */
 export function setRagToolStore(store: IRagStore): void {
   ragStoreInstance = store
+}
+
+/**
+ * Set the Discord guild snowflake used to build source URLs in RAG
+ * results. Called once during container initialization. When unset,
+ * results carry `sourceUrl: null` and the archivist falls back to
+ * name-only attribution.
+ */
+export function setRagToolDiscordGuildId(guildId: string | undefined): void {
+  discordGuildId = guildId && guildId.trim().length > 0 ? guildId : undefined
 }
 
 /**
@@ -59,24 +70,55 @@ function getTraceContext(): TraceContext {
   return currentTraceContext
 }
 
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+/**
+ * Build a Discord deep link if we have enough info, otherwise null.
+ * Falls back to a channel-level link when the message snowflake is
+ * unknown (e.g., group hits where the first-message lookup returned
+ * NULL).
+ */
+function buildSourceUrl(
+  guildId: string | undefined,
+  channelId: string | null,
+  messageId: string | null,
+): string | null {
+  if (!guildId || !channelId) return null
+  return messageId
+    ? `https://discord.com/channels/${guildId}/${channelId}/${messageId}`
+    : `https://discord.com/channels/${guildId}/${channelId}`
+}
+
 /**
  * Format a single hit for the model. Prefer hydrated source row over
  * the lighter Qdrant payload when available.
  */
-function formatResult(r: RagResult): Record<string, unknown> {
+function formatResult(
+  r: RagResult,
+  guildId: string | undefined,
+): Record<string, unknown> {
   if (r.scopeType === 'group') {
+    const channelId =
+      asNonEmptyString(r.hydrated?.channel_id) ??
+      asNonEmptyString(r.payload.channel_id)
+    const firstMessageId = asNonEmptyString(r.hydrated?.first_message_id)
     return {
       id: r.scopeId,
       type: 'teaching',
       score: r.score,
       summary: r.payload.summary ?? r.hydrated?.summary ?? null,
-      channelId: r.payload.channel_id ?? r.hydrated?.channel_id ?? null,
+      channelId,
       startedAt: r.payload.started_at ?? r.hydrated?.started_at ?? null,
       endedAt: r.payload.ended_at ?? r.hydrated?.ended_at ?? null,
       messageCount: r.payload.message_count ?? r.hydrated?.message_count ?? null,
       categorySlugs: r.payload.category_slugs ?? null,
+      sourceUrl: buildSourceUrl(guildId, channelId, firstMessageId),
     }
   }
+  const channelId = asNonEmptyString(r.payload.channel_id)
+  const messageId = asNonEmptyString(r.hydrated?.id) ?? asNonEmptyString(r.scopeId)
   return {
     id: r.scopeId,
     type: 'message',
@@ -84,8 +126,9 @@ function formatResult(r: RagResult): Record<string, unknown> {
     content: r.hydrated?.content ?? r.payload.text ?? null,
     author: r.hydrated?.author ?? null,
     createdAt: r.hydrated?.created_at ?? r.payload.created_at ?? null,
-    channelId: r.payload.channel_id ?? null,
+    channelId,
     categorySlugs: r.payload.category_slugs ?? null,
+    sourceUrl: buildSourceUrl(guildId, channelId, messageId),
   }
 }
 
@@ -166,7 +209,7 @@ Returns the top-K most semantically relevant hits with scores and metadata.`,
           }
         }
 
-        const formatted = result.value.map(formatResult)
+        const formatted = result.value.map((r) => formatResult(r, discordGuildId))
         logger.info({ count: formatted.length }, 'Archive hits returned')
 
         return {

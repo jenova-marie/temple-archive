@@ -54,6 +54,11 @@ async function hydrateGroup(
   db: NinshuburDb,
   groupId: string,
 ): Promise<Record<string, unknown> | null> {
+  // The correlated subquery yields the snowflake of the earliest message
+  // inside the group's channel/time window, so consumers can build a
+  // Discord deep link to the start of the conversation. Returns NULL
+  // when the source messages are unavailable (snapshot lag, deletion);
+  // callers fall back to a channel-only link.
   const rows = await db.execute(
     sql`
       SELECT g.id::text AS id,
@@ -61,7 +66,16 @@ async function hydrateGroup(
              g.summary,
              g.started_at,
              g.ended_at,
-             g.message_count
+             g.message_count,
+             (
+               SELECT m.id::text
+               FROM messages m
+               WHERE m.channel_id = g.channel_id
+                 AND m.created_at >= g.started_at
+                 AND m.created_at <= g.ended_at
+               ORDER BY m.created_at ASC
+               LIMIT 1
+             ) AS first_message_id
       FROM message_groups g
       WHERE g.id = ${groupId}::uuid
       LIMIT 1
