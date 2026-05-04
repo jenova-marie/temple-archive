@@ -43,6 +43,7 @@ import { TypewriterText } from "@/components/assistant-ui/typewriter-text";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { EmojiPickerButton } from "@/components/assistant-ui/emoji-picker-button";
 import {
   ComposerAddAttachment,
   ComposerAttachments,
@@ -287,6 +288,7 @@ const ComposerAction: FC = () => {
       <div className="flex items-center gap-1">
         <ComposerAddAttachment />
         {ENABLE_VAD_VOICE ? <VADVoiceInputButton /> : <VoiceInputButton />}
+        <EmojiPickerButton />
       </div>
 
       <ThreadPrimitive.If running={false}>
