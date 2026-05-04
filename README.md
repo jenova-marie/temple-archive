@@ -427,17 +427,16 @@ AUTH0_AUDIENCE=https://api.siri.app
 AUTH0_CLIENT_ID=your-spa-client-id
 ```
 
-When configured:
+Authentication is **mandatory** — both backends throw on startup without
+the `AUTH0_*` env vars set, and the SPA throws without `VITE_AUTH0_*`.
+
 - `/api/*` endpoints require a valid JWT in `Authorization: Bearer <token>` header
 - `/health` and `/health/metrics` remain public
 - User ID extracted from JWT `sub` claim
 - Roles extracted from the namespaced `https://siri.app/roles` claim (populated by an Auth0 Action)
+- The web-app redirects every route except `/login` and `/callback` to login when not authenticated
 
-When not configured:
-- Auth middleware is not applied
-- Requests to `/api/*` will fail (no user context)
-
-Set `DISABLE_AUTH=true` to bypass authentication entirely for local development. See `docs/AUTHENTICATION.md` for the full Auth0 dashboard setup.
+See `docs/AUTHENTICATION.md` for the full Auth0 dashboard setup.
 
 ## Environment Variables
 

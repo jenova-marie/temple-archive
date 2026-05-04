@@ -73,13 +73,12 @@ A well-designed pipeline is invisible to users but essential to developers. It's
 │   ┌──────────────────────────────────────────────────────────────────────┐  │
 │   │  2. AUTH MIDDLEWARE                                                   │  │
 │   │                                                                       │  │
-│   │     ┌─────────────────┐    ┌─────────────────┐                       │  │
-│   │     │ DISABLE_AUTH=   │    │ DISABLE_AUTH=   │                       │  │
-│   │     │ true            │    │ false           │                       │  │
-│   │     │                 │    │                 │                       │  │
-│   │     │ Mock user:      │    │ Verify JWT      │                       │  │
-│   │     │ id: "dev-user"  │    │ from Auth0      │                       │  │
-│   │     └─────────────────┘    └─────────────────┘                       │  │
+│   │     ┌─────────────────────────────────────┐                          │  │
+│   │     │  Auth0 JWT verification (mandatory) │                          │  │
+│   │     │  • createRemoteJWKSet               │                          │  │
+│   │     │  • check iss / aud / exp / sig      │                          │  │
+│   │     │  • req.user from sub + roles claim  │                          │  │
+│   │     └─────────────────────────────────────┘                          │  │
 │   │                                                                       │  │
 │   └────────────────────────────────┬─────────────────────────────────────┘  │
 │                                    │                                         │

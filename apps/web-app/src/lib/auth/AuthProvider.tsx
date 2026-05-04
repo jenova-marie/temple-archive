@@ -9,15 +9,11 @@ import { useAuthStore, type AuthUser } from '@/stores/authStore'
 const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN
 const AUTH0_CLIENT_ID = import.meta.env.VITE_AUTH0_CLIENT_ID
 const AUTH0_AUDIENCE = import.meta.env.VITE_AUTH0_AUDIENCE
-const DISABLE_AUTH = import.meta.env.VITE_DISABLE_AUTH === 'true'
 
-const MOCK_DEV_USER: AuthUser = {
-  access_token: 'dev-token',
-  profile: {
-    sub: 'dev-user',
-    name: 'Development User',
-    email: 'dev@localhost',
-  },
+if (!AUTH0_DOMAIN || !AUTH0_CLIENT_ID || !AUTH0_AUDIENCE) {
+  throw new Error(
+    'Auth0 configuration missing. Set VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID, and VITE_AUTH0_AUDIENCE.',
+  )
 }
 
 function AuthStateSyncer({ children }: { children: ReactNode }) {
@@ -60,19 +56,6 @@ function AuthStateSyncer({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-function DevAuthBypass({ children }: { children: ReactNode }) {
-  const setUser = useAuthStore((s) => s.setUser)
-  const setLoading = useAuthStore((s) => s.setLoading)
-
-  useEffect(() => {
-    console.warn('[Auth] ⚠️ VITE_DISABLE_AUTH=true - Using mock dev user')
-    setLoading(false)
-    setUser(MOCK_DEV_USER)
-  }, [setUser, setLoading])
-
-  return <>{children}</>
-}
-
 function onRedirectCallback(appState?: AppState) {
   const returnTo =
     (appState?.returnTo as string | undefined) ||
@@ -83,10 +66,6 @@ function onRedirectCallback(appState?: AppState) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  if (DISABLE_AUTH) {
-    return <DevAuthBypass>{children}</DevAuthBypass>
-  }
-
   return (
     <Auth0Provider
       domain={AUTH0_DOMAIN}
@@ -113,16 +92,7 @@ interface UseAuthReturn {
   signoutRedirect: () => Promise<void>
 }
 
-const MOCK_AUTH: UseAuthReturn = {
-  isAuthenticated: true,
-  isLoading: false,
-  user: MOCK_DEV_USER,
-  signinRedirect: () => Promise.resolve(),
-  signoutRedirect: () => Promise.resolve(),
-}
-
 export function useAuth(): UseAuthReturn {
-  if (DISABLE_AUTH) return MOCK_AUTH
   const auth = useAuth0()
   const storeUser = useAuthStore((s) => s.user)
 

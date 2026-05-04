@@ -76,7 +76,6 @@ describe('auth middleware', () => {
     delete process.env.AUTH0_ISSUER_BASE_URL
     delete process.env.AUTH0_AUDIENCE
     delete process.env.AUTH0_CLIENT_ID
-    delete process.env.DISABLE_AUTH
   })
 
   describe('createAuthMiddleware', () => {
@@ -322,18 +321,14 @@ describe('auth middleware', () => {
   })
 
   describe('getAuthMiddleware', () => {
-    it('returns null when AUTH0_ISSUER_BASE_URL is not set', () => {
-      const auth = getAuthMiddleware()
-
-      expect(auth).toBeNull()
+    it('throws when AUTH0_ISSUER_BASE_URL is not set', () => {
+      expect(() => getAuthMiddleware()).toThrow(/Auth0 authentication is required/)
     })
 
-    it('returns null when AUTH0_AUDIENCE is not set', () => {
+    it('throws when AUTH0_AUDIENCE is not set', () => {
       process.env.AUTH0_ISSUER_BASE_URL = 'https://test.us.auth0.com/'
 
-      const auth = getAuthMiddleware()
-
-      expect(auth).toBeNull()
+      expect(() => getAuthMiddleware()).toThrow(/Auth0 authentication is required/)
     })
 
     it('returns middleware when AUTH0_ISSUER_BASE_URL and AUTH0_AUDIENCE are set', () => {
@@ -342,19 +337,9 @@ describe('auth middleware', () => {
 
       const auth = getAuthMiddleware()
 
-      expect(auth).not.toBeNull()
-      expect(auth?.required).toBeDefined()
-      expect(auth?.optional).toBeDefined()
-      expect(auth?.requireRole).toBeDefined()
-    })
-
-    it('returns bypass middleware when DISABLE_AUTH=true', () => {
-      process.env.DISABLE_AUTH = 'true'
-
-      const auth = getAuthMiddleware()
-
-      expect(auth).not.toBeNull()
-      expect(auth?.required).toBeDefined()
+      expect(auth.required).toBeDefined()
+      expect(auth.optional).toBeDefined()
+      expect(auth.requireRole).toBeDefined()
     })
   })
 

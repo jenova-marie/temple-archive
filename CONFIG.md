@@ -337,9 +337,9 @@ auth:
 ```
 
 **Effect:**
-- Without issuerBaseURL + audience: API is unauthenticated (development mode)
-- With both set: All `/api/*` endpoints require a valid JWT
-- Set `DISABLE_AUTH=true` to bypass authentication entirely (dev only)
+- Auth is mandatory: both backends refuse to start without `issuerBaseURL` + `audience`
+- All `/api/*` endpoints require a valid JWT; only `/health` is public
+- The web-app refuses to mount without `VITE_AUTH0_DOMAIN` + `VITE_AUTH0_CLIENT_ID` + `VITE_AUTH0_AUDIENCE`, and redirects every route except `/login` and `/callback` to login when not authenticated
 
 Roles are read from a namespaced custom claim — `https://siri.app/roles` — populated by an Auth0 Action. See `docs/AUTHENTICATION.md` for the dashboard setup.
 

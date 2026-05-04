@@ -71,57 +71,28 @@ app.use(express.json({ limit: "1mb" }));
 // Tracing middleware
 app.use(tracingMiddleware);
 
-// Auth middleware (optional - only enabled if AUTH0_ISSUER_BASE_URL is set)
+// Auth middleware - mandatory; throws on missing AUTH0_* config
 const auth = getAuthMiddleware();
 
 // Routes
 app.use("/health", createHealthRouter());
 
-// Chat API - requires authentication if Auth0 is configured
-if (auth) {
-  app.use("/api/v1/chat", auth.required, createChatRouter({
-    pipeline: container.pipeline,
-    loadUserData: container.loadUserData,
-  }));
-  logger.info("Auth0 JWT authentication enabled for /api/v1/chat");
-} else {
-  // Check if we're in production without auth
-  const isProduction = process.env.NODE_ENV === "production";
-  const message = "No authentication configured - API is running UNPROTECTED";
-
-  if (isProduction) {
-    logger.error(
-      {
-        AUTH0_ISSUER_BASE_URL: process.env.AUTH0_ISSUER_BASE_URL ? "[SET]" : "[NOT SET]",
-        AUTH0_AUDIENCE: process.env.AUTH0_AUDIENCE ? "[SET]" : "[NOT SET]",
-        DISABLE_AUTH: process.env.DISABLE_AUTH,
-      },
-      `${message} - SET AUTH0_ISSUER_BASE_URL and AUTH0_AUDIENCE or DISABLE_AUTH=true`
-    );
-  } else {
-    logger.warn(message);
-  }
-
-  app.use("/api/v1/chat", createChatRouter({
-    pipeline: container.pipeline,
-    loadUserData: container.loadUserData,
-  }));
-}
+// Chat API - requires Auth0 JWT
+app.use("/api/v1/chat", auth.required, createChatRouter({
+  pipeline: container.pipeline,
+  loadUserData: container.loadUserData,
+}));
+logger.info("Auth0 JWT authentication enabled for /api/v1/chat");
 
 // RAG API — read-only consumer of ninshubur's wisdom archive.
 // Only mounted when RAG is configured (ENABLE_RAG=true + voyage/ninshubur env).
 if (container.ragStore) {
-  if (auth) {
-    app.use(
-      "/api/v1/rag",
-      auth.required,
-      createRagRouter({ ragStore: container.ragStore }),
-    );
-    logger.info("Auth0 JWT authentication enabled for /api/v1/rag");
-  } else {
-    app.use("/api/v1/rag", createRagRouter({ ragStore: container.ragStore }));
-    logger.warn("RAG API mounted WITHOUT authentication");
-  }
+  app.use(
+    "/api/v1/rag",
+    auth.required,
+    createRagRouter({ ragStore: container.ragStore }),
+  );
+  logger.info("Auth0 JWT authentication enabled for /api/v1/rag");
 }
 
 // Error handling

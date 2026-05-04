@@ -127,8 +127,10 @@ export async function sendMessage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      // For local dev with DISABLE_AUTH=true, we pass userId as a header
-      // In production, this would be a JWT token
+      // TODO: CLI auth — Auth0 is now mandatory on agent-api. The X-User-Id
+      // header is no longer honored; this header is preserved as a marker
+      // until a real token flow (device code, PAT, etc.) is wired up. CLI
+      // requests will get 401 until then.
       'X-User-Id': getUserId(),
     },
     body: JSON.stringify({

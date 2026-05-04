@@ -38,8 +38,7 @@ services:
       - ANTHROPIC_API_KEY
       - OPENAI_API_KEY
 
-      # Authentication (disable for local dev)
-      - DISABLE_AUTH
+      # Authentication (Auth0 - required)
       - AUTH0_ISSUER_BASE_URL
       - AUTH0_AUDIENCE
       - AUTH0_CLIENT_ID

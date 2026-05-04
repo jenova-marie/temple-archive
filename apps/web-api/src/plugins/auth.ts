@@ -46,8 +46,6 @@ export interface AuthPluginOptions {
   audience: string;
   /** Routes to skip authentication (e.g., ['/health']) */
   skipRoutes?: string[];
-  /** Bypass auth entirely (for DISABLE_AUTH=true) */
-  bypassAuth?: boolean;
 }
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
@@ -117,22 +115,6 @@ async function authPlugin(
   const logger = getLogger().child({ plugin: "auth" });
 
   fastify.decorateRequest("user", undefined as AuthenticatedUser | undefined);
-
-  if (options.bypassAuth) {
-    logger.warn("Authentication DISABLED (bypassAuth=true) - using dev user");
-
-    fastify.addHook("onRequest", async (request) => {
-      request.user = {
-        id: "dev-user",
-        email: "dev@siri.app",
-        name: "Development User",
-        roles: ["admin"],
-        claims: { sub: "dev-user" } as Auth0Claims,
-      };
-    });
-
-    return;
-  }
 
   const jwks = getJWKS(options.issuerBaseURL);
   const expectedIssuer = normalizeIssuer(options.issuerBaseURL);

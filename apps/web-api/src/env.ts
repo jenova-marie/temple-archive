@@ -21,11 +21,10 @@ export const env = createEnv({
       .transform((s) => parseInt(s, 10))
       .pipe(z.number().min(1).max(65535)),
 
-    // Authentication (optional - if not set, auth is disabled)
-    AUTH0_ISSUER_BASE_URL: z.string().url().optional(),
-    AUTH0_AUDIENCE: z.string().optional(),
+    // Authentication (Auth0 is required)
+    AUTH0_ISSUER_BASE_URL: z.string().url(),
+    AUTH0_AUDIENCE: z.string(),
     AUTH0_CLIENT_ID: z.string().optional(),
-    DISABLE_AUTH: z.enum(["true", "false"]).default("false"),
 
     // Observability
     LOG_LEVEL: z

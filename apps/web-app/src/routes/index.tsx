@@ -1,8 +1,7 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { MeetingGuide } from "@/components/chat/MeetingGuide";
 import { MessageCircleIcon } from "lucide-react";
 import { useChatStore, GUIDES } from "@/stores/chatStore";
-import { useAuthStore } from "@/stores/authStore";
 
 export const Route = createFileRoute("/")({
   component: ChatPage,
@@ -11,12 +10,8 @@ export const Route = createFileRoute("/")({
 function ChatPage() {
   const selectedGuideId = useChatStore((s) => s.selectedGuideId);
   const setGuide = useChatStore((s) => s.setGuide);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    return <Navigate to="/login" search={{ returnUrl: "/" }} />;
-  }
+  // Auth is enforced by __root.tsx; this component only renders when authenticated.
 
   return (
     <div className="space-y-8">

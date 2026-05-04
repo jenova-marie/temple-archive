@@ -60,31 +60,23 @@ export async function buildApp() {
 
   await app.register(websocket);
 
-  // Register authentication plugin (if configured)
+  // Register authentication plugin - Auth0 is mandatory
   const issuerBaseURL = env.AUTH0_ISSUER_BASE_URL;
   const audience = env.AUTH0_AUDIENCE;
 
-  if (issuerBaseURL && audience) {
-    await app.register(authPlugin, {
-      issuerBaseURL,
-      audience,
-      bypassAuth: env.DISABLE_AUTH === "true",
-      skipRoutes: ["/health"],
-    });
-    logger.info({ issuer: issuerBaseURL, audience }, "Auth plugin registered");
-  } else if (env.DISABLE_AUTH === "true") {
-    // Auth disabled without Auth0 config - register bypass
-    await app.register(authPlugin, {
-      issuerBaseURL: "https://disabled.invalid/",
-      audience: "disabled",
-      bypassAuth: true,
-    });
-    logger.warn("Auth plugin registered in bypass mode (DISABLE_AUTH=true)");
-  } else {
-    logger.warn(
-      "Auth not configured (AUTH0_ISSUER_BASE_URL or AUTH0_AUDIENCE missing) - routes unprotected",
+  if (!issuerBaseURL || !audience) {
+    throw new Error(
+      "Auth0 authentication is required but not configured. " +
+        "Set AUTH0_ISSUER_BASE_URL and AUTH0_AUDIENCE environment variables.",
     );
   }
+
+  await app.register(authPlugin, {
+    issuerBaseURL,
+    audience,
+    skipRoutes: ["/health"],
+  });
+  logger.info({ issuer: issuerBaseURL, audience }, "Auth plugin registered");
 
   // Register API routes
   await app.register(transcribeRoutes);

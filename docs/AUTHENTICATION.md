@@ -1,6 +1,8 @@
 # Authentication
 
-Siri uses Auth0 for OIDC authentication, with a bypass mode for local development.
+Siri uses Auth0 for OIDC authentication. **Authentication is mandatory** —
+both backends refuse to start without `AUTH0_*` env vars set, the SPA
+throws if `VITE_AUTH0_*` are missing, and there is no developer bypass.
 
 ## The Problem
 
@@ -8,24 +10,17 @@ Siri stores personal, sensitive data — conversations about mental health, rela
 
 Authentication answers "who is making this request?" Without it, anyone with the URL could access anyone's data. With weak auth, attackers could impersonate users, steal tokens, or hijack sessions.
 
-But authentication is also friction. Every login flow is a barrier to entry. Every expired token is a broken session. Every misconfigured redirect is a support ticket. We need security without making the app unusable.
-
-For development, auth is often pure overhead. You're iterating on features, not testing login flows. Requiring real auth for local dev slows everyone down.
-
 ## The Idea
 
-Use a battle-tested identity platform (Auth0) for production, with a complete bypass for development.
+Use a battle-tested identity platform (Auth0). The web-app uses
+`@auth0/auth0-react` to manage the OAuth flow. The agent-api and web-api
+validate JWTs using Auth0's published JWKS. Every `/api/*` endpoint
+requires a valid bearer token, every SPA route except `/login` and
+`/callback` redirects to login when not authenticated.
 
-**Production**: Auth0 handles password storage, session management, token issuance, refresh flows, PKCE, JWKS rotation, MFA. We delegate trust to a system built for this purpose.
-
-**Development**: Set `DISABLE_AUTH=true` and skip auth entirely. A mock user is injected, allowing full functionality without touching Auth0.
-
-This separation means:
-- Production security doesn't compromise developer experience
-- Local testing doesn't require infrastructure setup
-- Auth bugs are isolated to the auth layer, not scattered throughout the codebase
-
-The web-app uses `@auth0/auth0-react` to manage the OAuth flow. The agent-api and web-api validate JWTs using Auth0's published JWKS. Both check the bypass flag and short-circuit when disabled.
+Auth0 handles password storage, session management, token issuance,
+refresh flows, PKCE, JWKS rotation, MFA. We delegate trust to a system
+built for this purpose.
 
 ## Architecture Overview
 
@@ -128,35 +123,40 @@ After this is done, an access token issued for the SPA → API will contain a `h
 9. Roles extracted from `https://siri.app/roles` claim → req.user.roles
 ```
 
-## Development Flow (Bypass)
+## Local Development
 
-When `DISABLE_AUTH=true` (backend) or `VITE_DISABLE_AUTH=true` (frontend):
+There is no auth bypass. Local dev uses a real Auth0 tenant — the same
+one as production, or a separate dev tenant of your choice. To work
+locally:
 
-- The web-app skips `Auth0Provider` entirely and injects a mock dev user into the auth store.
-- Backends inject a hardcoded dev user into `req.user` on every request, with `roles: ['admin']`.
-- The agent-api also honors an `X-User-Id` header to let CLI tools target a specific user.
+1. Make sure your Auth0 dashboard SPA app has `http://localhost:61666`
+   in its Allowed Callback URLs / Logout URLs / Web Origins
+2. Set the `AUTH0_*` env vars in `.env` (and `VITE_AUTH0_*` in
+   `apps/web-app/build.env`)
+3. `pnpm dev` and log in via the Universal Login flow
 
-No tokens are validated, no JWKS is fetched, no Auth0 traffic is generated.
+Note: the CLI (`packages/cli`) does not currently authenticate against
+Auth0. It still sends an `X-User-Id` header which is no longer honored,
+so CLI requests against the agent-api will return 401 until a real
+token flow (device code, PAT, etc.) is wired up.
 
 ## Configuration
 
-### Backend env vars
+### Backend env vars (required — both backends throw on startup if missing)
 
 | Variable | Purpose |
 |---|---|
-| `AUTH0_ISSUER_BASE_URL` | Tenant URL with trailing slash, e.g. `https://your-tenant.us.auth0.com/` |
+| `AUTH0_ISSUER_BASE_URL` | Tenant URL, e.g. `https://your-tenant.us.auth0.com/` (trailing slash optional — normalized internally) |
 | `AUTH0_AUDIENCE` | API identifier from the Auth0 dashboard, e.g. `https://api.siri.app` |
 | `AUTH0_CLIENT_ID` | SPA client ID (used by web-api env validation; not strictly required by the JWT verifier) |
-| `DISABLE_AUTH` | Set to `true` to bypass JWT verification entirely |
 
-### Frontend env vars (Vite)
+### Frontend env vars (Vite — SPA throws on startup if missing)
 
 | Variable | Purpose |
 |---|---|
 | `VITE_AUTH0_DOMAIN` | Tenant domain without protocol, e.g. `your-tenant.us.auth0.com` |
 | `VITE_AUTH0_CLIENT_ID` | SPA client ID |
 | `VITE_AUTH0_AUDIENCE` | Same as backend `AUTH0_AUDIENCE` — required so access tokens are issued for the API, not just the SPA |
-| `VITE_DISABLE_AUTH` | Set to `true` to bypass Auth0 in the SPA and inject a mock dev user |
 
 ## Roles and Permissions
 

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   createRootRoute,
   Link,
+  Navigate,
   Outlet,
   useLocation,
 } from "@tanstack/react-router";
@@ -58,11 +59,16 @@ function UserMenu() {
   );
 }
 
+// Routes that don't require authentication (login flow itself)
+const PUBLIC_ROUTES = new Set(["/login", "/callback"]);
+
 function RootLayout() {
   const location = useLocation();
   const savePosition = useScrollStore((s) => s.savePosition);
   const getPosition = useScrollStore((s) => s.getPosition);
   const prevPathRef = useRef(location.pathname);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
 
   // Save scroll position before route change, restore on new route
   useEffect(() => {
@@ -82,6 +88,19 @@ function RootLayout() {
       prevPathRef.current = currentPath;
     }
   }, [location.pathname, savePosition, getPosition]);
+
+  // Auth gate: redirect unauthenticated users to /login (except for the
+  // login flow itself). Wait for the Auth0 SDK to finish loading first
+  // so we don't bounce briefly during silent token refresh.
+  const isPublicRoute = PUBLIC_ROUTES.has(location.pathname);
+  if (!isLoading && !isAuthenticated && !isPublicRoute) {
+    return (
+      <Navigate
+        to="/login"
+        search={{ returnUrl: location.pathname }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

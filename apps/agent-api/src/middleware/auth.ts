@@ -234,54 +234,6 @@ export function createAuthMiddleware(config: Auth0AuthConfig) {
   };
 }
 
-/**
- * Create a bypass middleware that skips JWT verification.
- * Used when DISABLE_AUTH=true for local development.
- *
- * Supports X-User-Id header to allow CLI and other tools to specify user ID.
- */
-function createBypassAuthMiddleware() {
-  const logger = getLogger().child({ middleware: "auth" });
-
-  const createDevUser = (req: Request): AuthenticatedUser => {
-    const userId = (req.headers["x-user-id"] as string) || "jenova";
-    return {
-      id: userId,
-      email: "jenova-marie@proton.me",
-      name: "Jenova",
-      roles: ["admin"],
-      claims: { sub: userId } as Auth0Claims,
-    };
-  };
-
-  return {
-    required: async (
-      req: Request,
-      _res: Response,
-      next: NextFunction,
-    ): Promise<void> => {
-      req.user = createDevUser(req);
-      logger.debug({ userId: req.user.id }, "Auth bypassed (DISABLE_AUTH=true)");
-      next();
-    },
-
-    optional: async (
-      req: Request,
-      _res: Response,
-      next: NextFunction,
-    ): Promise<void> => {
-      req.user = createDevUser(req);
-      next();
-    },
-
-    requireRole: () => {
-      return (_req: Request, _res: Response, next: NextFunction): void => {
-        next();
-      };
-    },
-  };
-}
-
 let authMiddlewareInstance: ReturnType<typeof createAuthMiddleware> | null =
   null;
 
@@ -292,35 +244,17 @@ export function resetAuthMiddleware(): void {
   authMiddlewareInstance = null;
 }
 
-export function getAuthMiddleware(): ReturnType<
-  typeof createAuthMiddleware
-> | null {
+export function getAuthMiddleware(): ReturnType<typeof createAuthMiddleware> {
   if (authMiddlewareInstance) return authMiddlewareInstance;
-
-  if (process.env.DISABLE_AUTH === "true") {
-    const logger = getLogger().child({ component: "auth" });
-    logger.warn(
-      { DISABLE_AUTH: process.env.DISABLE_AUTH },
-      "⚠️  Authentication DISABLED - Using development bypass (should NOT be used in production)"
-    );
-    authMiddlewareInstance = createBypassAuthMiddleware();
-    return authMiddlewareInstance;
-  }
 
   const issuerBaseURL = process.env.AUTH0_ISSUER_BASE_URL;
   const audience = process.env.AUTH0_AUDIENCE;
 
   if (!issuerBaseURL || !audience) {
-    const logger = getLogger().child({ component: "auth" });
-    logger.error(
-      {
-        AUTH0_ISSUER_BASE_URL_SET: !!issuerBaseURL,
-        AUTH0_AUDIENCE_SET: !!audience,
-        NODE_ENV: process.env.NODE_ENV,
-      },
-      "❌ Auth0 authentication not configured - missing AUTH0_ISSUER_BASE_URL and/or AUTH0_AUDIENCE. Set these environment variables or use DISABLE_AUTH=true for local development"
+    throw new Error(
+      "Auth0 authentication is required but not configured. " +
+        "Set AUTH0_ISSUER_BASE_URL and AUTH0_AUDIENCE environment variables.",
     );
-    return null;
   }
 
   authMiddlewareInstance = createAuthMiddleware({
