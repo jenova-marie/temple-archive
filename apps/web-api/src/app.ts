@@ -61,28 +61,28 @@ export async function buildApp() {
   await app.register(websocket);
 
   // Register authentication plugin (if configured)
-  const issuer = env.ZITADEL_ISSUER;
-  const audience = env.ZITADEL_AUDIENCE || env.ZITADEL_CLIENT_ID;
+  const issuerBaseURL = env.AUTH0_ISSUER_BASE_URL;
+  const audience = env.AUTH0_AUDIENCE;
 
-  if (issuer && audience) {
+  if (issuerBaseURL && audience) {
     await app.register(authPlugin, {
-      issuer,
+      issuerBaseURL,
       audience,
       bypassAuth: env.DISABLE_AUTH === "true",
       skipRoutes: ["/health"],
     });
-    logger.info({ issuer, audience }, "Auth plugin registered");
+    logger.info({ issuer: issuerBaseURL, audience }, "Auth plugin registered");
   } else if (env.DISABLE_AUTH === "true") {
-    // Auth disabled without Zitadel config - register bypass
+    // Auth disabled without Auth0 config - register bypass
     await app.register(authPlugin, {
-      issuer: "disabled",
+      issuerBaseURL: "https://disabled.invalid/",
       audience: "disabled",
       bypassAuth: true,
     });
     logger.warn("Auth plugin registered in bypass mode (DISABLE_AUTH=true)");
   } else {
     logger.warn(
-      "Auth not configured (ZITADEL_ISSUER or ZITADEL_AUDIENCE missing) - routes unprotected",
+      "Auth not configured (AUTH0_ISSUER_BASE_URL or AUTH0_AUDIENCE missing) - routes unprotected",
     );
   }
 

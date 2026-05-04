@@ -71,19 +71,19 @@ app.use(express.json({ limit: "1mb" }));
 // Tracing middleware
 app.use(tracingMiddleware);
 
-// Auth middleware (optional - only enabled if ZITADEL_ISSUER is set)
+// Auth middleware (optional - only enabled if AUTH0_ISSUER_BASE_URL is set)
 const auth = getAuthMiddleware();
 
 // Routes
 app.use("/health", createHealthRouter());
 
-// Chat API - requires authentication if Zitadel is configured
+// Chat API - requires authentication if Auth0 is configured
 if (auth) {
   app.use("/api/v1/chat", auth.required, createChatRouter({
     pipeline: container.pipeline,
     loadUserData: container.loadUserData,
   }));
-  logger.info("Zitadel JWT authentication enabled for /api/v1/chat");
+  logger.info("Auth0 JWT authentication enabled for /api/v1/chat");
 } else {
   // Check if we're in production without auth
   const isProduction = process.env.NODE_ENV === "production";
@@ -92,14 +92,11 @@ if (auth) {
   if (isProduction) {
     logger.error(
       {
-        ZITADEL_ISSUER: process.env.ZITADEL_ISSUER ? "[SET]" : "[NOT SET]",
-        ZITADEL_AUDIENCE:
-          process.env.ZITADEL_AUDIENCE || process.env.ZITADEL_CLIENT_ID
-            ? "[SET]"
-            : "[NOT SET]",
+        AUTH0_ISSUER_BASE_URL: process.env.AUTH0_ISSUER_BASE_URL ? "[SET]" : "[NOT SET]",
+        AUTH0_AUDIENCE: process.env.AUTH0_AUDIENCE ? "[SET]" : "[NOT SET]",
         DISABLE_AUTH: process.env.DISABLE_AUTH,
       },
-      `${message} - SET ZITADEL_ISSUER and ZITADEL_AUDIENCE or DISABLE_AUTH=true`
+      `${message} - SET AUTH0_ISSUER_BASE_URL and AUTH0_AUDIENCE or DISABLE_AUTH=true`
     );
   } else {
     logger.warn(message);
@@ -120,7 +117,7 @@ if (container.ragStore) {
       auth.required,
       createRagRouter({ ragStore: container.ragStore }),
     );
-    logger.info("Zitadel JWT authentication enabled for /api/v1/rag");
+    logger.info("Auth0 JWT authentication enabled for /api/v1/rag");
   } else {
     app.use("/api/v1/rag", createRagRouter({ ragStore: container.ragStore }));
     logger.warn("RAG API mounted WITHOUT authentication");
@@ -170,9 +167,9 @@ const server = app.listen(port, () => {
     CRISIS_THRESHOLD_HIGH: config.crisis.thresholdHigh,
     CRISIS_THRESHOLD_CRITICAL: config.crisis.thresholdCritical,
 
-    // Authentication (Zitadel)
-    ZITADEL_ISSUER: config.auth.zitadel.issuer || "[NOT SET]",
-    ZITADEL_AUDIENCE: config.auth.zitadel.audience || "[NOT SET]",
+    // Authentication (Auth0)
+    AUTH0_ISSUER_BASE_URL: config.auth.auth0.issuerBaseURL || "[NOT SET]",
+    AUTH0_AUDIENCE: config.auth.auth0.audience || "[NOT SET]",
     AUTH_ENABLED: auth ? "true" : "false",
   };
 

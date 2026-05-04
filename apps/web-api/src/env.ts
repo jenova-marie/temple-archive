@@ -22,9 +22,9 @@ export const env = createEnv({
       .pipe(z.number().min(1).max(65535)),
 
     // Authentication (optional - if not set, auth is disabled)
-    ZITADEL_ISSUER: z.string().url().optional(),
-    ZITADEL_AUDIENCE: z.string().optional(),
-    ZITADEL_CLIENT_ID: z.string().optional(),
+    AUTH0_ISSUER_BASE_URL: z.string().url().optional(),
+    AUTH0_AUDIENCE: z.string().optional(),
+    AUTH0_CLIENT_ID: z.string().optional(),
     DISABLE_AUTH: z.enum(["true", "false"]).default("false"),
 
     // Observability

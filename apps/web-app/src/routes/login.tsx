@@ -15,10 +15,8 @@ function LoginPage() {
 
   useEffect(() => {
     if (!auth.isLoading && !auth.isAuthenticated) {
-      // Store return URL for after callback
       sessionStorage.setItem('auth_return_url', returnUrl)
-      // Initiate login redirect
-      auth.signinRedirect()
+      auth.signinRedirect({ returnUrl })
     }
   }, [auth.isLoading, auth.isAuthenticated, auth, returnUrl])
 

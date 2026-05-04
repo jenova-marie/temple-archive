@@ -13,7 +13,7 @@ Siri is a personal AI companion - forked from RecoverySky Agent but customized a
 - **Active Knowledge Graph**: Neo4j-powered entity extraction with memory tools Claude can use during conversations
 - **Real-Time Crisis Detection**: Pre-flight keyword matching (<10ms) + LLM deep evaluation with webhook alerting
 - **Safety Validation**: PII detection, medical advice filtering, enabling language detection
-- **JWT Authentication**: Zitadel-based authentication for API endpoints
+- **JWT Authentication**: Auth0-based authentication for API endpoints
 - **Observable Pipeline**: OpenTelemetry tracing + Prometheus metrics + structured logging
 - **Type-Safe Architecture**: Result-based error handling, no exceptions thrown
 - **Meeting Discovery**: Integration with RecoverySky Meeting API for finding AA/NA meetings
@@ -418,23 +418,26 @@ When level >= 7, `WebhookCrisisHandler` sends alerts:
 
 ## Authentication
 
-The API supports JWT authentication via [Zitadel](https://zitadel.com):
+The API supports JWT authentication via [Auth0](https://auth0.com):
 
 ```bash
 # Configure in environment
-ZITADEL_ISSUER=https://your-instance.zitadel.cloud
-ZITADEL_AUDIENCE=your-client-id@your-project
+AUTH0_ISSUER_BASE_URL=https://your-tenant.us.auth0.com/
+AUTH0_AUDIENCE=https://api.siri.app
+AUTH0_CLIENT_ID=your-spa-client-id
 ```
 
 When configured:
-- `/api/*` endpoints require valid JWT in `Authorization: Bearer <token>` header
+- `/api/*` endpoints require a valid JWT in `Authorization: Bearer <token>` header
 - `/health` and `/health/metrics` remain public
 - User ID extracted from JWT `sub` claim
-- Roles extracted from `urn:zitadel:iam:org:project:roles` claim
+- Roles extracted from the namespaced `https://siri.app/roles` claim (populated by an Auth0 Action)
 
 When not configured:
 - Auth middleware is not applied
 - Requests to `/api/*` will fail (no user context)
+
+Set `DISABLE_AUTH=true` to bypass authentication entirely for local development. See `docs/AUTHENTICATION.md` for the full Auth0 dashboard setup.
 
 ## Environment Variables
 
@@ -449,9 +452,10 @@ USE_STUBS=true
 ANTHROPIC_API_KEY=sk-ant-xxx
 OPENAI_API_KEY=sk-xxx
 
-# Authentication (Zitadel)
-ZITADEL_ISSUER=https://your-instance.zitadel.cloud
-ZITADEL_AUDIENCE=your-client-id@your-project
+# Authentication (Auth0)
+AUTH0_ISSUER_BASE_URL=https://your-tenant.us.auth0.com/
+AUTH0_AUDIENCE=https://api.siri.app
+AUTH0_CLIENT_ID=your-spa-client-id
 
 # L1: Redis
 REDIS_URL=redis://localhost:6379
@@ -679,10 +683,10 @@ pnpm typecheck
 
 ### Phase 9: Production Hardening ✅
 - [x] Comprehensive unit test suite (470+ tests)
-- [x] JWT authentication (Zitadel)
+- [x] JWT authentication (Auth0)
 - [x] Observability (OpenTelemetry + Prometheus)
 - [x] Result-based error handling
-- [x] User profile fetching from Zitadel userinfo
+- [x] User profile fetching from Auth0 userinfo
 - [x] Redis caching for user/profile data
 
 ### Phase 10: Literature & Context Management ✅

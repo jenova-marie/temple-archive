@@ -5,8 +5,8 @@ export const Route = createFileRoute('/callback')({
 })
 
 function CallbackPage() {
-  // react-oidc-context handles the callback automatically via onSigninCallback in config
-  // This page just shows a loading spinner while that happens
+  // Auth0Provider exchanges the code and fires onRedirectCallback in AuthProvider.tsx;
+  // this page just shows a loading spinner during that exchange.
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
       <div className="text-center">

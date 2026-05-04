@@ -36,10 +36,9 @@ services:
 
       # Authentication (disable for local dev)
       - DISABLE_AUTH
-      - ZITADEL_ISSUER=https://auth.rso
-      - ZITADEL_AUDIENCE=352079658088464386
-      - ZITADEL_PROJECT_ID=352079615960809474
-      - ZITADEL_CLIENT_ID=352079658088464386
+      - AUTH0_ISSUER_BASE_URL
+      - AUTH0_AUDIENCE
+      - AUTH0_CLIENT_ID
 
       # Memory config
       - MEMORY_CONTEXT_MODE

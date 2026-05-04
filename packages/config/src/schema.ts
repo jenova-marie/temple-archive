@@ -135,15 +135,16 @@ const evaluationSchema = z.object({
   mode: val?.mode ?? "on_demand",
 }))
 
-const zitadelSchema = z.object({
-  issuer: z.string().optional(),
+const auth0Schema = z.object({
+  issuerBaseURL: z.string().optional(),
   audience: z.string().optional(),
+  clientId: z.string().optional(),
 }).optional().transform((val) => val ?? {})
 
 const authSchema = z.object({
-  zitadel: zitadelSchema,
+  auth0: auth0Schema,
 }).optional().transform((val) => ({
-  zitadel: val?.zitadel ?? {},
+  auth0: val?.auth0 ?? {},
 }))
 
 const meetingApiSchema = z.object({

@@ -1,88 +1,65 @@
 import { useEffect, type ReactNode } from 'react'
-import { AuthProvider as OidcAuthProvider, useAuth as useOidcAuth } from 'react-oidc-context'
-import { oidcConfig } from './config'
-import { useAuthStore } from '@/stores/authStore'
-import type { User } from 'oidc-client-ts'
+import {
+  Auth0Provider,
+  useAuth0,
+  type AppState,
+} from '@auth0/auth0-react'
+import { useAuthStore, type AuthUser } from '@/stores/authStore'
 
-const ZITADEL_AUTHORITY = import.meta.env.VITE_ZITADEL_AUTHORITY
+const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN
+const AUTH0_CLIENT_ID = import.meta.env.VITE_AUTH0_CLIENT_ID
+const AUTH0_AUDIENCE = import.meta.env.VITE_AUTH0_AUDIENCE
 const DISABLE_AUTH = import.meta.env.VITE_DISABLE_AUTH === 'true'
 
-// Mock user for development when auth is disabled
-const MOCK_DEV_USER: User = {
+const MOCK_DEV_USER: AuthUser = {
   access_token: 'dev-token',
-  token_type: 'Bearer',
   profile: {
     sub: 'dev-user',
     name: 'Development User',
     email: 'dev@localhost',
-    iss: 'dev',
-    aud: 'dev',
-    exp: Math.floor(Date.now() / 1000) + 86400,
-    iat: Math.floor(Date.now() / 1000),
   },
-  expires_at: Math.floor(Date.now() / 1000) + 86400,
-  expired: false,
-  scopes: ['openid', 'profile', 'email'],
-  session_state: null,
-  state: null,
-  expires_in: 86400,
-  toStorageString: () => JSON.stringify({}),
 }
 
 function AuthStateSyncer({ children }: { children: ReactNode }) {
-  const auth = useOidcAuth()
+  const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0()
   const setUser = useAuthStore((s) => s.setUser)
   const setLoading = useAuthStore((s) => s.setLoading)
 
   useEffect(() => {
-    setLoading(auth.isLoading)
-  }, [auth.isLoading, setLoading])
+    setLoading(isLoading)
+  }, [isLoading, setLoading])
 
   useEffect(() => {
-    if (!auth.user) {
+    if (isLoading) return
+
+    if (!isAuthenticated || !user) {
       setUser(null)
       return
     }
 
-    // Capture user to avoid potential null in async closure
-    const user = auth.user
-
-    // Fetch userinfo from Zitadel to get profile claims (name, email, etc)
-    const fetchUserinfo = async () => {
+    let cancelled = false
+    ;(async () => {
       try {
-        const userinfoUrl = `${ZITADEL_AUTHORITY?.replace(/\/$/, '') || 'https://auth.rso'}/oidc/v1/userinfo`
-
-        const response = await fetch(userinfoUrl, {
-          headers: {
-            Authorization: `Bearer ${user.access_token}`,
-          },
+        const accessToken = await getAccessTokenSilently()
+        if (cancelled) return
+        setUser({
+          access_token: accessToken,
+          profile: user as AuthUser['profile'],
         })
-
-        if (response.ok) {
-          const userinfo = await response.json()
-          // Merge userinfo claims into the profile
-          user.profile = {
-            ...user.profile,
-            ...userinfo,
-          }
-          console.log('[Auth] Userinfo fetched and merged:', user.profile)
-        } else {
-          console.warn('[Auth] Userinfo fetch failed:', response.status)
-        }
       } catch (error) {
-        console.error('[Auth] Failed to fetch userinfo:', error)
-      } finally {
-        setUser(user)
+        console.error('[Auth] Failed to acquire access token:', error)
+        if (!cancelled) setUser(null)
       }
-    }
+    })()
 
-    fetchUserinfo()
-  }, [auth.user, setUser])
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, isLoading, user, getAccessTokenSilently, setUser])
 
   return <>{children}</>
 }
 
-// Bypass component that sets mock user when auth is disabled
 function DevAuthBypass({ children }: { children: ReactNode }) {
   const setUser = useAuthStore((s) => s.setUser)
   const setLoading = useAuthStore((s) => s.setLoading)
@@ -96,29 +73,70 @@ function DevAuthBypass({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+function onRedirectCallback(appState?: AppState) {
+  const returnTo =
+    (appState?.returnTo as string | undefined) ||
+    sessionStorage.getItem('auth_return_url') ||
+    '/'
+  sessionStorage.removeItem('auth_return_url')
+  window.location.replace(returnTo)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Bypass OIDC entirely when auth is disabled
   if (DISABLE_AUTH) {
     return <DevAuthBypass>{children}</DevAuthBypass>
   }
 
   return (
-    <OidcAuthProvider {...oidcConfig}>
+    <Auth0Provider
+      domain={AUTH0_DOMAIN}
+      clientId={AUTH0_CLIENT_ID}
+      authorizationParams={{
+        redirect_uri: `${window.location.origin}/callback`,
+        audience: AUTH0_AUDIENCE,
+        scope: 'openid profile email offline_access',
+      }}
+      onRedirectCallback={onRedirectCallback}
+      cacheLocation="localstorage"
+      useRefreshTokens
+    >
       <AuthStateSyncer>{children}</AuthStateSyncer>
-    </OidcAuthProvider>
+    </Auth0Provider>
   )
 }
 
-// Re-export the useAuth hook - returns mock when auth disabled
-export function useAuth() {
-  if (DISABLE_AUTH) {
-    return {
-      isAuthenticated: true,
-      isLoading: false,
-      user: MOCK_DEV_USER,
-      signinRedirect: () => Promise.resolve(),
-      signoutRedirect: () => Promise.resolve(),
-    }
+interface UseAuthReturn {
+  isAuthenticated: boolean
+  isLoading: boolean
+  user: AuthUser | null
+  signinRedirect: (opts?: { returnUrl?: string }) => Promise<void>
+  signoutRedirect: () => Promise<void>
+}
+
+const MOCK_AUTH: UseAuthReturn = {
+  isAuthenticated: true,
+  isLoading: false,
+  user: MOCK_DEV_USER,
+  signinRedirect: () => Promise.resolve(),
+  signoutRedirect: () => Promise.resolve(),
+}
+
+export function useAuth(): UseAuthReturn {
+  if (DISABLE_AUTH) return MOCK_AUTH
+  const auth = useAuth0()
+  const storeUser = useAuthStore((s) => s.user)
+
+  return {
+    isAuthenticated: auth.isAuthenticated,
+    isLoading: auth.isLoading,
+    user: storeUser,
+    signinRedirect: (opts) =>
+      auth.loginWithRedirect({
+        appState: opts?.returnUrl ? { returnTo: opts.returnUrl } : undefined,
+      }),
+    signoutRedirect: () =>
+      auth.logout({
+        logoutParams: { returnTo: window.location.origin },
+      }),
   }
-  return useOidcAuth()
 }

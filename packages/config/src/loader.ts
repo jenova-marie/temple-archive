@@ -90,8 +90,9 @@ const ENV_VAR_MAPPING: Record<string, string> = {
   EVALUATION_MODE: "evaluation.mode",
 
   // Auth
-  ZITADEL_ISSUER: "auth.zitadel.issuer",
-  ZITADEL_AUDIENCE: "auth.zitadel.audience",
+  AUTH0_ISSUER_BASE_URL: "auth.auth0.issuerBaseURL",
+  AUTH0_AUDIENCE: "auth.auth0.audience",
+  AUTH0_CLIENT_ID: "auth.auth0.clientId",
 
   // Meeting API
   MEETING_API_URL: "meetingApi.url",

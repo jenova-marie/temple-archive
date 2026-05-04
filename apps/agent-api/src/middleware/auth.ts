@@ -1,130 +1,98 @@
 /**
- * Zitadel JWT Authentication Middleware
+ * Auth0 JWT Authentication Middleware
  *
- * Validates JWTs issued by Zitadel using JWKS endpoint
+ * Validates JWTs issued by Auth0 using the standard JWKS endpoint.
  */
 
 import type { Request, Response, NextFunction } from "express";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { getLogger } from "@siri/observability";
 
-/**
- * Zitadel JWT claims
- */
-export interface ZitadelClaims extends JWTPayload {
-  /** Subject - the user ID */
+const ROLES_CLAIM = "https://siri.app/roles";
+
+export interface Auth0Claims extends JWTPayload {
   sub: string;
-  /** Email address */
   email?: string;
-  /** Email verified flag */
   email_verified?: boolean;
-  /** Full name */
   name?: string;
-  /** Given name */
   given_name?: string;
-  /** Family name */
   family_name?: string;
-  /** Preferred username */
-  preferred_username?: string;
-  /** Locale */
+  nickname?: string;
+  picture?: string;
   locale?: string;
-  /** Zitadel roles (project-specific) */
-  "urn:zitadel:iam:org:project:roles"?: Record<string, Record<string, string>>;
+  permissions?: string[];
+  [ROLES_CLAIM]?: string[];
 }
 
-/**
- * Authenticated user attached to request
- */
 export interface AuthenticatedUser {
-  /** User ID from Zitadel (sub claim) */
   id: string;
-  /** Email address */
   email?: string;
-  /** Display name */
   name?: string;
-  /** Roles from Zitadel */
   roles: string[];
-  /** Raw JWT claims for advanced use cases */
-  claims: ZitadelClaims;
+  claims: Auth0Claims;
 }
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      /** Authenticated user (present if JWT is valid) */
       user?: AuthenticatedUser;
     }
   }
 }
 
-/**
- * Configuration for Zitadel auth middleware
- */
-export interface ZitadelAuthConfig {
-  /** Zitadel issuer URL (e.g., https://my-instance.zitadel.cloud) */
-  issuer: string;
-  /** Expected audience (client ID) */
+export interface Auth0AuthConfig {
+  /** Auth0 issuer base URL, e.g. https://your-tenant.us.auth0.com/ (trailing slash optional) */
+  issuerBaseURL: string;
+  /** API audience identifier configured in Auth0 */
   audience: string;
   /** JWKS cache time in ms (default: 10 minutes) */
   jwksCacheTime?: number;
 }
 
-// Cached JWKS fetcher (singleton per issuer)
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
+function normalizeIssuer(issuer: string): string {
+  return issuer.endsWith("/") ? issuer : `${issuer}/`;
+}
 
 function getJWKS(issuer: string): ReturnType<typeof createRemoteJWKSet> {
   const cached = jwksCache.get(issuer);
   if (cached) return cached;
 
-  // Zitadel uses /oauth/v2/keys instead of /.well-known/jwks.json
-  const jwksUri = `${issuer.replace(/\/$/, "")}/oauth/v2/keys`;
+  const jwksUri = `${normalizeIssuer(issuer)}.well-known/jwks.json`;
   const jwks = createRemoteJWKSet(new URL(jwksUri));
   jwksCache.set(issuer, jwks);
   return jwks;
 }
 
-/**
- * Extract roles from Zitadel claims
- */
-function extractRoles(claims: ZitadelClaims): string[] {
-  const rolesObj = claims["urn:zitadel:iam:org:project:roles"];
-  if (!rolesObj) return [];
-
-  // Zitadel stores roles as { "role_name": { "org_id": "org_name" } }
-  return Object.keys(rolesObj);
+function extractRoles(claims: Auth0Claims): string[] {
+  const roles = claims[ROLES_CLAIM];
+  return Array.isArray(roles) ? roles : [];
 }
 
-/**
- * Userinfo response from Zitadel
- */
 interface UserinfoResponse {
   sub: string;
   name?: string;
   given_name?: string;
   family_name?: string;
-  preferred_username?: string;
+  nickname?: string;
   email?: string;
   email_verified?: boolean;
+  picture?: string;
   locale?: string;
 }
 
-/**
- * Fetch user profile from Zitadel userinfo endpoint
- * This gets the profile claims that aren't in the access token
- */
 async function fetchUserinfo(
   issuer: string,
   accessToken: string,
   logger: ReturnType<typeof getLogger>
 ): Promise<UserinfoResponse | null> {
-  const userinfoUrl = `${issuer.replace(/\/$/, "")}/oidc/v1/userinfo`;
+  const userinfoUrl = `${normalizeIssuer(issuer)}userinfo`;
 
   try {
     const response = await fetch(userinfoUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!response.ok) {
@@ -135,53 +103,23 @@ async function fetchUserinfo(
       return null;
     }
 
-    const userinfo = (await response.json()) as UserinfoResponse;
-    logger.debug(
-      {
-        sub: userinfo.sub,
-        name: userinfo.name,
-        email: userinfo.email,
-        given_name: userinfo.given_name,
-        family_name: userinfo.family_name,
-      },
-      "Userinfo fetched successfully"
-    );
-    return userinfo;
+    return (await response.json()) as UserinfoResponse;
   } catch (error) {
     logger.warn({ error }, "Failed to fetch userinfo");
     return null;
   }
 }
 
-/**
- * Create authentication middleware for Zitadel
- *
- * Usage:
- * ```ts
- * const authMiddleware = createAuthMiddleware({
- *   issuer: process.env.ZITADEL_ISSUER!,
- *   audience: process.env.ZITADEL_CLIENT_ID!,
- * })
- *
- * // Require auth
- * app.use('/api', authMiddleware.required)
- *
- * // Optional auth
- * app.use('/public', authMiddleware.optional)
- * ```
- */
-export function createAuthMiddleware(config: ZitadelAuthConfig) {
+export function createAuthMiddleware(config: Auth0AuthConfig) {
   const logger = getLogger().child({ middleware: "auth" });
-  const jwks = getJWKS(config.issuer);
+  const jwks = getJWKS(config.issuerBaseURL);
+  const expectedIssuer = normalizeIssuer(config.issuerBaseURL);
 
   logger.info(
-    { issuer: config.issuer, audience: config.audience },
-    "Auth middleware initialized",
+    { issuer: expectedIssuer, audience: config.audience },
+    "Auth0 middleware initialized"
   );
 
-  /**
-   * Verify JWT and attach user to request
-   */
   async function verifyAndAttachUser(req: Request): Promise<boolean> {
     const authHeader = req.headers.authorization;
 
@@ -193,20 +131,24 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
 
     try {
       const { payload } = await jwtVerify(token, jwks, {
-        issuer: config.issuer,
+        issuer: expectedIssuer,
         audience: config.audience,
       });
 
-      const claims = payload as ZitadelClaims;
+      const claims = payload as Auth0Claims;
 
-      // Fetch profile data from userinfo endpoint (access tokens don't include profile claims)
-      const userinfo = await fetchUserinfo(config.issuer, token, logger);
+      // Auth0 access tokens often omit profile claims; userinfo fills them in.
+      const userinfo = await fetchUserinfo(config.issuerBaseURL, token, logger);
 
-      // Build user object - prefer userinfo data, fall back to JWT claims
       req.user = {
         id: claims.sub,
         email: userinfo?.email || claims.email,
-        name: userinfo?.name || userinfo?.given_name || claims.name || claims.preferred_username,
+        name:
+          userinfo?.name ||
+          userinfo?.given_name ||
+          userinfo?.nickname ||
+          claims.name ||
+          claims.nickname,
         roles: extractRoles(claims),
         claims,
       };
@@ -215,15 +157,13 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
         {
           userId: req.user.id,
           roles: req.user.roles,
-          name: req.user.name,
           email: req.user.email,
         },
-        "User authenticated",
+        "User authenticated"
       );
 
       return true;
     } catch (error) {
-      // jose errors don't serialize well, extract useful info
       const err = error as Error & { code?: string; claim?: string };
       logger.warn(
         {
@@ -231,21 +171,16 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
           errorMessage: err.message,
           errorCode: err.code,
           claim: err.claim,
-          issuer: config.issuer,
+          issuer: expectedIssuer,
           audience: config.audience,
-          // SECURITY TODO: Remove token logging before production
-          token,
         },
-        "JWT verification failed",
+        "JWT verification failed"
       );
       return false;
     }
   }
 
   return {
-    /**
-     * Require valid JWT - returns 401 if not present or invalid
-     */
     required: async (
       req: Request,
       res: Response,
@@ -264,9 +199,6 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
       next();
     },
 
-    /**
-     * Optional JWT - attaches user if present, continues regardless
-     */
     optional: async (
       req: Request,
       _res: Response,
@@ -276,9 +208,6 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
       next();
     },
 
-    /**
-     * Require specific role(s) - must be used after required middleware
-     */
     requireRole: (...roles: string[]) => {
       return (req: Request, res: Response, next: NextFunction): void => {
         if (!req.user) {
@@ -306,23 +235,22 @@ export function createAuthMiddleware(config: ZitadelAuthConfig) {
 }
 
 /**
- * Create a bypass middleware that skips JWT verification
- * Used when DISABLE_AUTH=true for local development
+ * Create a bypass middleware that skips JWT verification.
+ * Used when DISABLE_AUTH=true for local development.
  *
- * Supports X-User-Id header to allow CLI and other tools to specify user ID
+ * Supports X-User-Id header to allow CLI and other tools to specify user ID.
  */
 function createBypassAuthMiddleware() {
   const logger = getLogger().child({ middleware: "auth" });
 
   const createDevUser = (req: Request): AuthenticatedUser => {
-    // Allow X-User-Id header to override default user ID for CLI/testing
     const userId = (req.headers["x-user-id"] as string) || "jenova";
     return {
       id: userId,
       email: "jenova-marie@proton.me",
       name: "Jenova",
       roles: ["admin"],
-      claims: { sub: userId } as ZitadelClaims,
+      claims: { sub: userId } as Auth0Claims,
     };
   };
 
@@ -354,11 +282,6 @@ function createBypassAuthMiddleware() {
   };
 }
 
-/**
- * Get auth middleware instance (singleton pattern for convenience)
- * Returns bypass middleware if DISABLE_AUTH=true
- * Returns null if ZITADEL_ISSUER is not configured
- */
 let authMiddlewareInstance: ReturnType<typeof createAuthMiddleware> | null =
   null;
 
@@ -374,7 +297,6 @@ export function getAuthMiddleware(): ReturnType<
 > | null {
   if (authMiddlewareInstance) return authMiddlewareInstance;
 
-  // Check for auth bypass (local development)
   if (process.env.DISABLE_AUTH === "true") {
     const logger = getLogger().child({ component: "auth" });
     logger.warn(
@@ -385,24 +307,25 @@ export function getAuthMiddleware(): ReturnType<
     return authMiddlewareInstance;
   }
 
-  const issuer = process.env.ZITADEL_ISSUER;
-  const audience =
-    process.env.ZITADEL_AUDIENCE || process.env.ZITADEL_CLIENT_ID;
+  const issuerBaseURL = process.env.AUTH0_ISSUER_BASE_URL;
+  const audience = process.env.AUTH0_AUDIENCE;
 
-  if (!issuer || !audience) {
+  if (!issuerBaseURL || !audience) {
     const logger = getLogger().child({ component: "auth" });
     logger.error(
       {
-        ZITADEL_ISSUER_SET: !!issuer,
-        ZITADEL_AUDIENCE_SET: !!audience,
-        ZITADEL_CLIENT_ID_SET: !!process.env.ZITADEL_CLIENT_ID,
+        AUTH0_ISSUER_BASE_URL_SET: !!issuerBaseURL,
+        AUTH0_AUDIENCE_SET: !!audience,
         NODE_ENV: process.env.NODE_ENV,
       },
-      "❌ Zitadel authentication not configured - missing ZITADEL_ISSUER and/or ZITADEL_AUDIENCE. Set these environment variables or use DISABLE_AUTH=true for local development"
+      "❌ Auth0 authentication not configured - missing AUTH0_ISSUER_BASE_URL and/or AUTH0_AUDIENCE. Set these environment variables or use DISABLE_AUTH=true for local development"
     );
     return null;
   }
 
-  authMiddlewareInstance = createAuthMiddleware({ issuer, audience });
+  authMiddlewareInstance = createAuthMiddleware({
+    issuerBaseURL,
+    audience,
+  });
   return authMiddlewareInstance;
 }

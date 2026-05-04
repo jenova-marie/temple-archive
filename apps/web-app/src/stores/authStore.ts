@@ -1,16 +1,37 @@
 import { create } from 'zustand'
-import type { User } from 'oidc-client-ts'
 
-// Zitadel stores roles in this claim format
-const ZITADEL_ROLES_CLAIM = 'urn:zitadel:iam:org:project:roles'
+const ROLES_CLAIM = 'https://siri.app/roles'
+
+/**
+ * Provider-agnostic auth user model the rest of the app reads from.
+ * Mirrors OIDC convention: a profile blob plus the active access token.
+ */
+export interface AuthUserProfile {
+  sub: string
+  name?: string
+  given_name?: string
+  family_name?: string
+  nickname?: string
+  email?: string
+  email_verified?: boolean
+  picture?: string
+  locale?: string
+  [ROLES_CLAIM]?: string[]
+  [key: string]: unknown
+}
+
+export interface AuthUser {
+  access_token: string
+  profile: AuthUserProfile
+}
 
 interface AuthState {
-  user: User | null
+  user: AuthUser | null
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
 
-  setUser: (user: User | null) => void
+  setUser: (user: AuthUser | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   getAccessToken: () => string | null
@@ -52,12 +73,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get()
     if (!user?.profile) return []
 
-    // Zitadel stores roles as an object with role names as keys
-    // e.g., { "meeting_guide": { "org_id": "..." }, "admin": { ... } }
-    const rolesObj = user.profile[ZITADEL_ROLES_CLAIM] as Record<string, unknown> | undefined
-    if (!rolesObj || typeof rolesObj !== 'object') return []
-
-    return Object.keys(rolesObj)
+    const roles = user.profile[ROLES_CLAIM]
+    return Array.isArray(roles) ? roles : []
   },
 
   hasRole: (role: string) => {

@@ -12,7 +12,7 @@
 - Multi-tier memory: Redis (L1), PostgreSQL (L2), Neo4j (L3), Qdrant (L4)
 - LLM-based entity extraction to knowledge graph
 - Production safety validators (PII, Medical, Enabling detectors)
-- JWT authentication via Zitadel
+- JWT authentication via Auth0
 - Meeting discovery API integration (findMeetings tool)
 
 **What works today:**
@@ -23,7 +23,7 @@
 - Memory tools for agent to query/save to knowledge graph
 - Safety validation (PII detection, medical advice, enabling language)
 - LLM-based response evaluation
-- JWT authentication (Zitadel)
+- JWT authentication (Auth0)
 - Meeting discovery (AA, NA, CMA, RD)
 
 **What needs work:**

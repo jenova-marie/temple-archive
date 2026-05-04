@@ -16,7 +16,7 @@
 |-----|---------|
 | [docs/PIPELINE.md](docs/PIPELINE.md) | Message processing flow from request to response |
 | [docs/MEMORY_TIERS.md](docs/MEMORY_TIERS.md) | L1→L2→L3→L4 multi-tier memory architecture |
-| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Zitadel OIDC flow and DISABLE_AUTH bypass |
+| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Auth0 OIDC flow and DISABLE_AUTH bypass |
 
 ## Memory System
 

@@ -317,26 +317,31 @@ evaluation:
 
 ---
 
-### `auth` - Authentication (Zitadel)
+### `auth` - Authentication (Auth0)
 
 JWT authentication configuration for API endpoints.
 
 | Setting | Type | Default | Env Var | Description |
 |---------|------|---------|---------|-------------|
-| `zitadel.issuer` | string | - | `ZITADEL_ISSUER` | OIDC issuer URL. When set, enables JWT authentication. |
-| `zitadel.audience` | string | - | `ZITADEL_AUDIENCE` | Expected audience claim in JWT. |
+| `auth0.issuerBaseURL` | string | - | `AUTH0_ISSUER_BASE_URL` | Auth0 tenant URL (e.g. `https://your-tenant.us.auth0.com/`). When set, enables JWT authentication. |
+| `auth0.audience` | string | - | `AUTH0_AUDIENCE` | API identifier configured in Auth0 dashboard. |
+| `auth0.clientId` | string | - | `AUTH0_CLIENT_ID` | SPA client ID (used by the web-app for the login flow). |
 
 **Example:**
 ```yaml
 auth:
-  zitadel:
-    issuer: https://auth.example.com
-    audience: siri-api@my-project
+  auth0:
+    issuerBaseURL: https://your-tenant.us.auth0.com/
+    audience: https://api.siri.app
+    clientId: your-spa-client-id
 ```
 
 **Effect:**
-- Without issuer: API is unauthenticated (development mode)
-- With issuer: All `/api/*` endpoints require valid JWT
+- Without issuerBaseURL + audience: API is unauthenticated (development mode)
+- With both set: All `/api/*` endpoints require a valid JWT
+- Set `DISABLE_AUTH=true` to bypass authentication entirely (dev only)
+
+Roles are read from a namespaced custom claim — `https://siri.app/roles` — populated by an Auth0 Action. See `docs/AUTHENTICATION.md` for the dashboard setup.
 
 ---
 
@@ -596,9 +601,10 @@ crisis:
   deepEvalEnabled: true
 
 auth:
-  zitadel:
-    issuer: ${ZITADEL_ISSUER}
-    audience: ${ZITADEL_AUDIENCE}
+  auth0:
+    issuerBaseURL: ${AUTH0_ISSUER_BASE_URL}
+    audience: ${AUTH0_AUDIENCE}
+    clientId: ${AUTH0_CLIENT_ID}
 
 memory:
   contextMode: 0
@@ -666,8 +672,9 @@ memory:
 | **Crisis** | `CRISIS_THRESHOLD_HIGH` | `crisis.thresholdHigh` |
 | | `CRISIS_THRESHOLD_CRITICAL` | `crisis.thresholdCritical` |
 | | `CRISIS_WEBHOOK_URL` | `crisis.webhookUrl` |
-| **Auth** | `ZITADEL_ISSUER` | `auth.zitadel.issuer` |
-| | `ZITADEL_AUDIENCE` | `auth.zitadel.audience` |
+| **Auth** | `AUTH0_ISSUER_BASE_URL` | `auth.auth0.issuerBaseURL` |
+| | `AUTH0_AUDIENCE` | `auth.auth0.audience` |
+| | `AUTH0_CLIENT_ID` | `auth.auth0.clientId` |
 | **Memory** | `MEMORY_CONTEXT_MODE` | `memory.contextMode` |
 | | `MEMORY_TOOL_ACCESS` | `memory.toolAccess` |
 | | `ENTITY_EXTRACTION_MODE` | `memory.entityExtraction.mode` |

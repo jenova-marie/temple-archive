@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Request, Response, NextFunction } from 'express'
-import { createAuthMiddleware, getAuthMiddleware, resetAuthMiddleware, type ZitadelClaims } from './auth.js'
+import { createAuthMiddleware, getAuthMiddleware, resetAuthMiddleware, type Auth0Claims } from './auth.js'
 import * as jose from 'jose'
 
-// Mock observability
 vi.mock('@siri/observability', () => ({
   getLogger: () => ({
     child: () => ({
@@ -16,7 +15,6 @@ vi.mock('@siri/observability', () => ({
   }),
 }))
 
-// Mock jose
 vi.mock('jose', async () => {
   const actual = await vi.importActual('jose')
   return {
@@ -26,6 +24,8 @@ vi.mock('jose', async () => {
   }
 })
 
+const ROLES_CLAIM = 'https://siri.app/roles'
+
 describe('auth middleware', () => {
   let mockReq: Partial<Request>
   let mockRes: Partial<Response>
@@ -34,24 +34,21 @@ describe('auth middleware', () => {
   let mockStatus: ReturnType<typeof vi.fn>
 
   const mockConfig = {
-    issuer: 'https://test.zitadel.cloud',
-    audience: 'test-client-id',
+    issuerBaseURL: 'https://test.us.auth0.com/',
+    audience: 'https://api.siri.app',
   }
 
-  const mockClaims: ZitadelClaims = {
-    sub: 'user-123',
+  const mockClaims: Auth0Claims = {
+    sub: 'auth0|user-123',
     email: 'test@example.com',
     email_verified: true,
     name: 'Test User',
-    preferred_username: 'testuser',
-    iss: mockConfig.issuer,
+    nickname: 'testuser',
+    iss: mockConfig.issuerBaseURL,
     aud: mockConfig.audience,
     exp: Math.floor(Date.now() / 1000) + 3600,
     iat: Math.floor(Date.now() / 1000),
-    'urn:zitadel:iam:org:project:roles': {
-      admin: { '123': 'org-name' },
-      user: { '123': 'org-name' },
-    },
+    [ROLES_CLAIM]: ['admin', 'user'],
   }
 
   beforeEach(() => {
@@ -71,16 +68,14 @@ describe('auth middleware', () => {
 
     mockNext = vi.fn()
 
-    // Default: createRemoteJWKSet returns a mock function
     vi.mocked(jose.createRemoteJWKSet).mockReturnValue(vi.fn() as unknown as ReturnType<typeof jose.createRemoteJWKSet>)
   })
 
   afterEach(() => {
-    // Reset singleton and env vars
     resetAuthMiddleware()
-    delete process.env.ZITADEL_ISSUER
-    delete process.env.ZITADEL_AUDIENCE
-    delete process.env.ZITADEL_CLIENT_ID
+    delete process.env.AUTH0_ISSUER_BASE_URL
+    delete process.env.AUTH0_AUDIENCE
+    delete process.env.AUTH0_CLIENT_ID
     delete process.env.DISABLE_AUTH
   })
 
@@ -141,7 +136,7 @@ describe('auth middleware', () => {
         await auth.required(mockReq as Request, mockRes as Response, mockNext)
 
         expect(mockReq.user).toBeDefined()
-        expect(mockReq.user?.id).toBe('user-123')
+        expect(mockReq.user?.id).toBe('auth0|user-123')
         expect(mockReq.user?.email).toBe('test@example.com')
         expect(mockReq.user?.name).toBe('Test User')
         expect(mockReq.user?.roles).toContain('admin')
@@ -149,7 +144,7 @@ describe('auth middleware', () => {
         expect(mockNext).toHaveBeenCalled()
       })
 
-      it('uses preferred_username as name fallback', async () => {
+      it('uses nickname as name fallback', async () => {
         mockReq.headers = { authorization: 'Bearer valid-token' }
         const claimsWithoutName = { ...mockClaims, name: undefined }
         vi.mocked(jose.jwtVerify).mockResolvedValue({
@@ -167,9 +162,27 @@ describe('auth middleware', () => {
       it('returns empty roles array when no roles claim', async () => {
         mockReq.headers = { authorization: 'Bearer valid-token' }
         const claimsWithoutRoles = { ...mockClaims }
-        delete claimsWithoutRoles['urn:zitadel:iam:org:project:roles']
+        delete claimsWithoutRoles[ROLES_CLAIM]
         vi.mocked(jose.jwtVerify).mockResolvedValue({
           payload: claimsWithoutRoles,
+          protectedHeader: { alg: 'RS256' },
+        })
+
+        const auth = createAuthMiddleware(mockConfig)
+
+        await auth.required(mockReq as Request, mockRes as Response, mockNext)
+
+        expect(mockReq.user?.roles).toEqual([])
+      })
+
+      it('returns empty roles array when roles claim is not an array', async () => {
+        mockReq.headers = { authorization: 'Bearer valid-token' }
+        const claimsWithBadRoles = {
+          ...mockClaims,
+          [ROLES_CLAIM]: 'admin' as unknown as string[],
+        }
+        vi.mocked(jose.jwtVerify).mockResolvedValue({
+          payload: claimsWithBadRoles,
           protectedHeader: { alg: 'RS256' },
         })
 
@@ -217,7 +230,7 @@ describe('auth middleware', () => {
         await auth.optional(mockReq as Request, mockRes as Response, mockNext)
 
         expect(mockReq.user).toBeDefined()
-        expect(mockReq.user?.id).toBe('user-123')
+        expect(mockReq.user?.id).toBe('auth0|user-123')
         expect(mockNext).toHaveBeenCalled()
       })
     })
@@ -239,7 +252,7 @@ describe('auth middleware', () => {
 
       it('returns 403 when user lacks required role', () => {
         mockReq.user = {
-          id: 'user-123',
+          id: 'auth0|user-123',
           roles: ['user'],
           claims: mockClaims,
         }
@@ -259,7 +272,7 @@ describe('auth middleware', () => {
 
       it('calls next when user has required role', () => {
         mockReq.user = {
-          id: 'user-123',
+          id: 'auth0|user-123',
           roles: ['admin', 'user'],
           claims: mockClaims,
         }
@@ -275,7 +288,7 @@ describe('auth middleware', () => {
 
       it('allows access when user has any of multiple roles', () => {
         mockReq.user = {
-          id: 'user-123',
+          id: 'auth0|user-123',
           roles: ['moderator'],
           claims: mockClaims,
         }
@@ -290,7 +303,7 @@ describe('auth middleware', () => {
 
       it('shows all required roles in error message', () => {
         mockReq.user = {
-          id: 'user-123',
+          id: 'auth0|user-123',
           roles: ['user'],
           claims: mockClaims,
         }
@@ -309,23 +322,23 @@ describe('auth middleware', () => {
   })
 
   describe('getAuthMiddleware', () => {
-    it('returns null when ZITADEL_ISSUER is not set', () => {
+    it('returns null when AUTH0_ISSUER_BASE_URL is not set', () => {
       const auth = getAuthMiddleware()
 
       expect(auth).toBeNull()
     })
 
-    it('returns null when ZITADEL_AUDIENCE is not set', () => {
-      process.env.ZITADEL_ISSUER = 'https://test.zitadel.cloud'
+    it('returns null when AUTH0_AUDIENCE is not set', () => {
+      process.env.AUTH0_ISSUER_BASE_URL = 'https://test.us.auth0.com/'
 
       const auth = getAuthMiddleware()
 
       expect(auth).toBeNull()
     })
 
-    it('returns middleware when ZITADEL_ISSUER and ZITADEL_AUDIENCE are set', () => {
-      process.env.ZITADEL_ISSUER = 'https://test.zitadel.cloud'
-      process.env.ZITADEL_AUDIENCE = 'test-client-id'
+    it('returns middleware when AUTH0_ISSUER_BASE_URL and AUTH0_AUDIENCE are set', () => {
+      process.env.AUTH0_ISSUER_BASE_URL = 'https://test.us.auth0.com/'
+      process.env.AUTH0_AUDIENCE = 'https://api.siri.app'
 
       const auth = getAuthMiddleware()
 
@@ -335,13 +348,13 @@ describe('auth middleware', () => {
       expect(auth?.requireRole).toBeDefined()
     })
 
-    it('uses ZITADEL_CLIENT_ID as fallback for ZITADEL_AUDIENCE', () => {
-      process.env.ZITADEL_ISSUER = 'https://test.zitadel.cloud'
-      process.env.ZITADEL_CLIENT_ID = 'fallback-client-id'
+    it('returns bypass middleware when DISABLE_AUTH=true', () => {
+      process.env.DISABLE_AUTH = 'true'
 
       const auth = getAuthMiddleware()
 
       expect(auth).not.toBeNull()
+      expect(auth?.required).toBeDefined()
     })
   })
 

@@ -78,7 +78,7 @@ A well-designed pipeline is invisible to users but essential to developers. It's
 │   │     │ true            │    │ false           │                       │  │
 │   │     │                 │    │                 │                       │  │
 │   │     │ Mock user:      │    │ Verify JWT      │                       │  │
-│   │     │ id: "dev-user"  │    │ from Zitadel    │                       │  │
+│   │     │ id: "dev-user"  │    │ from Auth0      │                       │  │
 │   │     └─────────────────┘    └─────────────────┘                       │  │
 │   │                                                                       │  │
 │   └────────────────────────────────┬─────────────────────────────────────┘  │

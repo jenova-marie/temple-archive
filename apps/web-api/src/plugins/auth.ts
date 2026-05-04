@@ -1,8 +1,7 @@
 /**
- * Zitadel JWT Authentication Plugin for Fastify
+ * Auth0 JWT Authentication Plugin for Fastify
  *
- * Ported from apps/api Express middleware to Fastify plugin pattern.
- * Validates JWTs issued by Zitadel using JWKS endpoint.
+ * Validates JWTs issued by Auth0 using the standard JWKS endpoint.
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
@@ -10,61 +9,40 @@ import fp from "fastify-plugin";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { getLogger } from "@siri/observability";
 
-/**
- * Zitadel JWT claims
- */
-export interface ZitadelClaims extends JWTPayload {
-  /** Subject - the user ID */
+const ROLES_CLAIM = "https://siri.app/roles";
+
+export interface Auth0Claims extends JWTPayload {
   sub: string;
-  /** Email address */
   email?: string;
-  /** Email verified flag */
   email_verified?: boolean;
-  /** Full name */
   name?: string;
-  /** Given name */
   given_name?: string;
-  /** Family name */
   family_name?: string;
-  /** Preferred username */
-  preferred_username?: string;
-  /** Locale */
+  nickname?: string;
+  picture?: string;
   locale?: string;
-  /** Zitadel roles (project-specific) */
-  "urn:zitadel:iam:org:project:roles"?: Record<string, Record<string, string>>;
+  permissions?: string[];
+  [ROLES_CLAIM]?: string[];
 }
 
-/**
- * Authenticated user attached to request
- */
 export interface AuthenticatedUser {
-  /** User ID from Zitadel (sub claim) */
   id: string;
-  /** Email address */
   email?: string;
-  /** Display name */
   name?: string;
-  /** Roles from Zitadel */
   roles: string[];
-  /** Raw JWT claims for advanced use cases */
-  claims: ZitadelClaims;
+  claims: Auth0Claims;
 }
 
-// Extend Fastify's Request type
 declare module "fastify" {
   interface FastifyRequest {
-    /** Authenticated user (present if JWT is valid) */
     user?: AuthenticatedUser;
   }
 }
 
-/**
- * Auth plugin configuration
- */
 export interface AuthPluginOptions {
-  /** Zitadel issuer URL */
-  issuer: string;
-  /** Expected audience (client ID) */
+  /** Auth0 issuer base URL, e.g. https://your-tenant.us.auth0.com/ */
+  issuerBaseURL: string;
+  /** API audience identifier configured in Auth0 */
   audience: string;
   /** Routes to skip authentication (e.g., ['/health']) */
   skipRoutes?: string[];
@@ -72,58 +50,49 @@ export interface AuthPluginOptions {
   bypassAuth?: boolean;
 }
 
-// Cached JWKS fetcher (singleton per issuer)
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
+function normalizeIssuer(issuer: string): string {
+  return issuer.endsWith("/") ? issuer : `${issuer}/`;
+}
 
 function getJWKS(issuer: string): ReturnType<typeof createRemoteJWKSet> {
   const cached = jwksCache.get(issuer);
   if (cached) return cached;
 
-  // Zitadel uses /oauth/v2/keys instead of /.well-known/jwks.json
-  const jwksUri = `${issuer.replace(/\/$/, "")}/oauth/v2/keys`;
+  const jwksUri = `${normalizeIssuer(issuer)}.well-known/jwks.json`;
   const jwks = createRemoteJWKSet(new URL(jwksUri));
   jwksCache.set(issuer, jwks);
   return jwks;
 }
 
-/**
- * Extract roles from Zitadel claims
- */
-function extractRoles(claims: ZitadelClaims): string[] {
-  const rolesObj = claims["urn:zitadel:iam:org:project:roles"];
-  if (!rolesObj) return [];
-  return Object.keys(rolesObj);
+function extractRoles(claims: Auth0Claims): string[] {
+  const roles = claims[ROLES_CLAIM];
+  return Array.isArray(roles) ? roles : [];
 }
 
-/**
- * Userinfo response from Zitadel
- */
 interface UserinfoResponse {
   sub: string;
   name?: string;
   given_name?: string;
   family_name?: string;
-  preferred_username?: string;
+  nickname?: string;
   email?: string;
   email_verified?: boolean;
+  picture?: string;
   locale?: string;
 }
 
-/**
- * Fetch user profile from Zitadel userinfo endpoint
- */
 async function fetchUserinfo(
   issuer: string,
   accessToken: string,
   logger: ReturnType<typeof getLogger>
 ): Promise<UserinfoResponse | null> {
-  const userinfoUrl = `${issuer.replace(/\/$/, "")}/oidc/v1/userinfo`;
+  const userinfoUrl = `${normalizeIssuer(issuer)}userinfo`;
 
   try {
     const response = await fetch(userinfoUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!response.ok) {
@@ -134,31 +103,21 @@ async function fetchUserinfo(
       return null;
     }
 
-    const userinfo = (await response.json()) as UserinfoResponse;
-    logger.debug(
-      { sub: userinfo.sub, name: userinfo.name, email: userinfo.email },
-      "Userinfo fetched"
-    );
-    return userinfo;
+    return (await response.json()) as UserinfoResponse;
   } catch (error) {
     logger.warn({ error }, "Failed to fetch userinfo");
     return null;
   }
 }
 
-/**
- * Fastify authentication plugin
- */
 async function authPlugin(
   fastify: FastifyInstance,
   options: AuthPluginOptions
 ): Promise<void> {
   const logger = getLogger().child({ plugin: "auth" });
 
-  // Decorate request with user property
   fastify.decorateRequest("user", undefined as AuthenticatedUser | undefined);
 
-  // Bypass mode for development
   if (options.bypassAuth) {
     logger.warn("Authentication DISABLED (bypassAuth=true) - using dev user");
 
@@ -168,29 +127,26 @@ async function authPlugin(
         email: "dev@siri.app",
         name: "Development User",
         roles: ["admin"],
-        claims: { sub: "dev-user" } as ZitadelClaims,
+        claims: { sub: "dev-user" } as Auth0Claims,
       };
     });
 
     return;
   }
 
-  // Normal auth mode
-  const jwks = getJWKS(options.issuer);
+  const jwks = getJWKS(options.issuerBaseURL);
+  const expectedIssuer = normalizeIssuer(options.issuerBaseURL);
+
   logger.info(
-    { issuer: options.issuer, audience: options.audience },
-    "Auth plugin initialized"
+    { issuer: expectedIssuer, audience: options.audience },
+    "Auth0 plugin initialized"
   );
 
-  const skipPatterns = [
-    "/health",
-    ...(options.skipRoutes || []),
-  ];
+  const skipPatterns = ["/health", ...(options.skipRoutes || [])];
 
   fastify.addHook(
     "onRequest",
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // Skip auth for specified routes
       const shouldSkip = skipPatterns.some((pattern) =>
         request.url.startsWith(pattern)
       );
@@ -217,14 +173,17 @@ async function authPlugin(
 
       try {
         const { payload } = await jwtVerify(token, jwks, {
-          issuer: options.issuer,
+          issuer: expectedIssuer,
           audience: options.audience,
         });
 
-        const claims = payload as ZitadelClaims;
+        const claims = payload as Auth0Claims;
 
-        // Optionally fetch userinfo for profile data
-        const userinfo = await fetchUserinfo(options.issuer, token, logger);
+        const userinfo = await fetchUserinfo(
+          options.issuerBaseURL,
+          token,
+          logger
+        );
 
         request.user = {
           id: claims.sub,
@@ -232,8 +191,9 @@ async function authPlugin(
           name:
             userinfo?.name ||
             userinfo?.given_name ||
+            userinfo?.nickname ||
             claims.name ||
-            claims.preferred_username,
+            claims.nickname,
           roles: extractRoles(claims),
           claims,
         };
