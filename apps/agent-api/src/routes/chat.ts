@@ -396,7 +396,13 @@ export function createChatRouter({
           userId,
           messageLength: lastUserMessage.length,
           messageCount: messages.length,
+          // Raw body fields so we can see which one the client used.
+          // SPA sends `guide`; CLI legacy sends `agent`. `guide` wins.
+          guide,
+          agent,
           systemPromptId,
+          locale: localeCode,
+          timezone,
         },
         "Processing chat message",
       );
