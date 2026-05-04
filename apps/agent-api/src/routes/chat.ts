@@ -72,7 +72,14 @@ const chatBodySchema = z
           .passthrough(),
       )
       .min(1),
-    /** Optional agent/persona (system prompt) to use instead of default siri */
+    /**
+     * Selects a system prompt by name (matches `system_prompts.name` rows
+     * surfaced via GET /api/v1/guides). The web-app sends `guide`; the CLI
+     * still sends `agent`. Both are accepted; `guide` takes precedence
+     * when both are supplied.
+     */
+    guide: z.string().optional(),
+    /** Legacy alias for `guide` — kept for CLI backward compat. */
     agent: z.string().optional(),
     /** User's locale code (ISO 3166-1 alpha-2, e.g., 'US', 'DE'). Defaults to 'US'. */
     locale: z.string().length(2).optional(),
@@ -242,11 +249,14 @@ export function createChatRouter({
 
       const {
         messages: rawMessages,
-        agent: systemPromptId,
+        guide,
+        agent,
         conversation_id,
         locale: localeCode,
         timezone,
       } = parseResult.data;
+      // `guide` is the canonical name; `agent` kept for CLI backward compat.
+      const systemPromptId = guide ?? agent;
 
       // Validate messages array
       if (!rawMessages || rawMessages.length === 0) {

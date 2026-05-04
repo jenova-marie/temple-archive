@@ -3,6 +3,13 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+import { config as loadDotenv } from "dotenv";
+
+// Load build.env into process.env so VITE_* values are available in both
+// `vite` (dev server) and `vite build`. Vite by convention only reads
+// .env / .env.local / .env.[mode] files; build.env is a non-standard
+// name we keep to mirror what the production Docker pipeline copies.
+loadDotenv({ path: path.resolve(__dirname, "build.env") });
 
 // Port configuration
 const webAppPort = process.env.WEB_APP_PORT || "5173";

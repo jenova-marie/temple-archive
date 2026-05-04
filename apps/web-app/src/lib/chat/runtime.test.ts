@@ -88,8 +88,9 @@ describe('useMeetingGuideRuntime', () => {
 
     expect(transportConstructorCalls.length).toBeGreaterThan(0)
     const config = transportConstructorCalls[0]
-    // Should use env var or fallback
-    expect(config.api).toMatch(/localhost.*\/api\/v1\/chat/)
+    // Defaults to a relative path so the SPA hits same-origin and goes
+    // through Vite's /api proxy in dev / the reverse proxy in prod.
+    expect(config.api).toMatch(/\/api\/v1\/chat$/)
   })
 
   it('includes selected guide in request body', () => {

@@ -4,12 +4,15 @@ import { AssistantChatTransport } from "@assistant-ui/react-ai-sdk";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+// Empty/unset → relative paths so requests go through Vite's /api proxy in
+// dev and the same-origin reverse proxy in production.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 // Authenticated chat endpoint - requires authentication
 const CHAT_API_URL =
-  import.meta.env.VITE_AUTH_CHAT_API_URL || `${API_BASE_URL}/api/v1/chat`;
+  import.meta.env.VITE_AUTH_CHAT_API_URL?.length
+    ? import.meta.env.VITE_AUTH_CHAT_API_URL
+    : `${API_BASE_URL}/api/v1/chat`;
 
 export function useMeetingGuideRuntime() {
   const user = useAuthStore((s) => s.user);

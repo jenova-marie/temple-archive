@@ -1,7 +1,9 @@
 import { useAuthStore } from "@/stores/authStore";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+// Empty/unset → relative paths so requests go through Vite's /api proxy in
+// dev and the same-origin reverse proxy in production. Override only when
+// the API really lives on a different origin.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export async function apiClient<T>(
   endpoint: string,
