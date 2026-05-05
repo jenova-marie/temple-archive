@@ -108,6 +108,13 @@ export interface PipelineInput {
   localeCode?: string;
   /** User's timezone (IANA format, e.g., 'America/New_York'). Defaults to server timezone. */
   timezone?: string;
+  /**
+   * "Total Privacy" mode. When true, the request must not write to any
+   * persistence layer — no L1/L2/L3/L4/L5 writes, no fact extraction, no
+   * postprocess persistence. Read-only memory tools only. The Archivist
+   * cannot remember this conversation.
+   */
+  totalPrivacy?: boolean;
 }
 
 import type { PipelineDiagnostics } from "./diagnostics.js";

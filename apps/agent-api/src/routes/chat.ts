@@ -22,6 +22,7 @@ import {
   agentTools,
   getMemoryTools,
   getMem0Tools,
+  getReadOnlyMem0Tools,
   getRagTools,
   setRagToolTraceContext,
   clearRagToolTraceContext,
@@ -85,6 +86,13 @@ const chatBodySchema = z
     locale: z.string().length(2).optional(),
     /** User's timezone (IANA format, e.g., 'America/New_York'). Defaults to server timezone. */
     timezone: z.string().optional(),
+    /**
+     * Total Privacy mode. When true, the server must not write to any
+     * persistence layer for this request. Memory tools are downgraded to
+     * read-only and post-processing (which is the only path that
+     * persists messages, embeddings, and extracted facts) is skipped.
+     */
+    total_privacy: z.boolean().optional(),
   })
   .passthrough();
 
@@ -254,9 +262,11 @@ export function createChatRouter({
         conversation_id,
         locale: localeCode,
         timezone,
+        total_privacy,
       } = parseResult.data;
       // `guide` is the canonical name; `agent` kept for CLI backward compat.
       const systemPromptId = guide ?? agent;
+      const totalPrivacy = total_privacy === true;
 
       // Validate messages array
       if (!rawMessages || rawMessages.length === 0) {
@@ -388,6 +398,7 @@ export function createChatRouter({
         displayName: userData.displayName,
         localeCode: localeCode || 'US',
         timezone,
+        totalPrivacy,
       };
 
       logger.info(
@@ -403,8 +414,11 @@ export function createChatRouter({
           systemPromptId,
           locale: localeCode,
           timezone,
+          totalPrivacy,
         },
-        "Processing chat message",
+        totalPrivacy
+          ? "Processing chat message (TOTAL PRIVACY — no DB writes)"
+          : "Processing chat message",
       );
 
       // STAGE 1: Pre-flight checks (crisis, memory, system prompt)
@@ -458,19 +472,27 @@ export function createChatRouter({
             stream: emergencyStream.toUIMessageStream(),
           });
 
-          // Post-process the emergency response
-          emergencyStream.text
-            .then(async (text) => {
-              await pipeline.postProcess(
-                input,
-                text,
-                preflightResult.value,
-                traceContext,
-              );
-            })
-            .catch((err) => {
-              logger.error({ err }, "Emergency post-process failed");
-            });
+          // Post-process the emergency response (writes messages, runs
+          // safety/eval, etc.). Skip entirely under Total Privacy mode.
+          if (totalPrivacy) {
+            logger.info(
+              { conversationId },
+              "Total Privacy: skipping emergency post-process (no DB writes)",
+            );
+          } else {
+            emergencyStream.text
+              .then(async (text) => {
+                await pipeline.postProcess(
+                  input,
+                  text,
+                  preflightResult.value,
+                  traceContext,
+                );
+              })
+              .catch((err) => {
+                logger.error({ err }, "Emergency post-process failed");
+              });
+          }
 
           return;
         }
@@ -494,11 +516,16 @@ export function createChatRouter({
       // RAG tools (read-only consumer of ninshubur's wisdom archive)
       setRagToolTraceContext(traceContext);
 
-      // Build tools: L5 Mem0 tools take precedence over L3/L4 tools
+      // Build tools: L5 Mem0 tools take precedence over L3/L4 tools.
+      // In Total Privacy mode, downgrade to the read-only subset so the
+      // model can still recall prior context but can't write new memories,
+      // forget existing ones, or mutate the knowledge graph.
       const memoryTools = l5MemoryEnabled
-        ? getMem0Tools()
+        ? totalPrivacy
+          ? getReadOnlyMem0Tools()
+          : getMem0Tools()
         : memoryToolAccess !== "off"
-          ? getMemoryTools(memoryToolAccess)
+          ? getMemoryTools(totalPrivacy ? "read" : memoryToolAccess)
           : {};
 
       // RAG tools (empty if RAG is disabled or store not initialized)
@@ -630,7 +657,12 @@ export function createChatRouter({
         }),
       });
 
-      // STAGE 3: Post-process after stream completes (async, don't await)
+      // STAGE 3: Post-process after stream completes (async, don't await).
+      // In Total Privacy mode the entire postprocess stage is skipped —
+      // that's where messages, embeddings, fact extraction, and
+      // diagnostics get persisted. Safety/evaluation are also skipped
+      // because their outputs are only meaningful when persisted alongside
+      // the conversation.
       result.text
         .then(async (responseText) => {
           const duration = Date.now() - startTime;
@@ -656,6 +688,18 @@ export function createChatRouter({
             );
             error.name = "EmptyResponseError";
             throw error;
+          }
+
+          if (totalPrivacy) {
+            logger.info(
+              {
+                requestId,
+                duration,
+                totalDuration: Date.now() - startTime,
+              },
+              "Total Privacy: stream completed, skipping post-process (no DB writes)",
+            );
+            return;
           }
 
           logger.info(

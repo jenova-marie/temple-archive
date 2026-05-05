@@ -36,14 +36,18 @@ function ChatPage() {
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold/10 ring-1 ring-gold/30">
               <Rosette className="h-5 w-5 text-gold" />
             </div>
-            <div className="min-w-0">
-              <h1 className="font-display text-2xl font-medium leading-tight tracking-tight text-foreground sm:text-[1.75rem]">
-                {activeGuide?.name ?? "Guide"}
-              </h1>
-              {activeGuide?.description && (
-                <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
-                  {activeGuide.description}
-                </p>
+            <div className="min-w-0 min-h-[3.25rem]">
+              {activeGuide && (
+                <>
+                  <h1 className="font-display text-2xl font-medium leading-tight tracking-tight text-foreground sm:text-[1.75rem]">
+                    {activeGuide.name}
+                  </h1>
+                  {activeGuide.description && (
+                    <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+                      {activeGuide.description}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>

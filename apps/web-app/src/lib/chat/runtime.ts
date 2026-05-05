@@ -42,15 +42,18 @@ export function useMeetingGuideRuntime() {
       // Only send the latest user message - server fetches history from PostgreSQL
       // This reduces payload size and makes the server the source of truth
       prepareSendMessagesRequest: ({ messages }) => {
-        // Read the live guide selection at send time, not closure time.
-        const currentGuide = useChatStore.getState().selectedGuideId;
+        // Read live store state at send time, not closure time, so toggles
+        // (guide, privacy) take effect immediately without rebuilding the
+        // transport.
+        const { selectedGuideId, totalPrivacy } = useChatStore.getState();
         // Find the last user message to send
         const lastUserMessage = messages.filter((m) => m.role === "user").slice(-1);
         return {
           body: {
             messages: lastUserMessage,
-            guide: currentGuide,
+            guide: selectedGuideId,
             conversation_id: conversationId,
+            total_privacy: totalPrivacy,
           },
         };
       },

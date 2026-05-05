@@ -319,6 +319,15 @@ export const mem0Tools = {
 }
 
 /**
+ * Read-only subset — used in Total Privacy mode where the Archivist may
+ * recall but must not write or forget memories on the user's behalf.
+ */
+export const readOnlyMem0Tools = {
+  searchMemories,
+  listMemories,
+}
+
+/**
  * Get Mem0 tools if the store is configured
  */
 export function getMem0Tools(): Record<string, unknown> {
@@ -326,4 +335,14 @@ export function getMem0Tools(): Record<string, unknown> {
     return {}
   }
   return mem0Tools
+}
+
+/**
+ * Get only the read-only Mem0 tools (Total Privacy mode).
+ */
+export function getReadOnlyMem0Tools(): Record<string, unknown> {
+  if (!mem0StoreInstance) {
+    return {}
+  }
+  return readOnlyMem0Tools
 }

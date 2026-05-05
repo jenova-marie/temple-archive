@@ -3,48 +3,44 @@ import { persist } from "zustand/middleware";
 import type { Guide } from "@siri/shared";
 import { fetchGuides } from "@/lib/api/guides";
 
-/**
- * Fallback list used until the server's `/api/v1/guides` responds — and
- * if that request fails entirely, we keep showing this so the dropdown
- * isn't empty.
- */
-const FALLBACK_GUIDES: Guide[] = [
-  {
-    id: "siri",
-    name: "Siri",
-    description: "Your personal AI companion",
-  },
-];
-
 interface ChatStore {
   selectedGuideId: string;
   guides: Guide[];
   guidesLoading: boolean;
   guidesError: string | null;
+  totalPrivacy: boolean;
   setGuide: (guideId: string) => void;
+  setTotalPrivacy: (value: boolean) => void;
   loadGuides: () => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>()(
   persist(
     (set, get) => ({
-      selectedGuideId: "siri",
-      guides: FALLBACK_GUIDES,
+      selectedGuideId: "",
+      guides: [],
       guidesLoading: false,
       guidesError: null,
+      totalPrivacy: false,
       setGuide: (guideId) => set({ selectedGuideId: guideId }),
+      setTotalPrivacy: (value) => set({ totalPrivacy: value }),
       loadGuides: async () => {
         if (get().guidesLoading) return;
         set({ guidesLoading: true, guidesError: null });
         try {
           const guides = await fetchGuides();
-          // Empty server list still beats the fallback if the user is
-          // intentionally curating guides DB-side; but we keep a single
-          // entry so the dropdown can never disappear entirely.
-          set({
-            guides: guides.length > 0 ? guides : FALLBACK_GUIDES,
+          set((state) => ({
+            guides,
             guidesLoading: false,
-          });
+            // If the persisted selection isn't in the freshly-loaded list
+            // (or nothing was selected), fall back to the first guide so
+            // the UI has something to render.
+            selectedGuideId:
+              state.selectedGuideId &&
+              guides.some((g) => g.id === state.selectedGuideId)
+                ? state.selectedGuideId
+                : guides[0]?.id ?? "",
+          }));
         } catch (error) {
           console.warn("[chatStore] Failed to load guides:", error);
           set({
@@ -59,12 +55,12 @@ export const useChatStore = create<ChatStore>()(
       name: "chat-store",
       // Only persist the user's selection; guides themselves come from the
       // server on mount so we don't show stale entries after a DB change.
-      partialize: (state) => ({ selectedGuideId: state.selectedGuideId }),
+      partialize: (state) => ({
+        selectedGuideId: state.selectedGuideId,
+        totalPrivacy: state.totalPrivacy,
+      }),
     },
   ),
 );
 
-// Re-export the type and a `GUIDES` symbol for backward compatibility with
-// any existing import sites. Reads come through the store instead.
-export const GUIDES: Guide[] = FALLBACK_GUIDES;
 export type { Guide };
