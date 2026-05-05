@@ -47,15 +47,10 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
-import { VoiceInputButton } from "@/components/assistant-ui/voice-input-button";
-import { VADVoiceInputButton } from "@/components/assistant-ui/vad-voice-input-button";
-
 import { cn } from "@/lib/utils";
 
 // Use MarkdownText by default, TypewriterText when enabled via env var
 const ENABLE_TYPEWRITER = import.meta.env.VITE_ENABLE_TYPEWRITER === 'true';
-// Use VAD-based voice input (auto-detect speech) vs hold-to-talk
-const ENABLE_VAD_VOICE = import.meta.env.VITE_ENABLE_VAD_VOICE === 'true';
 const TextComponent = ENABLE_TYPEWRITER ? TypewriterText : MarkdownText;
 
 const ThreadToolbar: FC = () => {
@@ -250,7 +245,6 @@ const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
       <div className="flex items-center gap-1">
-        {ENABLE_VAD_VOICE ? <VADVoiceInputButton /> : <VoiceInputButton />}
         <EmojiPickerButton />
       </div>
 

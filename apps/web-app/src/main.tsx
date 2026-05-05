@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { AuthProvider } from '@/lib/auth/AuthProvider'
@@ -16,10 +17,10 @@ declare module '@tanstack/react-router' {
   }
 }
 
-// Note: StrictMode removed because it causes issues with VAD library
-// (double-mount destroys audio context, causing "null stream" errors)
 createRoot(document.getElementById('root')!).render(
-  <AuthProvider>
-    <RouterProvider router={router} />
-  </AuthProvider>,
+  <StrictMode>
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  </StrictMode>,
 )
