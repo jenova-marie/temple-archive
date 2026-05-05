@@ -1,729 +1,773 @@
-# Siri
+<div align="center">
 
-Siri is a personal AI companion - forked from RecoverySky Agent but customized as Jenova's private AI friend. Built with a multi-tier memory system, real-time crisis detection, and safety-first design principles.
+# 🏛️ Temple Archive 🏛️
 
-**Last Updated:** 2026/01/08
+#### `𒂍 𒀭𒈹` · *é dInanna* · *the House of 𒀭Inanna*
 
-## Features
+### *The Conversational Interface to the Temple of 𒀭Inanna's Light*
 
-- **Vercel AI SDK Compatible**: Native support for `useChat` hooks with UIMessage format
-- **Multi-Tier Memory System**: L1 (Redis) + L2 (PostgreSQL) + L3 (Neo4j) + L4 (Qdrant) + **L5 (Mem0)** for contextual conversations
-- **L5 Mem0 Memory**: Intelligent fact extraction, deduplication, and semantic retrieval as primary memory system
-- **Phase-Shifted Memory Prompts**: Pre-generated memory context from previous requests, injected into current request
-- **Active Knowledge Graph**: Neo4j-powered entity extraction with memory tools Claude can use during conversations
-- **Real-Time Crisis Detection**: Pre-flight keyword matching (<10ms) + LLM deep evaluation with webhook alerting
-- **Safety Validation**: PII detection, medical advice filtering, enabling language detection
-- **JWT Authentication**: Auth0-based authentication for API endpoints
-- **Observable Pipeline**: OpenTelemetry tracing + Prometheus metrics + structured logging
-- **Type-Safe Architecture**: Result-based error handling, no exceptions thrown
-- **Meeting Discovery**: Integration with RecoverySky Meeting API for finding AA/NA meetings
-- **Literature Search**: Semantic search through recovery literature (AA, NA, CMA, Refuge Recovery)
-- **Context Compaction**: Automatic summarization of older messages to manage context length
-- **CLI Tool**: Interactive command-line interface with streaming support and memory diagnostics
-- **CI/CD Pipeline**: Forgejo Actions with Docker build and ECR deployment
+*A web companion where a seeker walks into the Temple, sits at the feet of a Priestess, and asks her questions about the wisdom that [𒀭Ninshubur](https://github.com/jenova-marie/ninshubur) has gathered and preserved. Built on Claude (via the Vercel AI SDK), a multi-tier memory architecture, and a Retrieval-Augmented Generation client that reads — never writes — from Ninshubur's wisdom archive.*
 
-## Quick Start
+**🕊️ The Temple Archive is the *librarian*; [𒀭Ninshubur](https://github.com/jenova-marie/ninshubur) is the *scribe*.** Ninshubur gathers and embeds the High Priestesses' words; the Temple Archive answers a seeker's questions by retrieving from that archive and consulting it through the chosen guide.
 
-```bash
-# Install dependencies
-pnpm install
+**🔒 The Temple Archive is consent-respecting in the same spirit.** It only retrieves from records Ninshubur was authorized to preserve. The boundary that decided whose words got archived was set in [Ninshubur's `USER_IDS`](https://github.com/jenova-marie/ninshubur#-allowlist-filters--the-consent-boundary) — the Temple Archive simply consults what was already given.
 
-# Build all packages
-pnpm build
+✦ ─────────────────────────────────── ✦
 
-# Start development server (with stubs)
-pnpm dev
+</div>
 
-# Or with real services
-docker-compose up -d
-USE_STUBS=false pnpm dev
+> *"Let the seeker who comes to the Temple of 𒀭Inanna's Light find the words preserved, the questions welcomed, and a Priestess to walk her through the archive."*
+
+> 📜 **About the cuneiform.** `𒂍` is the Sumerian sign for *house* or *temple*; `𒀭𒈹` is *dInanna* (the goddess Inanna, with the divinity-determinative `𒀭` prefix). Together `𒂍 𒀭𒈹` reads "the House of 𒀭Inanna" — the Temple itself. The companion repo's name `𒀭𒊩𒋚` *dNin.šubur* is documented in [Ninshubur's README](https://github.com/jenova-marie/ninshubur#-📜-about-the-cuneiform).
+
+If [𒀭Ninshubur](https://github.com/jenova-marie/ninshubur) is the loyal *sukkal* who carries the High Priestesses' words into Postgres and Qdrant, the **Temple Archive** is the chamber where those words are spoken aloud again — through a chosen guide, in response to a seeker's questions. The Archive does not write to the corpus; it does not gather anything new; it does not extend Ninshubur's reach. It opens what Ninshubur has already preserved and lets the words be heard.
+
+**Who lives here.** Several Priestess-guides are available, each with her own voice and instructions. The default is **Ninpippa, Priestess Archivist of the Holly Tablets**, who serves 𒀭Inanna and speaks from the Temple Archives. Other guides include **the Archivist** (a quieter character who speaks only what the archive permits) and **Ninpipanna** (a warmer companion). All are configurable as named "guides" the seeker can choose at the top of the page.
+
+**Why a separate codebase from Ninshubur?** Different concerns, different cadences. Ninshubur is a CLI scribe — she runs on demand, gathers, and exits. The Temple Archive is a long-running web service — it serves seekers continuously, holds conversational memory across requests, runs crisis detection in the hot path, and streams responses through the Vercel AI SDK. Both touch the same archive, but with opposite postures: Ninshubur **writes** (carefully, narrowly, with consent); the Temple Archive **reads** (read-only, reverent, with attribution).
+
+✦ ─────────────────────────────────── ✦
+
+## 📜 Table of Contents
+
+1. [What the Temple Archive Does](#-what-the-temple-archive-does)
+2. [The Stack](#-the-stack)
+3. [Quick Reference Cheatsheet](#-quick-reference-cheatsheet)
+4. [Setup From Scratch](#-setup-from-scratch)
+5. [The Sacred `.env` File](#-the-sacred-env-file)
+6. [The Pipeline](#%EF%B8%8F-the-pipeline)
+7. [The Guides](#-the-guides)
+8. [Memory Tiers (L1–L5)](#-memory-tiers-l1l5)
+9. [RAG Over Ninshubur's Archive](#-rag-over-ninshuburs-archive)
+10. [Crisis Detection & Safety](#-crisis-detection--safety)
+11. [Authentication](#-authentication)
+12. [Operations & Maintenance](#%EF%B8%8F-operations--maintenance)
+13. [Troubleshooting](#-troubleshooting)
+14. [License](#%EF%B8%8F-license)
+
+✦ ─────────────────────────────────── ✦
+
+## 🪷 What the Temple Archive Does
+
+The Temple Archive is the seeker-facing half of a two-repo system. It does no scraping, no embedding, no archive-building. Its job is to **let a seeker converse with the wisdom that already exists**.
+
+```
+   ┌─────────────────────────────┐         ┌─────────────────────────────┐
+   │   Ninshubur (the scribe)    │   ───►  │   Temple Archive (the       │
+   │                             │         │            chamber)         │
+   │   • Reads Discord (manual)  │         │   • Serves a web SPA        │
+   │   • Filters by USER_IDS     │         │   • Streams agent responses │
+   │   • Persists to Postgres    │         │   • Reads Qdrant + Postgres │
+   │   • Embeds via Voyage AI    │         │   • Consults a chosen guide │
+   │   • Pushes to Qdrant        │         │   • Holds memory L1–L5      │
+   └─────────────────────────────┘         └─────────────────────────────┘
+        github.com/jenova-marie               this repo (the front door)
+              /ninshubur
+
+       Ninshubur writes.                  The Temple Archive reads.
+       Ninshubur is a CLI tool.           The Temple Archive is a web service.
+       Ninshubur is offline between       The Temple Archive runs as long as
+       invocations.                       seekers are knocking.
 ```
 
-The API server runs at `http://localhost:3333` by default.
+A typical conversation, end-to-end:
 
-## CLI Usage
+1. A seeker visits the Temple Archive in a browser, signs in via Auth0, and picks a guide.
+2. She types a question into the composer. The agent-api receives it (with a JWT).
+3. The pipeline runs: crisis check → memory retrieval (L1 Redis, L5 Mem0, optional L3 Neo4j / L4 Qdrant) → optional RAG retrieval from [Ninshubur's stores](https://github.com/jenova-marie/ninshubur#-the-database-schema) → agent processing through Claude → parallel safety + evaluation → persist + stream response.
+4. The chosen guide answers — quoting from the archive, attributing to the speaker (Entu Siri Ninkurgarra, Entu Meadow, …), and providing a source link back into Discord when one is available.
+5. The conversation persists across requests (so the seeker can come back tomorrow and pick up the thread), unless she enabled **Total Privacy mode** for that session.
 
-The CLI provides an interactive way to chat with the agent:
+The result: instead of running `pnpm cli rag query "what does the Temple teach about 𒀭Inanna?"` on a terminal (the [Ninshubur way](https://github.com/jenova-marie/ninshubur#%F0%9F%8C%B7-phase-e--rag-query-the-payoff)), a seeker just *asks the Priestess in plain language* and gets a guided, sourced, memory-aware answer.
 
-```bash
-# Build and use the CLI
+✦ ─────────────────────────────────── ✦
+
+## 💎 The Stack
+
+| Layer | Technology | Why |
+|---|---|---|
+| **Runtime** | Node.js 20+ + TypeScript (ESM, NodeNext) | Strict, modern, no transpile drama |
+| **Monorepo** | pnpm workspaces | Strict, fast, deterministic |
+| **API server** | Express + Vercel AI SDK v5 | Streaming agent responses to `useChat` clients |
+| **Frontend** | React 19 + Vite + assistant-ui + TanStack Router | A composable chat UI that speaks the SDK natively |
+| **LLM** | Anthropic Claude (Sonnet for the agent, Haiku for crisis / entity / compaction) | Quality where it matters, speed where it doesn't |
+| **Embeddings** | Voyage AI `voyage-3.5` (1024-dim) | Same provider Ninshubur uses — vectors are interoperable |
+| **L1 Cache** | Redis | <10ms session state for active conversations |
+| **L2 Persistence** | PostgreSQL + Drizzle ORM (+ pgvector) | Conversation history, profiles, system prompts |
+| **L3 Knowledge Graph** | Neo4j | Entity extraction & traversal (legacy, opt-in) |
+| **L4 Semantic Store** | Qdrant | Vector similarity over the agent's own memories |
+| **L5 Primary Memory** | [Mem0](https://docs.mem0.ai/) | Fact extraction, deduplication, semantic recall |
+| **RAG corpus** | [Ninshubur's Postgres + Qdrant](https://github.com/jenova-marie/ninshubur#-the-database-schema) | Read-only consumer of the wisdom archive |
+| **Auth** | Auth0 (JWT bearer) | Mandatory; both the API and the SPA throw without it |
+| **Observability** | OpenTelemetry + Prometheus + Pino (via [`@jenova-marie/wonder-logger`](https://github.com/jenova-marie/wonder-logger)) | Traces, metrics, structured logs, all wired |
+| **Errors** | [`@jenova-marie/ts-rust-result`](https://github.com/jenova-marie/ts-rust-result) | `Result<T, E>` everywhere — no thrown exceptions across boundaries |
+| **Tests** | Vitest | Fast, ESM-native |
+| **Container** | Multi-stage Dockerfile + docker-compose | Local infra in one command; production via the same image |
+
+✦ ─────────────────────────────────── ✦
+
+## ⚡ Quick Reference Cheatsheet
+
+> *Pin this above your altar, queen.* 💅
+
+### Daily operations
+
+```sh
+# Local development (uses ./opt for config)
+pnpm dev
+
+# Local development inside Docker (uses /container)
+pnpm dev:docker
+
+# Run the agent-api on a custom port
+PORT=3333 pnpm dev
+
+# Production start (built first)
+pnpm start              # uses /container
+pnpm start:local        # uses ./opt
+```
+
+### Build & test
+
+```sh
+pnpm install                       # install all workspace deps
+pnpm build                         # build everything except agent-api
+pnpm build:all                     # build everything including agent-api
+pnpm typecheck                     # tsc -b across the workspace
+pnpm test                          # vitest run, all packages
+pnpm test:watch                    # vitest watch mode
+pnpm lint                          # eslint over packages + apps
+
+# Scoped to one package
+pnpm --filter @siri/memory build
+pnpm --filter @siri/pipeline test
+pnpm vitest run packages/memory/src/qdrant/client.test.ts
+```
+
+### Database (L2 Postgres via Drizzle)
+
+```sh
+pnpm --filter @siri/db db:generate         # generate a migration after schema edits
+pnpm --filter @siri/db db:migrate:local    # apply pending migrations
+pnpm --filter @siri/db db:studio:local     # open Drizzle Studio (graphical browser)
+```
+
+> ⚠️ **Schema sync gotcha.** The db package keeps schema in two locations:
+> `packages/db/src/schema.ts` (the consolidated file Drizzle Kit reads) and
+> `packages/db/src/schema/*.ts` (the per-table files runtime code imports).
+> When you change a table, **edit both** or the migration generator silently
+> won't see the change.
+
+### Local infrastructure
+
+```sh
+# Core services: Redis, Postgres, Neo4j, Qdrant
+docker-compose up -d
+
+# With observability stack (Jaeger, Prometheus, Grafana)
+docker-compose --profile observability up -d
+```
+
+### CLI (talks to the agent-api over HTTP)
+
+```sh
 pnpm --filter @siri/cli build
 
-# Start interactive chat
+# Interactive chat
 node packages/cli/dist/index.js
 
-# Send a single message
+# One-shot
 node packages/cli/dist/index.js chat "I'm feeling anxious today"
 
-# Check API health
+# Health + config
 node packages/cli/dist/index.js health
-
-# Show configuration
 node packages/cli/dist/index.js config show
 ```
 
-See [packages/cli/README.md](packages/cli/README.md) for full CLI documentation.
+✦ ─────────────────────────────────── ✦
 
-## API Endpoints
+## 🌸 Setup From Scratch
 
-### Health Check
+If you've cloned this repo to a fresh machine:
 
-```bash
-curl http://localhost:3333/health
+```sh
+# 1. Install dependencies (pnpm only — don't switch to npm/yarn)
+pnpm install
+
+# 2. Configure your secrets. The agent-api reads from {CONTAINER_ROOT}/...,
+#    where CONTAINER_ROOT is ./opt for local dev and /container in Docker.
+cp opt/.env.example opt/.env
+$EDITOR opt/.env                     # see "The Sacred .env File" below
+
+# 3. Web-app secrets
+cp apps/web-app/.env.example apps/web-app/.env
+$EDITOR apps/web-app/.env
+
+# 4. Bring up local infra (Redis, Postgres, Neo4j, Qdrant)
+docker-compose up -d
+
+# 5. Apply Postgres migrations
+pnpm --filter @siri/db db:migrate:local
+
+# 6. Build the workspace
+pnpm build
+
+# 7. Start the agent-api + web-app together
+pnpm dev
 ```
 
-### Send Message
+The agent-api runs at `http://localhost:3333` by default. The web-app (Vite) prints its own URL on start (typically `http://localhost:61666`) and proxies `/api/*` to the agent-api.
 
-The API uses [Vercel AI SDK](https://sdk.vercel.ai/docs) message format for compatibility with `useChat` hooks.
+> 💡 **About the wisdom archive.** The Temple Archive expects [Ninshubur](https://github.com/jenova-marie/ninshubur) to have already populated Postgres + Qdrant with embedded teachings. Set `ENABLE_RAG=true` and point `NINSHUBUR_DATABASE_URL` + `NINSHUBUR_QDRANT_URL` at her stores to enable the `searchKnowledge` tool and `/api/v1/rag/*` routes. Without this, the agent runs fine — it just can't quote the archive.
 
-**Authentication required** - Include a valid JWT in the `Authorization` header:
+✦ ─────────────────────────────────── ✦
 
-```bash
-curl -X POST http://localhost:3333/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -d '{
-    "id": "conv_123",
-    "messages": [
-      {"role": "user", "parts": [{"type": "text", "text": "Hello Siri!"}], "id": "msg_1"}
-    ],
-    "guide": "siri"
-  }'
+## 🔮 The Sacred `.env` File
+
+Every variable here, what it means, and why. Variables are loaded from `{CONTAINER_ROOT}/...` paths (`./opt` locally, `/container` in Docker), validated by Zod schemas in `@siri/config`, and made available as typed env objects throughout the apps.
+
+### 🌹 Application
+
+```sh
+NODE_ENV=development                 # development | test | production
+PORT=3333                            # agent-api HTTP port
+LOG_LEVEL=debug                      # fatal | error | warn | info | debug | trace
+USE_STUBS=true                       # true → in-memory stores; false → real services
+AGENT_MODEL=claude-sonnet-4-20250514 # model for agent processing
 ```
 
-The `userId` is automatically extracted from the JWT `sub` claim.
+### 🌹 AI providers
 
-#### Request Format
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | Yes | Conversation/thread ID |
-| `messages` | UIMessage[] | Yes | Array of messages with `role`, `parts`, `id` |
-| `guide` | string | No | System prompt name (e.g., "siri") |
-| `trigger` | string | No | Action trigger type (e.g., "submit-message") |
-
-#### Response Format
-
-```json
-{
-  "id": "msg_abc123",
-  "role": "assistant",
-  "content": "I hear you. Feeling anxious is...",
-  "conversationId": "conv_123",
-  "metrics": { "totalDuration": 245, "tokensUsed": { "input": 50, "output": 120 } },
-  "crisisLevel": 2,
-  "emergencyTriggered": false
-}
+```sh
+ANTHROPIC_API_KEY=sk-ant-api03-...   # Required for the agent + Haiku helpers
+VOYAGE_API_KEY=pa-...                # Required for L4 embeddings + RAG queries
 ```
 
-### Metrics
+### 🌹 Authentication (Auth0) — **mandatory**
 
-```bash
-curl http://localhost:3333/health/metrics
+The agent-api throws on startup without these, and the SPA throws without `VITE_AUTH0_*`.
+
+```sh
+AUTH0_ISSUER_BASE_URL=https://your-tenant.us.auth0.com/
+AUTH0_AUDIENCE=https://api.siri.app
+AUTH0_CLIENT_ID=your-spa-client-id
 ```
 
-## Architecture
+See [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md) for the full Auth0 dashboard setup.
 
-```
-[User Message]
-     |
-     v
-+------------------------------------------------------------+
-|                    Pipeline Orchestrator                    |
-|                                                             |
-|  +---------------+                                          |
-|  | 1. Preflight  |---- CRISIS (level >= 8) ---+            |
-|  |   CrisisCheck |     (<10ms target)          |            |
-|  +-------+-------+                             v            |
-|          |                          +----------------+      |
-|          | NORMAL                   | Emergency      |      |
-|          v                          | Response       |      |
-|  +---------------+                  +----------------+      |
-|  | 2. Memory     |   L5 (Mem0) OR L1 -> L2 -> L3 -> L4    |
-|  |   Retrieval   |   + Memory Prompts from Redis          |
-|  +-------+-------+                                          |
-|          |                                                  |
-|          v                                                  |
-|  +------------------+                                       |
-|  | 2.5 Memory       |   Build context from L5/Neo4j        |
-|  |     Context      |   + inject memory prompts            |
-|  +--------+---------+                                       |
-|           |                                                 |
-|           v                                                 |
-|  +---------------+                                          |
-|  | 3. Agent      |   Claude (via Vercel AI SDK)            |
-|  |   Processing  |   Tools: findMeetings, searchLiterature,|
-|  |               |          Mem0 tools, memory tools, etc. |
-|  +-------+-------+                                          |
-|          |                                                  |
-|          +---------------------+                            |
-|          |                     |  PARALLEL                  |
-|          v                     v                            |
-|  +---------------+     +---------------+                    |
-|  | 4. Safety     |     | 5. Deep       |                    |
-|  |   Validation  |     |   Crisis Eval |                    |
-|  +-------+-------+     +-------+-------+                    |
-|          |                     |                            |
-|          v                     |                            |
-|  +---------------+             |                            |
-|  | 6. Persist    |<------------+                            |
-|  |   + Extract   |   L5: Mem0 storage (infer=true)         |
-|  |               |   L3: Entity extraction -> Neo4j        |
-|  |               |   Generate memory prompts -> Redis      |
-|  +---------------+                                          |
-+------------------------------------------------------------+
-     |
-     v
-[Response to User]
+### 🌹 L1 Redis (session cache)
+
+```sh
+REDIS_URL=redis://localhost:6379
+REDIS_PASSWORD=
+REDIS_USERNAME=                      # for ACL auth (Redis 6+)
+REDIS_TLS=false
 ```
 
-## Project Structure
+### 🌹 L2 PostgreSQL (conversation history, profiles, system prompts)
 
-```
-siri/
-├── packages/
-│   ├── types/           # Shared TypeScript interfaces
-│   ├── observability/   # Logging, tracing, metrics (wonder-logger)
-│   ├── config/          # YAML config loader with env var interpolation
-│   ├── db/              # Drizzle ORM, PostgreSQL session store
-│   ├── memory/          # Multi-tier memory orchestration (L1-L4)
-│   ├── mem0/            # L5 Mem0 integration
-│   ├── crisis/          # Crisis detection patterns & handlers
-│   ├── safety/          # Response safety validation
-│   ├── tools/           # Vercel AI SDK tool definitions
-│   ├── agent/           # System prompt builder, agent provider
-│   ├── evaluation/      # Response quality evaluation
-│   ├── pipeline/        # Main orchestrator
-│   ├── cli/             # Command-line interface
-│   └── shared/          # Shared utilities
-├── apps/
-│   ├── agent-api/       # Express API server (main)
-│   ├── web-api/         # Voice transcription API
-│   └── web-app/         # React frontend
-├── scripts/
-│   └── init-db.sql      # PostgreSQL schema
-└── docker-compose.yml   # Local development services
+```sh
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/siri
 ```
 
-## Memory Tier Architecture
+### 🌹 L3 Neo4j (legacy knowledge graph — opt-in)
 
-| Tier | Store | Purpose | Latency Target | Implementation |
-|------|-------|---------|----------------|----------------|
-| L1 | Redis | Active session cache | <10ms | RedisContextStore ✅ |
-| L2 | PostgreSQL + Drizzle | Session history, profiles | 10-50ms | PostgresSessionStore ✅ |
-| L3 | Neo4j | Entity knowledge graph | 20-100ms | Neo4jKnowledgeStore ✅ |
-| L4 | Qdrant | Semantic similarity | 5-20ms | QdrantVectorStore ✅ |
-| **L5** | **Mem0** | **Primary memory - fact extraction & retrieval** | **10-50ms** | **Mem0Store ✅** |
+```sh
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password123
+NEO4J_DATABASE=neo4j
+NEO4J_DATABASE_PER_USER=false        # database-per-user mode (Dozer/Enterprise)
+```
 
-When L5 is enabled (`ENABLE_L5_MEMORY=true`), it becomes the primary memory system. L3/L4 entity extraction and embeddings are disabled by default but can be force-enabled for hybrid use.
+### 🌹 L4 Qdrant (the agent's own semantic memory)
 
-### Redis L1 Features
-- Session state caching with configurable TTL (4hr default)
-- Recent message retrieval for context window
-- Authentication support (password, username, TLS)
-- Connection pooling with exponential backoff retry
+```sh
+QDRANT_URL=http://localhost:6333
+QDRANT_API_KEY=                      # blank for local; required for Qdrant Cloud
+```
 
-### Neo4j L3 Knowledge Graph
-- **Entity extraction** from conversations using Claude Haiku
-- **Database-per-user** mode for multi-tenancy (Dozer/Enterprise)
-- **Lazy schema initialization** - schemas created on first access per database
-- **Rich relationships** with context properties (not summaries)
-- **Graph traversal** for related entities and patterns
-- Entity types: person, place, event, emotion, trigger, coping_strategy, milestone, medication
+### 🌹 L5 Mem0 (primary memory)
 
-### Qdrant L4 Features
-- Voyage AI embedding provider (voyage-3.5, 1024-dim)
-- **Hybrid search** with dense vectors + BM25 sparse vectors
-- Semantic similarity search across conversation history
-- **Literature search** - semantic search through recovery literature collection
-- Automatic collection creation with HNSW indexing
-- Batch indexing for bulk operations
+```sh
+ENABLE_L5_MEMORY=false               # master switch — set true for typical deployments
+MEM0_API_URL=http://localhost:8000   # Mem0 FastAPI endpoint
+L5_MEMORY_LIMIT=10                   # max memories retrieved per request
+```
 
-### Mem0 L5 Features (Primary Memory)
-- **Automatic fact extraction** from conversations using Mem0's inference engine
-- **Deduplication and conflict resolution** - similar memories are merged automatically
-- **Semantic search** for user memories with relevance scoring
-- Memories injected into system prompt for contextual awareness
-- Mem0 tools available for agent use (searchMemories, addMemory, etc.)
+When L5 is enabled, the legacy L3/L4 features are auto-disabled (you can force-enable them by setting their flags to `true` explicitly):
 
-#### L5 Configuration
+| Flag | Default | Purpose |
+|---|---|---|
+| `ENABLE_L3_QUERIES` | `false` | Neo4j entity lookups |
+| `ENABLE_ENTITY_EXTRACTION` | `false` | LLM entity extraction to Neo4j |
+| `ENABLE_PREFLIGHT_EMBEDDINGS` | `false` | Query embeddings for L4 search |
+| `ENABLE_POSTFLIGHT_EMBEDDINGS` | `true` | Message embeddings for L4 storage |
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ENABLE_L5_MEMORY` | `false` | Master switch for Mem0 L5 |
-| `MEM0_API_URL` | - | Mem0 FastAPI service URL (e.g., `http://localhost:8000`) |
-| `L5_MEMORY_LIMIT` | `10` | Max memories to retrieve per request |
+### 🌹 RAG over [Ninshubur's wisdom archive](https://github.com/jenova-marie/ninshubur)
 
-When L5 is enabled, these features are auto-disabled (set to `true` to force enable):
-- `ENABLE_L3_QUERIES` - Neo4j entity lookups
-- `ENABLE_ENTITY_EXTRACTION` - LLM entity extraction to Neo4j
-- `ENABLE_PREFLIGHT_EMBEDDINGS` - Query embeddings for L4 semantic search
-- `ENABLE_POSTFLIGHT_EMBEDDINGS` - Message embeddings for L4 storage
+```sh
+# Enables the searchKnowledge agent tool + /api/v1/rag/* routes.
+# Requires VOYAGE_API_KEY (above) plus pointers to Ninshubur's stores.
+ENABLE_RAG=true
+NINSHUBUR_DATABASE_URL=postgres://postgres:postgres@localhost:5432/ninshubur
+NINSHUBUR_QDRANT_URL=http://localhost:6333
+```
 
-## Phase-Shifted Memory Prompts
+The RAG client (`@siri/rag`) is **read-only** — it queries Ninshubur's Postgres + Qdrant for retrieval but never writes. Ingestion belongs to Ninshubur. See [her README's Phase II section](https://github.com/jenova-marie/ninshubur#-phase-ii--the-analysis-understanding) for the full ingestion flow.
 
-Memory prompts are pre-generated during postflight and stored in Redis L1 with per-key TTL. On the next request, these prompts are retrieved during preflight and injected into the system prompt.
+### 🌹 Crisis detection & alerting
 
-### How It Works
-1. **Postflight**: After a response, the `MemoryPromptGenerator` analyzes recent messages
-2. **Generation**: Claude Haiku generates a narrativized memory context with topic-based TTL
-3. **Storage**: Prompts stored in Redis with individual TTLs (high-relevance topics last longer)
-4. **Preflight**: On next request, all non-expired prompts are retrieved and injected
+```sh
+ENABLE_CRISIS_DETECTION=true
+ENABLE_DEEP_CRISIS_EVAL=true
+CRISIS_THRESHOLD_HIGH=7
+CRISIS_THRESHOLD_CRITICAL=9
+CRISIS_WEBHOOK_URL=                  # optional; webhook for crisis alerts
+CRISIS_WEBHOOK_SECRET=               # HMAC-SHA256 secret for signing
+```
 
-### Configuration
+### 🌹 Safety + evaluation
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MEMORY_PROMPT_ENABLED` | `false` | Enable phase-shifted memory prompts |
-| `MEMORY_PROMPT_RECENT_MESSAGES` | `1` | Number of recent messages to analyze |
-| `MEMORY_PROMPT_MAX_TTL_MINUTES` | `60` | Maximum TTL for memory prompts |
+```sh
+ENABLE_SAFETY_VALIDATION=true        # PII / medical / enabling detection
+ENABLE_RESPONSE_EVALUATION=true      # LLM-based response quality scoring
+EVALUATION_MODE=on_demand            # all | sample:N | on_demand
+```
 
-## Literature Search
+### 🌹 Memory tools (what Claude can do during a conversation)
 
-Semantic search through recovery literature stored in PostgreSQL with embeddings in Qdrant:
+```sh
+MEMORY_TOOL_ACCESS=read              # off | read | write | full
+ENTITY_EXTRACTION_MODE=all           # all | none | sample:N | significant
+ENTITY_MIN_IMPORTANCE=0.3            # 0.0–1.0
+```
 
-### Literature Tools
+| Level | Tools available |
+|---|---|
+| `off` | None |
+| `read` | recallMemory, searchEntities, getRelatedEntities |
+| `write` | read + saveNote, logObservation |
+| `full` | write + updateEntity, deleteEntity, createRelationship |
 
-| Tool | Description |
-|------|-------------|
-| `searchLiterature` | Semantic search for passages matching a query, filterable by fellowship |
-| `getLiteraturePassage` | Get a specific page from a piece of literature |
-| `listLiterature` | List all available literature, optionally filtered by fellowship |
+### 🌹 Context compaction (long conversation summarization)
 
-### Supported Fellowships
-- **AA** - Alcoholics Anonymous
-- **NA** - Narcotics Anonymous
-- **CMA** - Crystal Meth Anonymous
-- **RD** - Refuge Recovery / Recover Dharma
+```sh
+COMPACTION_ENABLED=true
+COMPACTION_THRESHOLD=30              # message count to trigger
+COMPACTION_BATCH_SIZE=15             # oldest N messages folded into a summary
+COMPACTION_MODEL=claude-3-haiku-20240307
+COMPACTION_MAX_TOKENS=512
+COMPACTION_TIMEOUT_MS=15000
+```
 
-### Database Schema
-Literature is stored in two tables:
-- `literature` - Metadata (title, fellowship, ISBN, edition, summary)
-- `literature_blocks` - Text passages with page/line references
+### 🌹 Phase-shifted memory prompts
 
-Embeddings are stored in a dedicated Qdrant collection (`literature`) with fellowship filtering support.
+Memory prompts are pre-generated in postflight and stored in Redis with per-key TTL, then injected at the next request's preflight.
 
-## Context Compaction
+```sh
+MEMORY_PROMPT_ENABLED=false
+MEMORY_PROMPT_RECENT_MESSAGES=1
+MEMORY_PROMPT_MAX_TTL_MINUTES=60
+```
 
-Automatic summarization of older messages to manage context window size:
+### 🌹 Observability
 
-### How It Works
-1. After memory retrieval, checks if message count exceeds threshold (default: 30)
-2. Takes the oldest N messages (default: 15)
-3. Summarizes them via Claude Haiku into a single "[Earlier in this conversation]" paragraph
-4. Atomically replaces original messages with summary in Redis
-5. Runs fire-and-forget (non-blocking)
+```sh
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_SERVICE_NAME=temple-archive
+```
 
-### Configuration
+### 🌹 Web-app (`apps/web-app/.env`)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `COMPACTION_ENABLED` | `true` | Enable/disable context compaction |
-| `COMPACTION_THRESHOLD` | `30` | Message count to trigger compaction |
-| `COMPACTION_BATCH_SIZE` | `15` | Number of oldest messages to compact |
-| `COMPACTION_MODEL` | `claude-3-haiku-20240307` | LLM for summarization |
-| `COMPACTION_MAX_TOKENS` | `512` | Max tokens for summary |
-| `COMPACTION_TIMEOUT_MS` | `15000` | Timeout for LLM call |
+```sh
+# Leave blank for same-origin requests (Vite proxy in dev, reverse proxy in prod)
+VITE_API_BASE_URL=
+VITE_AUTH_CHAT_API_URL=
 
-## Dynamic System Prompts
+# Auth0 (mirror the agent-api's tenant)
+VITE_AUTH0_DOMAIN=your-tenant.us.auth0.com
+VITE_AUTH0_CLIENT_ID=your-spa-client-id
+VITE_AUTH0_AUDIENCE=https://api.siri.app
 
-System prompts can be loaded from disk or database with priority ordering:
+# UX flags
+# VITE_ENABLE_TYPEWRITER=true        # animated typing for assistant responses
+```
 
-1. **Disk first**: Check `apps/agent-api/src/prompts/{name}.md`
-2. **Database fallback**: Query `system_prompts` table for active prompt
-3. **Hardcoded default**: Use embedded fallback if neither found
+✦ ─────────────────────────────────── ✦
+
+## 🏛️ The Pipeline
+
+Every chat request flows through a single orchestrator (`@siri/pipeline`). Each stage is observable, swappable, and degrades gracefully when its dependency is offline.
+
+```
+   [seeker's message]
+        |
+        v
+   ┌────────────────────────────────────────────────────────────────────┐
+   │                       Pipeline Orchestrator                        │
+   │                                                                    │
+   │   ┌────────────────┐                                               │
+   │   │ 1. Preflight   │── CRISIS (level ≥ 8) ──┐                      │
+   │   │   CrisisCheck  │   (<10ms keyword pass)  │                      │
+   │   └───────┬────────┘                         v                      │
+   │           │ NORMAL                  ┌──────────────────┐            │
+   │           v                         │  Emergency reply │            │
+   │   ┌──────────────────┐              │  + webhook alert │            │
+   │   │ 2. Memory        │              └──────────────────┘            │
+   │   │   Retrieval      │   L5 (Mem0) primary; L1→L2→L3→L4 legacy     │
+   │   └────────┬─────────┘   + memory prompts from Redis               │
+   │            │                                                       │
+   │            v                                                       │
+   │   ┌──────────────────┐                                             │
+   │   │ 2.5 Memory       │   Build memory context for system prompt    │
+   │   │     Context      │                                             │
+   │   └────────┬─────────┘                                             │
+   │            │                                                       │
+   │            v                                                       │
+   │   ┌──────────────────┐                                             │
+   │   │ 3. Agent         │   Claude (Sonnet) via Vercel AI SDK         │
+   │   │   Processing     │   Tools: searchKnowledge (RAG), memory      │
+   │   │                  │   tools, findMeetings, searchLiterature     │
+   │   └────────┬─────────┘                                             │
+   │            │                                                       │
+   │            ├──────────────────┐  PARALLEL                          │
+   │            v                  v                                    │
+   │   ┌──────────────────┐  ┌──────────────────┐                       │
+   │   │ 4. Safety        │  │ 5. Deep Crisis   │                       │
+   │   │   Validation     │  │   Eval (Haiku)   │                       │
+   │   └────────┬─────────┘  └────────┬─────────┘                       │
+   │            │                     │                                 │
+   │            v                     |                                 │
+   │   ┌──────────────────┐           |                                 │
+   │   │ 6. Persist +     │ <─────────┘                                 │
+   │   │   Extract        │   L5 Mem0 (infer=true)                      │
+   │   │                  │   L3 entity extraction → Neo4j (if enabled) │
+   │   │                  │   Memory prompts → Redis                    │
+   │   └──────────────────┘                                             │
+   └────────────────────────────────────────────────────────────────────┘
+        |
+        v
+   [streaming response → seeker]
+```
+
+A pipeline-stage deep dive lives in [`docs/PIPELINE.md`](docs/PIPELINE.md).
+
+✦ ─────────────────────────────────── ✦
+
+## 🌷 The Guides
+
+System prompts live as markdown files in [`apps/agent-api/src/prompts/`](apps/agent-api/src/prompts/) and are also fetchable from the `system_prompts` Postgres table. Each chat request specifies which guide it wants in the body's `guide` field.
+
+| Guide | File | Voice |
+|---|---|---|
+| **Ninpippa (Siri)** | [`siri.md`](apps/agent-api/src/prompts/siri.md) | The default. *Priestess Archivist of the Holly Tablets* — devoted to 𒀭Inanna, sourced and sacred, embodies the spirit of Enheduanna |
+| **The Archivist** | [`archivist.md`](apps/agent-api/src/prompts/archivist.md) | A quieter character who quotes verbatim, attributes by name, and stops when the archive falls silent |
+| **Ninpipanna** | [`pippa.md`](apps/agent-api/src/prompts/pippa.md) | A warm, conversational companion who learns the seeker's name on first contact |
+
+Resolution order on each chat request:
+
+1. **Disk first** — `apps/agent-api/src/prompts/{guide}.md`
+2. **Database fallback** — query `system_prompts` for `name = guide AND active = true`
+3. **Hardcoded default** — embedded fallback if neither found
 
 ```sql
--- Insert a custom base identity prompt (database option)
+-- Add a custom guide via the database (no rebuild needed)
 INSERT INTO system_prompts (id, name, content, active, created, updated)
 VALUES (
   'prompt_001',
-  'siri',
-  'You are Siri, a compassionate AI companion...',
+  'my_new_guide',
+  'You are ...',
   true,
   NOW(),
   NOW()
 );
 ```
 
-For development, create markdown files in `apps/agent-api/src/prompts/` for faster iteration without database changes.
+For development, drop a markdown file in `apps/agent-api/src/prompts/` and restart the agent-api. The web-app's guide selector populates from `GET /api/v1/guides`.
 
-## Active Memory System
+✦ ─────────────────────────────────── ✦
 
-Neo4j is an **active participant** in conversations, not just an archive:
+## 🧠 Memory Tiers (L1–L5)
 
-### Pre-Agent Memory Context
-Before the agent processes a message, relevant memories are retrieved from Neo4j and injected into the prompt:
+The Temple Archive holds memory across requests so a returning seeker doesn't have to re-explain herself every visit. Five tiers, each with a distinct latency budget and purpose. **L5 (Mem0) is the primary memory tier** in modern deployments; L1–L4 stay live for caching, persistence, and legacy paths.
 
-| Mode | Description | Cost |
-|------|-------------|------|
-| 0 (off) | No memory context | Free |
-| 1 (template) | Format with templates | Free |
-| 2 (haiku) | Claude Haiku narrativizes | ~$0.0003/msg |
-| 3 (hybrid) | Templates + Haiku for complex | Variable |
+| Tier | Store | Purpose | Latency | Implementation |
+|---|---|---|---|---|
+| **L1** | Redis | Active session cache | <10ms | `RedisContextStore` |
+| **L2** | PostgreSQL + pgvector | Conversation history, profiles | 10–50ms | `PostgresSessionStore` |
+| **L3** | Neo4j | Entity knowledge graph (legacy, opt-in) | 20–100ms | `Neo4jKnowledgeStore` |
+| **L4** | Qdrant | Semantic similarity over the agent's own messages | 5–20ms | `QdrantVectorStore` |
+| **L5** | **Mem0** | **Primary memory — fact extraction & retrieval** | **10–50ms** | `Mem0Store` |
 
-### Memory Tools for Claude
-The agent can query and update the knowledge graph during conversations:
+When `ENABLE_L5_MEMORY=true`, Mem0 takes over as primary memory. It extracts facts from conversations automatically (`infer=true`), deduplicates, resolves conflicts, and retrieves by semantic similarity. L3/L4 features auto-disable but can be force-enabled for hybrid use.
 
-| Access Level | Tools Available |
-|--------------|-----------------|
-| `off` | None |
-| `read` | recallMemory, searchEntities, getRelatedEntities |
-| `write` | read + saveNote, logObservation |
-| `full` | write + updateEntity, deleteEntity, createRelationship |
+Detailed write-ups: [`docs/MEMORY_TIERS.md`](docs/MEMORY_TIERS.md), [`docs/L1_CONTEXT.md`](docs/L1_CONTEXT.md), [`docs/L2_DATA_STORE.md`](docs/L2_DATA_STORE.md), [`docs/L3_KNOWLEDGE_GRAPH.md`](docs/L3_KNOWLEDGE_GRAPH.md), [`docs/L4_VECTOR_STORE.md`](docs/L4_VECTOR_STORE.md), [`docs/DEEPMEMORY.md`](docs/DEEPMEMORY.md).
 
-### Literature Tools
-Always available when configured:
-- `searchLiterature` - Semantic search through recovery literature
-- `getLiteraturePassage` - Get specific page from a book
-- `listLiterature` - List available literature by fellowship
+> 💡 **L4 vs RAG.** Don't confuse L4 (the agent's own semantic memory of the seeker's past conversations) with RAG (read-only retrieval from Ninshubur's wisdom archive). They use the same engine (Qdrant + Voyage embeddings) but different collections, different payloads, and different write authorities.
 
-### Post-Agent Entity Extraction
-After responses, entities and relationships are extracted and stored:
+✦ ─────────────────────────────────── ✦
+
+## 📚 RAG Over Ninshubur's Archive
+
+The `@siri/rag` package is a **read-only client** over [Ninshubur's wisdom archive](https://github.com/jenova-marie/ninshubur). When a guide needs to quote a Priestess, this is the path the words travel:
 
 ```
-User: "My sponsor John suggested I try the HALT technique"
-        ↓ Entity Extraction (Haiku)
-Neo4j: (John:Person {role: "sponsor"})
-       (HALT:CopingStrategy)
-       (John)-[:SUGGESTED {context: "for cravings"}]->(HALT)
+   seeker's question
+        │
+        v
+   ┌──────────────────┐
+   │ Voyage AI        │   embed query (input_type="query")
+   │ voyage-3.5       │   → 1024-dim dense vector
+   └────────┬─────────┘
+            v
+   ┌──────────────────┐   cosine similarity, top-K
+   │ Qdrant           │   collections:
+   │                  │     ninshubur_messages
+   │                  │     ninshubur_groups
+   └────────┬─────────┘
+            v
+   ┌──────────────────┐   hydrate point IDs → full content,
+   │ Ninshubur        │   author, channel, link
+   │ PostgreSQL       │   (read-only via @siri/rag/ninshuburDb)
+   └────────┬─────────┘
+            v
+       agent's tool result, attributed and link-bearing
 ```
 
-## Crisis Detection
+### When RAG is on
 
-Two-stage crisis detection for accuracy and speed:
+`ENABLE_RAG=true` plus `VOYAGE_API_KEY`, `NINSHUBUR_DATABASE_URL`, and `NINSHUBUR_QDRANT_URL` enables:
 
-### Stage 1: Keyword Detection (<10ms)
-Fast regex-based pattern matching for 9 crisis types:
+- **`searchKnowledge` tool** — Claude can call it during a conversation, and the result lands in the response with attribution
+- **`GET /api/v1/rag/*`** — direct HTTP routes for non-agent retrieval (debugging, dashboards, separate clients)
 
-| Level | Severity | Patterns Detected |
-|-------|----------|-------------------|
-| 9-10 | Critical | Suicidal ideation, overdose risk, violence risk |
-| 7-8 | High | Active relapse, self-harm, imminent relapse |
-| 4-6 | Elevated | Severe distress, hopelessness, isolation |
-| 1-3 | Normal | Routine conversation |
+If any of those env vars are missing, the container logs a warning and the RAG features are simply unavailable for that boot — the rest of the agent runs normally.
 
-### Stage 2: Deep LLM Evaluation
-For messages that don't trigger emergency (level < 7), the `DeepCrisisEvaluator` runs in parallel with agent processing:
-- Analyzes context and nuance
-- Distinguishes past experiences from current crises
-- Can escalate crisis level if patterns are detected
+### What flows through (and what doesn't)
 
-### Crisis Alerting
-When level >= 7, `WebhookCrisisHandler` sends alerts:
-- HTTP POST to configured webhook URL
-- HMAC-SHA256 signed payloads
-- Non-blocking (fire-and-forget)
-- Includes crisis resources in response
+The RAG client only reads. It never writes to Ninshubur's Postgres or Qdrant. Ingestion is exclusively Ninshubur's domain — see her [Phase II — The Analysis (Understanding)](https://github.com/jenova-marie/ninshubur#-phase-ii--the-analysis-understanding) and [the embedding flow](https://github.com/jenova-marie/ninshubur#-phase-d--embed-voyage--qdrant) for how the corpus gets built.
 
-## Authentication
+The vector dimensions and embedding model **must match** between the two repos:
 
-The API supports JWT authentication via [Auth0](https://auth0.com):
+| Setting | Required value |
+|---|---|
+| Embedding model | `voyage-3.5` |
+| Vector dimensions | `1024` |
+| Distance metric | Cosine |
 
-```bash
-# Configure in environment
+If you change either side without changing the other, queries will return zero results or raise a dimension-mismatch error. The collections are owned by Ninshubur — change them there first, then re-embed.
+
+✦ ─────────────────────────────────── ✦
+
+## 🚨 Crisis Detection & Safety
+
+The Temple Archive serves seekers who may be in real distress, so every chat request runs through two layers of crisis detection and a safety pass on the response.
+
+### Stage 1 — Keyword Detection (<10ms, runs first)
+
+Fast regex-based pattern matching for nine crisis types, scored 1–10:
+
+| Level | Severity | Patterns detected |
+|---|---|---|
+| 9–10 | Critical | Suicidal ideation, overdose risk, violence risk |
+| 7–8 | High | Active relapse, self-harm, imminent relapse |
+| 4–6 | Elevated | Severe distress, hopelessness, isolation |
+| 1–3 | Normal | Routine conversation |
+
+A level ≥ 8 triggers the **emergency response path** — the rest of the pipeline is skipped, a safety-first reply is sent, and `WebhookCrisisHandler` posts an HMAC-signed alert to `CRISIS_WEBHOOK_URL` (fire-and-forget, non-blocking).
+
+### Stage 2 — Deep LLM Evaluation (parallel with agent processing)
+
+For non-emergency requests (level < 7), `DeepCrisisEvaluator` runs Haiku in parallel with the main agent call. It can:
+
+- Distinguish past experiences from current crises
+- Catch nuanced patterns regex misses
+- Escalate the crisis level mid-flight if needed
+
+### Safety pass (parallel with deep crisis eval)
+
+`SafetyValidator` analyzes the agent's *response* (not the user's message) through three detectors:
+
+- **PIIDetector** — SSN, phone, email, credit card, ...
+- **MedicalAdviceDetector** — dosage, diagnosis, treatment language
+- **EnablingDetector** — glorification, minimization, normalization of harm
+
+✦ ─────────────────────────────────── ✦
+
+## 🔐 Authentication
+
+Auth0-issued JWTs are required for every `/api/*` endpoint. `/health` and `/health/metrics` are public.
+
+```sh
+# agent-api
 AUTH0_ISSUER_BASE_URL=https://your-tenant.us.auth0.com/
 AUTH0_AUDIENCE=https://api.siri.app
 AUTH0_CLIENT_ID=your-spa-client-id
+
+# web-app
+VITE_AUTH0_DOMAIN=your-tenant.us.auth0.com
+VITE_AUTH0_CLIENT_ID=your-spa-client-id
+VITE_AUTH0_AUDIENCE=https://api.siri.app
 ```
 
-Authentication is **mandatory** — both backends throw on startup without
-the `AUTH0_*` env vars set, and the SPA throws without `VITE_AUTH0_*`.
+- The user's identity is extracted from the JWT `sub` claim
+- Roles come from the namespaced `https://siri.app/roles` claim (populated by an Auth0 Action)
+- The web-app redirects every route except `/login` and `/callback` to the login flow when not authenticated
+- **Both backends throw on startup without `AUTH0_*` set; the SPA throws on startup without `VITE_AUTH0_*`** — auth is mandatory by design
 
-- `/api/*` endpoints require a valid JWT in `Authorization: Bearer <token>` header
-- `/health` and `/health/metrics` remain public
-- User ID extracted from JWT `sub` claim
-- Roles extracted from the namespaced `https://siri.app/roles` claim (populated by an Auth0 Action)
-- The web-app redirects every route except `/login` and `/callback` to login when not authenticated
+Full Auth0 dashboard setup lives in [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md).
 
-See `docs/AUTHENTICATION.md` for the full Auth0 dashboard setup.
+### Sending a chat request
 
-## Environment Variables
-
-```bash
-# Application
-NODE_ENV=development
-PORT=3333
-LOG_LEVEL=debug
-USE_STUBS=true
-
-# AI Providers
-ANTHROPIC_API_KEY=sk-ant-xxx
-OPENAI_API_KEY=sk-xxx
-
-# Authentication (Auth0)
-AUTH0_ISSUER_BASE_URL=https://your-tenant.us.auth0.com/
-AUTH0_AUDIENCE=https://api.siri.app
-AUTH0_CLIENT_ID=your-spa-client-id
-
-# L1: Redis
-REDIS_URL=redis://localhost:6379
-REDIS_PASSWORD=              # Optional: for authenticated Redis
-REDIS_USERNAME=              # Optional: for ACL auth (Redis 6+)
-REDIS_TLS=false              # Enable TLS/SSL
-
-# L2: PostgreSQL
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/recoverysky
-
-# L3: Neo4j
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=password123
-NEO4J_DATABASE=neo4j         # Default database name
-NEO4J_DATABASE_PER_USER=false # Enable database-per-user mode (Dozer/Enterprise)
-
-# L4: Qdrant
-QDRANT_URL=http://localhost:6333
-QDRANT_API_KEY=              # Optional: for Qdrant Cloud
-
-# L5: Mem0
-ENABLE_L5_MEMORY=false       # Enable Mem0 as primary memory
-MEM0_API_URL=http://localhost:8000  # Mem0 FastAPI endpoint
-L5_MEMORY_LIMIT=10           # Max memories to retrieve
-
-# Feature Flags (legacy L3/L4 — opt-in; default off in L5-primary deployments)
-ENABLE_L3_QUERIES=false           # Neo4j entity lookups
-ENABLE_ENTITY_EXTRACTION=false    # LLM entity extraction to Neo4j
-ENABLE_PREFLIGHT_EMBEDDINGS=false # Query embeddings for L4 semantic search
-ENABLE_POSTFLIGHT_EMBEDDINGS=true # Message embeddings for L4 storage
-
-# Observability
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-OTEL_SERVICE_NAME=ninshubur
-
-# Crisis Response
-CRISIS_WEBHOOK_URL=          # Webhook for crisis alerts
-CRISIS_WEBHOOK_SECRET=       # HMAC secret for webhook signing
-CRISIS_THRESHOLD_HIGH=7
-CRISIS_THRESHOLD_CRITICAL=9
-
-# Active Memory System
-MEMORY_CONTEXT_MODE=0        # 0=off, 1=template, 2=haiku, 3=hybrid (legacy L3; auto-skipped when MEMORY_PROMPT_ENABLED=true)
-MEMORY_TOOL_ACCESS=read      # off, read, write, full
-
-# Entity Extraction
-ENTITY_EXTRACTION_MODE=all   # all, none, sample:N, significant
-ENTITY_MIN_IMPORTANCE=0.3    # 0.0-1.0 threshold
-
-# Evaluation
-EVALUATION_MODE=on_demand    # all, sample:N, on_demand
-
-# Meeting API
-MEETING_API_URL=http://localhost:4000
-MEETING_API_TOKEN=           # Optional: Bearer token for API auth
-
-# Context Compaction
-COMPACTION_ENABLED=true      # Enable/disable context compaction
-COMPACTION_THRESHOLD=30      # Message count to trigger compaction
-COMPACTION_BATCH_SIZE=15     # Number of oldest messages to compact per batch
-COMPACTION_MODEL=claude-3-haiku-20240307  # LLM for summarization
-COMPACTION_MAX_TOKENS=512    # Max tokens for summary response
-COMPACTION_TIMEOUT_MS=15000  # Timeout for LLM call (ms)
-
-# User Caching
-USER_CACHE_TTL_MINUTES=60    # TTL for user/profile cache in Redis
-
-# Memory Prompts (phase-shifted memory)
-MEMORY_PROMPT_ENABLED=false  # Enable phase-shifted memory prompts
-MEMORY_PROMPT_RECENT_MESSAGES=1   # Messages to analyze per request
-MEMORY_PROMPT_MAX_TTL_MINUTES=60  # Maximum TTL for prompts
-
-# Agent Model
-AGENT_MODEL=claude-sonnet-4-20250514  # Model for agent processing
+```sh
+curl -X POST http://localhost:3333/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -d '{
+    "id": "conv_123",
+    "messages": [
+      {"role": "user", "parts": [{"type": "text", "text": "What does the Temple teach about 𒀭Inanna?"}], "id": "msg_1"}
+    ],
+    "guide": "siri"
+  }'
 ```
 
-## Docker Services
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Conversation/thread ID |
+| `messages` | UIMessage[] | yes | Vercel AI SDK message format |
+| `guide` | string | no | Guide name (defaults to `siri`) |
+| `total_privacy` | boolean | no | If true, response is not persisted server-side |
 
-Start all infrastructure services:
+✦ ─────────────────────────────────── ✦
 
-```bash
-# Core services (Redis, PostgreSQL, Neo4j, Qdrant)
-docker-compose up -d
+## 🛠️ Operations & Maintenance
 
-# With observability stack (Jaeger, Grafana, Prometheus)
-docker-compose --profile observability up -d
+### Daily
+
+```sh
+curl http://localhost:3333/health                 # liveness
+curl http://localhost:3333/health/metrics         # Prometheus metrics
+docker compose ps                                 # check infra is up
 ```
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| Redis | 6379 | L1 cache |
-| PostgreSQL | 5432 | L2 persistence |
-| Neo4j | 7474, 7687 | L3 knowledge graph |
-| Qdrant | 6333, 6334 | L4 vector store |
-| Jaeger | 16686 | Distributed tracing UI |
-| Prometheus | 9090 | Metrics collection |
-| Grafana | 3333 | Dashboards |
+### Schema changes (L2 Postgres / Drizzle)
 
-## Development
+```sh
+# 1. Edit a file under packages/db/src/schema/   (per-table file)
+# 2. Edit packages/db/src/schema.ts              (consolidated file — both must match)
+# 3. Generate the migration
+pnpm --filter @siri/db db:generate
 
-### Build
-
-```bash
-# Build all packages (except api)
-pnpm build
-
-# Build everything including api
-pnpm build:all
-
-# Build specific package
-pnpm --filter @siri/memory build
+# 4. Review the SQL in packages/db/drizzle/
+# 5. Apply
+pnpm --filter @siri/db db:migrate:local
 ```
 
-### Test
+### Adding a new package
 
-```bash
-# Run all tests
-pnpm test
-
-# Watch mode
-pnpm test:watch
-
-# Run with coverage
-pnpm vitest run --coverage
-
-# Test specific package
-pnpm --filter @siri/pipeline test
+```sh
+# 1. Create packages/<name>/{package.json, tsconfig.json, src/index.ts}
+# 2. Add a reference in the root tsconfig.json
+# 3. Add it as a workspace dep where consumed:
+pnpm --filter @siri/<consumer> add @siri/<name>
+# 4. Export from src/index.ts; remember .js extensions on local imports
 ```
 
-### Test Coverage
+### Adding a new guide
 
-The project maintains comprehensive unit test coverage using Vitest with mock-based testing:
+The fastest path: drop a markdown file into `apps/agent-api/src/prompts/<name>.md` and restart the agent-api. The file's content becomes the system prompt; the file name is the `guide` value the SPA passes in the chat request body. To add it via the database instead (no restart), insert into `system_prompts`.
 
-| Package | Tests | Key Areas |
-|---------|-------|-----------|
-| @siri/types | 33 | Result types, domain errors |
-| @siri/observability | 48 | Logging, tracing, metrics |
-| @siri/crisis | 126 | Detection patterns, handlers, evaluators |
-| @siri/memory | 101 | Stores (Redis, Qdrant, Neo4j), orchestrator, memory prompts |
-| @siri/mem0 | ~30 | Mem0Store, client, transforms, InMemoryMem0Store |
-| @siri/db | 20 | Schema, PostgresSessionStore |
-| @siri/agent | 50 | VercelAIAgentProvider, prompt builder |
-| @siri/safety | 13 | PII, medical, enabling detectors |
-| @siri/evaluation | 14 | LLMEvaluator, scoring |
-| @siri/tools | 37 | Recovery tools, meeting client, memory tools, Mem0 tools |
-| @siri/cli | ~20 | Commands, chat, health |
-| **Total** | **500+** | |
+### Bumping versions across the monorepo
 
-All tests use mocks for external dependencies (Redis, PostgreSQL, Neo4j, Qdrant, Mem0, AI providers).
+The convention here is to bump every `package.json` to the same version simultaneously (a pattern the recent commit history makes clear: `🏗️ chore(monorepo): align all workspace versions at 0.1.1` and friends). This keeps Docker tags meaningful and avoids cross-package version skew.
 
-### Type Check
+✦ ─────────────────────────────────── ✦
 
-```bash
-pnpm typecheck
+## 🧯 Troubleshooting
+
+### *"AUTH0_ISSUER_BASE_URL is required"*
+
+Auth is mandatory. Set `AUTH0_ISSUER_BASE_URL`, `AUTH0_AUDIENCE`, and `AUTH0_CLIENT_ID` for the agent-api; `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, and `VITE_AUTH0_AUDIENCE` for the SPA. See [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md).
+
+### *"ENABLE_RAG=true but VOYAGE_API_KEY/NINSHUBUR_DATABASE_URL/NINSHUBUR_QDRANT_URL not set"*
+
+The Temple Archive expects [Ninshubur](https://github.com/jenova-marie/ninshubur) to have populated the corpus already. Either set the three env vars to point at her stores (and provide a Voyage API key), or set `ENABLE_RAG=false` to disable the `searchKnowledge` tool entirely.
+
+### *"Migration didn't pick up my schema change"*
+
+`packages/db` keeps schema in two places — `src/schema.ts` (the file Drizzle Kit reads) and `src/schema/*.ts` (per-table files runtime code uses). Edit **both**. Then re-run `pnpm --filter @siri/db db:generate`.
+
+### *"My L5 memories aren't being saved"*
+
+Check that `ENABLE_L5_MEMORY=true` and `MEM0_API_URL` is reachable from the agent-api container. The `Mem0Store` falls back gracefully (logs a warning, conversation continues) when Mem0 is unreachable, but no facts will be extracted. Hit `MEM0_API_URL/health` from the same network to verify.
+
+### *"Crisis webhook isn't firing"*
+
+`WebhookCrisisHandler` is fire-and-forget and swallows transport errors so a failing webhook can't block the seeker's response. Check the agent-api logs for a `crisis.webhook.failed` line. Verify the `CRISIS_WEBHOOK_SECRET` matches the receiver — the payload is HMAC-SHA256 signed and a mismatch is the most common cause of silent rejection at the receiver.
+
+### *"Qdrant dimension mismatch"*
+
+The agent-api expects 1024-dim vectors (Voyage `voyage-3.5`). If a collection was created at a different size — or if you swapped Voyage models — delete the collection and re-embed:
+
+```sh
+# Delete one of the agent's own collections
+curl -X DELETE "$QDRANT_URL/collections/<name>"
 ```
 
-## Core Dependencies
+For RAG against Ninshubur's collections, the dimensions are owned by *her* repo. Change them there ([Phase D in her README](https://github.com/jenova-marie/ninshubur#-phase-d--embed-voyage--qdrant)) and re-embed; don't try to fix it from this side.
 
-- **[@jenova-marie/wonder-logger](https://github.com/jenova-marie/wonder-logger)**: Unified observability (Pino logging + OpenTelemetry tracing/metrics)
-- **[@jenova-marie/ts-rust-result](https://github.com/jenova-marie/ts-rust-result)**: Type-safe Result error handling
-- **[Vercel AI SDK v5](https://sdk.vercel.ai/docs)**: LLM integration with streaming and tool support
-- **[@recoverysky-org/common](https://github.com/recoverysky-org/recoverysky-common)**: Shared models, schemas, and repositories
-- **[Drizzle ORM](https://orm.drizzle.team)**: Type-safe PostgreSQL database access
-- **[ioredis](https://github.com/redis/ioredis)**: Redis client with cluster support
-- **[@qdrant/js-client-rest](https://github.com/qdrant/qdrant-js)**: Qdrant vector database client
-- **[Express](https://expressjs.com)**: HTTP server framework
-- **[Vitest](https://vitest.dev)**: Fast unit testing framework
+### *"Cache hit rate looks low on the agent"*
 
-## Implementation Status
+The Vercel AI SDK forwards system-prompt + tool-definitions through Anthropic's prompt cache automatically. If hit rates are poor, your system prompt may be under the 4096-token cache minimum, or the guide is being switched mid-conversation (which invalidates the cache). Pin a guide and check token counts in the response metadata.
 
-### Phase 1: Agent Integration ✅
-- [x] VercelAIAgentProvider with Claude (claude-sonnet-4)
-- [x] Vercel AI SDK v5 with UIMessage format
-- [x] Streaming support with AsyncGenerator
-- [x] Tool execution loop with argument conversion
-- [x] Token usage tracking and error handling
-- [x] Dynamic system prompts from database
+✦ ─────────────────────────────────── ✦
 
-### Phase 2: PostgreSQL L2 Memory ✅
-- [x] Drizzle ORM schema with migrations
-- [x] PostgresSessionStore with conversation history
-- [x] pgvector support for embeddings (1536 dims)
-- [x] User profiles and session summaries
+## 💌 A Note for the Priestesses
 
-### Phase 3: Redis L1 Cache ✅
-- [x] RedisContextStore with sorted sets
-- [x] Configurable TTL (4hr default)
-- [x] Authentication support (password, username, TLS)
-- [x] Cache warming from L2
+If you're reviewing this work — welcome, beloved.
 
-### Phase 4: Embeddings ✅
-- [x] OpenAIEmbeddingProvider (text-embedding-3-small)
-- [x] Batch processing with rate limiting
-- [x] Semantic search integration
+The Temple Archive is the chamber where seekers come to consult the wisdom that [𒀭Ninshubur](https://github.com/jenova-marie/ninshubur) has preserved. It does not gather; it does not extend Ninshubur's reach into the wider Temple. It opens what was already given and lets a Priestess-guide answer in your voice.
 
-### Phase 5: Qdrant L4 Vector Store ✅
-- [x] QdrantVectorStore with HNSW indexing
-- [x] Semantic similarity search
-- [x] Automatic collection management
-- [x] Hybrid search with BM25 sparse vectors
+### 🌷 Boundary 1 — The archive is read-only
 
-### Phase 6: Enhanced Crisis Detection ✅
-- [x] KeywordCrisisDetector with 9 pattern types
-- [x] DeepCrisisEvaluator (LLM-based)
-- [x] WebhookCrisisHandler with HMAC signing
-- [x] Parallel evaluation with agent processing
+The Temple Archive's RAG client cannot write to Ninshubur's Postgres or Qdrant. If a teaching of yours appears in a guide's answer, it appeared because Ninshubur preserved it during a backfill you authorized via [her `USER_IDS`](https://github.com/jenova-marie/ninshubur#-allowlist-filters--the-consent-boundary). The Temple Archive is the librarian, not a second scribe.
 
-### Phase 7: Safety & Evaluation ✅
-- [x] SafetyValidator with three detectors:
-  - PIIDetector (SSN, phone, email, credit card, etc.)
-  - MedicalAdviceDetector (dosage, diagnosis, treatment)
-  - EnablingDetector (glorification, minimization)
-- [x] LLMEvaluator with quality/relevance/empathy/recovery scores
-- [x] Configurable evaluation modes
+### 🌷 Boundary 2 — The seeker's own conversations
 
-### Phase 8: Neo4j L3 Knowledge Graph ✅
-- [x] Neo4jKnowledgeStore with CRUD operations
-- [x] EntityExtractor with LLM-based extraction
-- [x] Database-per-user mode (Dozer/Enterprise)
-- [x] Lazy schema initialization per database
-- [x] Memory tools for Claude (recallMemory, saveNote, etc.)
-- [x] MemoryContextBuilder for pre-agent injection
-- [x] Rich relationship properties (graph-native design)
+The Temple Archive *does* write — but only the seeker's own conversation with the guide, into the seeker's own memory tiers (L1–L5). These belong to the seeker. They are not shared, not aggregated into the wisdom corpus, not accessible to other seekers. They exist so the guide can remember the seeker between visits.
 
-### Phase 9: Production Hardening ✅
-- [x] Comprehensive unit test suite (470+ tests)
-- [x] JWT authentication (Auth0)
-- [x] Observability (OpenTelemetry + Prometheus)
-- [x] Result-based error handling
-- [x] User profile fetching from Auth0 userinfo
-- [x] Redis caching for user/profile data
+The seeker can also opt into **Total Privacy mode** for any session — when enabled, the response is not persisted server-side. The conversation lives only as long as the browser tab is open.
 
-### Phase 10: Literature & Context Management ✅
-- [x] Literature database schema (literature, literature_blocks)
-- [x] LiteratureRepository for block hydration
-- [x] Semantic literature search via Qdrant
-- [x] Literature tools (searchLiterature, getLiteraturePassage, listLiterature)
-- [x] Context compaction for long conversations
-- [x] Fire-and-forget summarization via Haiku
+### 🌷 Boundary 3 — Crisis is treated with care
 
-### Phase 11: L5 Mem0 Memory ✅
-- [x] @siri/mem0 package with Mem0Store implementation
-- [x] Mem0 HTTP client with health checks
-- [x] InMemoryMem0Store for testing
-- [x] Integration with MemoryOrchestrator
-- [x] L5 memories injected into system prompt
-- [x] Mem0 tools for agent (searchMemories, addMemory)
-- [x] Auto-disable L3/L4 features when L5 enabled
-- [x] Postflight memory storage with inference
+When a seeker's words register as crisis (suicidal ideation, active relapse, violence risk, …), the Temple Archive abandons the normal pipeline and returns a safety-first reply with resources — and notifies the configured webhook so a human can reach out. The crisis layer cannot be silenced from the agent's side; it runs before the guide ever sees the message.
 
-### Phase 12: Phase-Shifted Memory Prompts ✅
-- [x] MemoryPromptStore with Redis + per-key TTL
-- [x] MemoryPromptGenerator with topic-based TTL assignment
-- [x] Integration into pipeline preflight/postflight
-- [x] Memory prompts section in system prompt builder
-- [x] CLI diagnostics for memory prompts
+If you find a bug, want to revise the ritual, or want to revoke a guide — the code is small enough to read in a sitting, the schema is intentionally legible, and every package has its own README and tests.
 
-### Phase 13: CI/CD & Infrastructure ✅
-- [x] Forgejo Actions workflow
-- [x] Docker build with multi-stage optimization
-- [x] ECR deployment workflow
-- [x] Configurable AGENT_MODEL env var
+May 𒀭Inanna's light guide your work, may the seekers find what they came for, and may the archive serve the Temple for many seasons. ✨
 
-### Phase 14: Future Enhancements
-- [ ] Load testing
-- [ ] API documentation (OpenAPI)
-- [ ] Hybrid L3/L4/L5 memory mode
+✦ ─────────────────────────────────── ✦
 
-## License
+## ⚖️ License
 
-Private - All rights reserved.
+**Private — All rights reserved.** Copyright © 2026 Jenova Marie.
+
+The companion project [𒀭Ninshubur](https://github.com/jenova-marie/ninshubur) is released under MIT. The Temple Archive is private at present; that may change in time, but for now this code is not licensed for redistribution.
+
+The Temple's archive content (messages, lessons, teachings — the data the High Priestesses authored) belongs to the Priestesses and is governed by their consent through [Ninshubur's `USER_IDS` boundary](https://github.com/jenova-marie/ninshubur#-allowlist-filters--the-consent-boundary), not by any license on this code.
+
+<div align="center">
+
+✦ ─────────────────────────────────── ✦
+
+*Made with 💖 in service of 𒀭Inanna*
+
+`𒂍 𒀭𒈹` *é dInanna* · `𒀭𒊩𒋚` *dNin.šubur* · `𒀭𒈹` *dInanna*
+
+✦
+
+*may 𒀭Inanna bless this code*
+
+</div>
