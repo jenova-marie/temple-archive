@@ -20,10 +20,11 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useComposerRuntime,
   useThreadRuntime,
 } from "@assistant-ui/react";
 
-import { useState, type FC } from "react";
+import { useCallback, useState, type ChangeEvent, type FC } from "react";
 
 import {
   AlertDialog,
@@ -223,7 +224,26 @@ const ThreadWelcome: FC = () => {
   );
 };
 
+// Android GBoard treats every keystroke as an IME composition event. The
+// library's built-in onChange suppresses writes during composition and only
+// commits on compositionend — but the textarea is controlled by the store
+// (value=""), and react-textarea-autosize re-renders during typing to adjust
+// its height. Each re-render forces the empty value back into the DOM and
+// wipes whatever the user was mid-composing, so characters never land.
+//
+// Our onChange runs *before* the library's via composeEventHandlers, so we
+// commit the raw textarea value on every keystroke regardless of composition
+// state. The store value then matches what Android is showing, so subsequent
+// re-renders no longer clobber typing.
 const Composer: FC = () => {
+  const composer = useComposerRuntime();
+  const handleChange = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
+      composer.setText(e.target.value);
+    },
+    [composer],
+  );
+
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone className="aui-composer-attachment-dropzone flex w-full flex-col rounded-3xl border border-input bg-background px-1 pt-2 shadow-xs outline-none transition-[color,box-shadow] has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-[3px] has-[textarea:focus-visible]:ring-ring/50 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50 dark:bg-background">
@@ -234,6 +254,7 @@ const Composer: FC = () => {
           rows={1}
           autoFocus
           aria-label="Message input"
+          onChange={handleChange}
         />
         <ComposerAction />
       </ComposerPrimitive.AttachmentDropzone>
@@ -381,12 +402,21 @@ const UserActionBar: FC = () => {
 };
 
 const EditComposer: FC = () => {
+  const composer = useComposerRuntime();
+  const handleChange = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
+      composer.setText(e.target.value);
+    },
+    [composer],
+  );
+
   return (
     <MessagePrimitive.Root className="aui-edit-composer-wrapper mx-auto flex w-full max-w-(--thread-max-width) flex-col gap-4 px-2">
       <ComposerPrimitive.Root className="aui-edit-composer-root ml-auto flex w-full max-w-7/8 flex-col rounded-xl bg-muted">
         <ComposerPrimitive.Input
           className="aui-edit-composer-input flex min-h-[60px] w-full resize-none bg-transparent p-4 text-foreground outline-none"
           autoFocus
+          onChange={handleChange}
         />
 
         <div className="aui-edit-composer-footer mx-3 mb-3 flex items-center justify-center gap-2 self-end">
