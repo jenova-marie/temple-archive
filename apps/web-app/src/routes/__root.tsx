@@ -123,7 +123,7 @@ function RootLayout() {
               </span>
             </Link>
             <a
-              href="https://github.com/recoverysky-org/recoverysky-app"
+              href="https://github.com/jenova-marie/temple-archive"
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground/60 hover:text-foreground transition-colors"
