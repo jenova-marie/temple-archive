@@ -11,7 +11,6 @@ import {
   RotateCcwIcon,
   SettingsIcon,
   Square,
-  UploadIcon,
 } from "lucide-react";
 
 import {
@@ -24,7 +23,7 @@ import {
   useThreadRuntime,
 } from "@assistant-ui/react";
 
-import { useRef, useState, type FC } from "react";
+import { useState, type FC } from "react";
 
 import {
   AlertDialog,
@@ -45,7 +44,6 @@ import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { EmojiPickerButton } from "@/components/assistant-ui/emoji-picker-button";
 import {
-  ComposerAddAttachment,
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
@@ -62,7 +60,6 @@ const TextComponent = ENABLE_TYPEWRITER ? TypewriterText : MarkdownText;
 
 const ThreadToolbar: FC = () => {
   const runtime = useThreadRuntime();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
@@ -103,24 +100,6 @@ const ThreadToolbar: FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    // Get the composer and add the attachments
-    const composer = runtime.composer;
-    for (const file of Array.from(files)) {
-      await composer.addAttachment(file);
-    }
-
-    // Reset the input so the same file can be selected again
-    event.target.value = "";
-  };
-
   return (
     <>
       <div className="aui-thread-toolbar flex items-center gap-1.5 px-4 py-2.5 border-b border-border/50">
@@ -141,24 +120,6 @@ const ThreadToolbar: FC = () => {
         >
           <DownloadIcon className="h-5 w-5" />
         </TooltipIconButton>
-
-        <TooltipIconButton
-          tooltip="Upload file"
-          variant="ghost"
-          className="h-9 w-9 rounded-lg"
-          onClick={handleUploadClick}
-        >
-          <UploadIcon className="h-5 w-5" />
-        </TooltipIconButton>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={handleFileChange}
-          multiple
-          accept="image/*,.pdf,.txt,.md,.json,.csv"
-        />
 
         <div className="flex-1" />
 
@@ -253,10 +214,13 @@ const ThreadWelcome: FC = () => {
       <div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col justify-center px-8">
           <div className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-2 animate-in font-semibold text-2xl duration-300 ease-out">
-            Hello there!
+            Salim, welcome to the Temple Archives.
           </div>
           <div className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-2 animate-in text-2xl text-muted-foreground/65 delay-100 duration-300 ease-out">
-            How can I help you today?
+            May 𒀭Inanna guide you in your queries.{" "}
+            <span className="font-display italic text-gold">
+              𒀭Inanna Zami!
+            </span>
           </div>
         </div>
       </div>
@@ -286,7 +250,6 @@ const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
       <div className="flex items-center gap-1">
-        <ComposerAddAttachment />
         {ENABLE_VAD_VOICE ? <VADVoiceInputButton /> : <VoiceInputButton />}
         <EmojiPickerButton />
       </div>
