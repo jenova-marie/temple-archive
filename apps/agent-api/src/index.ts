@@ -19,12 +19,14 @@ import {
   getLogger,
 } from "@siri/observability";
 import { createContainer } from "./container.js";
+import { createAskRouter } from "./routes/ask.js";
 import { createChatRouter } from "./routes/chat.js";
 import { createGuidesRouter } from "./routes/guides.js";
 import { createHealthRouter } from "./routes/health.js";
 import { createRagRouter } from "./routes/rag.js";
 import { tracingMiddleware } from "./middleware/tracing.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { getApiKeyMiddleware } from "./middleware/apiKey.js";
 import { getAuthMiddleware } from "./middleware/auth.js";
 
 // Initialize observability
@@ -60,6 +62,7 @@ app.use(
     allowedHeaders: [
       "Content-Type",
       "Authorization",
+      "X-API-Key",
       "X-Trace-Id",
       "X-Request-Id",
     ],
@@ -108,6 +111,23 @@ if (container.ragStore) {
     createRagRouter({ ragStore: container.ragStore }),
   );
   logger.info("Auth0 JWT authentication enabled for /api/v1/rag");
+}
+
+// Public Archivist API — GET /api/v1/ask?q=<question>, X-API-Key header.
+// Always uses the `archivist` guide; runs each request anonymously in Total
+// Privacy mode. Only mounted when ASK_API_KEYS is set (comma-separated).
+if (process.env.ASK_API_KEYS && process.env.ASK_API_KEYS.trim().length > 0) {
+  const askApiKey = getApiKeyMiddleware("ASK_API_KEYS");
+  app.use(
+    "/api/v1/ask",
+    askApiKey,
+    createAskRouter({ pipeline: container.pipeline }),
+  );
+  logger.info("API key authentication enabled for /api/v1/ask");
+} else {
+  logger.warn(
+    "/api/v1/ask NOT mounted — set ASK_API_KEYS (comma-separated) to enable",
+  );
 }
 
 // Error handling

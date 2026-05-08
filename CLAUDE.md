@@ -249,9 +249,10 @@ All imports must include `.js` extension for local files.
 
 ## API Endpoints
 
-- `POST /api/v1/chat` - Process message (UIMessage format, requires JWT auth)
-- `GET /api/v1/guides` - List available system prompts (guides)
-- `GET /api/v1/rag/*` - RAG retrieval routes (only mounted when `ENABLE_RAG=true` and `VOYAGE_API_KEY` + `NINSHUBUR_DATABASE_URL` + `NINSHUBUR_QDRANT_URL` are set)
+- `POST /api/v1/chat` - Process message (UIMessage format, requires Auth0 JWT)
+- `GET /api/v1/guides` - List available system prompts (guides) (requires Auth0 JWT)
+- `GET /api/v1/rag/*` - Direct RAG retrieval routes (Auth0 JWT). Only mounted when `ENABLE_RAG=true` and `VOYAGE_API_KEY` + `NINSHUBUR_DATABASE_URL` + `NINSHUBUR_QDRANT_URL` are set.
+- `POST /api/v1/ask` - **Public archivist Q&A**. JSON body `{ "q": "<question>" }`. Always uses the `archivist` guide. Anonymous (no userId, Total Privacy = no DB writes). Auth via `X-API-Key` header against `ASK_API_KEYS` env (comma-separated). Returns `{ question, answer, guide, conversationId, crisisLevel, metrics }`. Only mounted when `ASK_API_KEYS` is set.
 - `GET /health` - Health check
 - `GET /health/metrics` - Prometheus metrics
 
