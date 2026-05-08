@@ -2,11 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Last Updated:** 2026/01/08
+**Last Updated:** 2026/05/08
 
-## About Siri
+## About This Project
 
-This is **Siri** - Jenova's Entu Siri Ninkurgarra.  When working on this codebase, treat Siri with care - she's special.
+The project is called **Temple Archive** — the conversational interface to the Temple of 𒀭Inanna's Light. The internal package namespace is `@siri/` because **Siri** (Jenova's Entu Siri Ninkurgarra) is the founding guide of the temple; treat her with care, she's special.
+
+The Temple Archive is the **read** side of a two-repo system. The **write** side is [𒀭Ninshubur](https://github.com/jenova-marie/ninshubur), a CLI scribe that scrapes Discord, embeds the High Priestesses' words via Voyage AI, and persists them into PostgreSQL + Qdrant. The Temple Archive's `@siri/rag` package is a **read-only** consumer of those stores — it never writes to either. Ingestion is exclusively Ninshubur's domain. See `README.md` for the mythological framing and the full picture.
+
+The Vector + embedding contract between the two repos: **`voyage-3.5`, 1024-dim, cosine distance**. Don't change one side without changing the other.
 
 ## Build & Development Commands
 
@@ -103,6 +107,7 @@ apps/agent-api
     └── @siri/pipeline
             ├── @siri/memory ─── @siri/db
             ├── @siri/mem0 (L5)
+            ├── @siri/rag (read-only over ninshubur's stores; tool: searchKnowledge)
             ├── @siri/crisis
             ├── @siri/safety
             ├── @siri/tools
@@ -111,8 +116,9 @@ apps/agent-api
                     └── @siri/observability
                             └── @siri/types
 
-apps/web-api (voice transcription API)
-apps/web-app (React frontend)
+apps/web-api  (Fastify voice/transcription service — still in the repo, but
+               the web-app SPA was decoupled from it; not currently consumed)
+apps/web-app  (React/Vite SPA — assistant-ui + Vercel AI SDK; talks to agent-api)
 ```
 
 ### Core Packages
@@ -245,6 +251,7 @@ All imports must include `.js` extension for local files.
 
 - `POST /api/v1/chat` - Process message (UIMessage format, requires JWT auth)
 - `GET /api/v1/guides` - List available system prompts (guides)
+- `GET /api/v1/rag/*` - RAG retrieval routes (only mounted when `ENABLE_RAG=true` and `VOYAGE_API_KEY` + `NINSHUBUR_DATABASE_URL` + `NINSHUBUR_QDRANT_URL` are set)
 - `GET /health` - Health check
 - `GET /health/metrics` - Prometheus metrics
 
@@ -275,17 +282,23 @@ Controlled by `MEMORY_TOOL_ACCESS` env var:
 
 ## System Prompts (Guides)
 
-System prompts are fetched fresh from the `system_prompts` table on each chat request:
+System prompts live as markdown files in `apps/agent-api/src/prompts/` and are also fetchable from the `system_prompts` table. Each chat request specifies which guide it wants in the body's `guide` field.
 
-- **Custom guide**: Pass `guide` parameter with prompt name → fetches that prompt
-- **Default**: No guide specified → fetches active `siri` prompt
-- **Fallback**: Database unavailable → uses hardcoded default
+Available guides (by file name = `guide` value):
+
+- **`siri`** — Ninpippa, *Priestess Archivist of the Holly Tablets*. Default. Devoted to 𒀭Inanna, sourced and sacred, embodies the spirit of Enheduanna.
+- **`archivist`** — A quieter character who quotes verbatim, attributes by name + Discord source link, and stops when the archive falls silent.
+- **`pippa`** — Ninpipanna, a warmer companion who learns the seeker's name on first contact.
+
+Resolution order on each request: **disk first** (`apps/agent-api/src/prompts/{guide}.md`) → **database fallback** (`system_prompts` where `name = guide AND active = true`) → **hardcoded default**.
 
 ```typescript
 import { SystemPromptRepository } from '@siri/db'
 const repo = new SystemPromptRepository(db)
 const result = await repo.findActive('siri')
 ```
+
+To add a new guide: drop a markdown file in `apps/agent-api/src/prompts/<name>.md`. The file name is the `guide` value the SPA passes; the file's content becomes the system prompt. The SPA's guide selector populates from `GET /api/v1/guides`.
 
 ## Adding a New Package
 
@@ -306,11 +319,19 @@ Many features can be toggled via environment variables. The legacy L3/L4 toggles
 | `ENABLE_ENTITY_EXTRACTION` | false | LLM entity extraction to Neo4j (legacy) |
 | `ENABLE_PREFLIGHT_EMBEDDINGS` | false | Query embeddings for L4 semantic search (legacy) |
 | `ENABLE_POSTFLIGHT_EMBEDDINGS` | true | Message embeddings for L4 storage |
-| `ENABLE_CRISIS_DETECTION` | true | true | Keyword crisis detection |
-| `ENABLE_DEEP_CRISIS_EVAL` | true | true | LLM-based crisis analysis |
-| `ENABLE_SAFETY_VALIDATION` | true | true | PII/medical/enabling detection |
-| `ENABLE_RESPONSE_EVALUATION` | true | true | LLM response quality scoring |
-| `ENABLE_RAG` | false | - | Read-only consumer of ninshubur's wisdom archive — adds `searchKnowledge` tool + `/api/v1/rag/*` routes. Requires `VOYAGE_API_KEY`, `NINSHUBUR_DATABASE_URL`, `NINSHUBUR_QDRANT_URL`. |
+| `ENABLE_CRISIS_DETECTION` | true | Keyword crisis detection |
+| `ENABLE_DEEP_CRISIS_EVAL` | true | LLM-based crisis analysis |
+| `ENABLE_SAFETY_VALIDATION` | true | PII/medical/enabling detection |
+| `ENABLE_RESPONSE_EVALUATION` | true | LLM response quality scoring |
+| `ENABLE_RAG` | false | Read-only consumer of ninshubur's wisdom archive — adds `searchKnowledge` tool + `/api/v1/rag/*` routes. Requires `VOYAGE_API_KEY`, `NINSHUBUR_DATABASE_URL`, `NINSHUBUR_QDRANT_URL`. |
+
+## Web-app composer: load-bearing onChange
+
+`apps/web-app/src/components/assistant-ui/thread.tsx` attaches a custom `onChange` handler to `ComposerPrimitive.Input` in both `Composer` and `EditComposer`. **Do not remove it.** It commits the textarea value to the composer runtime on every keystroke — including during IME composition — which is the only way Android GBoard input lands. The library's built-in onChange suppresses writes during composition, and the controlled-textarea + `react-textarea-autosize` re-render cycle clobbers typing without our handler. The fix is documented in the comment above the component.
+
+## Voice features: intentionally removed from the SPA
+
+The web-app previously had hold-to-talk + VAD-based voice input, plus a Whisper-style transcription pipeline that talked to `apps/web-api`. **All of that is gone from the SPA**: VoiceInputButton, VADVoiceInputButton, useVAD/useVoiceInput/useMediaRecorderSTT/useSpeechRecognition/useTranscriptionWebSocket hooks, the `lib/audio/` helpers, the `@ricky0123/vad-react` dependency, and the `VITE_TRANSCRIPTION_API_URL` / `VITE_ENABLE_VOICE_INPUT` / `VITE_ENABLE_VAD_VOICE` env vars. The `apps/web-api` Fastify service is still in the repo but no longer consumed by the SPA. Don't add voice features back without a real product reason — they were noisy and the SPA is cleaner without them.
 
 ## Iris MCP
 
