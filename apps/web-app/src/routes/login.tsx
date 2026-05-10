@@ -1,7 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useAuth } from '@/lib/auth/AuthProvider'
-import { useAuthStore } from '@/stores/authStore'
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -13,21 +12,32 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const auth = useAuth()
   const { returnUrl } = Route.useSearch()
-  // Read auth state from the store — the same source __root.tsx uses to
-  // decide whether to bounce here. Reading from useAuth() (which proxies
-  // the Auth0 SDK directly) can disagree with the store when the SDK still
-  // holds a stale cached user but our token-refresh has failed; that
-  // disagreement is exactly how this page used to get stuck on its spinner.
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
-  const isLoading = useAuthStore((s) => s.isLoading)
-
+  // Fire signinRedirect once on mount, gated by a ref rather than auth
+  // state. Earlier versions of this page checked `!isLoading &&
+  // !isAuthenticated` before redirecting, which led to stuck spinners
+  // whenever the Auth0 SDK and our store disagreed about whether the user
+  // was authenticated — e.g. when the SDK held a cached user with no
+  // refresh token (`Missing Refresh Token` from getAccessTokenSilently)
+  // and the cache hadn't yet propagated to the store, or vice versa.
+  //
+  // The login page exists to start a login flow. If the user landed here,
+  // they want in. Calling signinRedirect when "already authenticated" is
+  // safe — Auth0 just performs silent SSO and bounces back. The ref
+  // prevents the effect from re-firing if React re-renders the page
+  // (e.g. because `auth` is a new object reference each render) before
+  // the browser navigates away.
+  const triggered = useRef(false)
   useEffect(() => {
-    if (isLoading || isAuthenticated) return
+    if (triggered.current) return
+    triggered.current = true
     sessionStorage.setItem('auth_return_url', returnUrl)
     auth.signinRedirect({ returnUrl }).catch((err) => {
       console.error('[Auth] signinRedirect failed:', err)
+      // Allow a retry on the next render if the call rejected — better to
+      // try again than to leave the user wedged on this page.
+      triggered.current = false
     })
-  }, [isLoading, isAuthenticated, auth, returnUrl])
+  }, [auth, returnUrl])
 
   return (
     <div className="flex min-h-[50vh] items-center justify-center">
