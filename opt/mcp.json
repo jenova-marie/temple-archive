@@ -17,15 +17,9 @@
     },
     "searxng-web-search": {
       "type": "http",
-      "url": "http://searxng.rso:3100/mcp",
+      "url": "https://searxng.intra.recoverysky.net/mcp",
       "description": "Use SearXNG for web searches when the user asks questions about current events, needs up-to-date information, wants to look something up online, or when you need to verify facts. This is your primary web search capability.",
       "tools": ["searxng_web_search", "web_url_read"]
-    },
-    "meteo-weather-forecast": {
-      "type": "http",
-      "url": "http://open-meteo-mcp:3000/mcp",
-      "description": "Use Meteo for weather and forecast data when the user asks questions about current weather or wants the forecast, mentions distant travel, discusses vacations, events, parties, or just needs a reminder to bring an umbrella. This is your primary web weather capability. Geolocating a location is available. Convert all values to the user's provided local data.",
-      "tools": ["geocoding", "weather_forecast", "air_quality", "flood_forecast", "seasonal_forecast"]
     }
   }
 }
