@@ -17,7 +17,8 @@ if (!AUTH0_DOMAIN || !AUTH0_CLIENT_ID || !AUTH0_AUDIENCE) {
 }
 
 function AuthStateSyncer({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading, user, getAccessTokenSilently } = useAuth0()
+  const { isAuthenticated, isLoading, user, getAccessTokenSilently, logout } =
+    useAuth0()
   const setUser = useAuthStore((s) => s.setUser)
   const setLoading = useAuthStore((s) => s.setLoading)
 
@@ -44,14 +45,25 @@ function AuthStateSyncer({ children }: { children: ReactNode }) {
         })
       } catch (error) {
         console.error('[Auth] Failed to acquire access token:', error)
-        if (!cancelled) setUser(null)
+        if (cancelled) return
+        setUser(null)
+        // CRITICAL: also clear the Auth0 SDK's own cache. Without this, the
+        // SDK keeps reporting isAuthenticated=true (from its localStorage
+        // copy of the stale user), while our store reports false. The two
+        // diverge — __root.tsx (reading from the store) bounces to /login,
+        // but LoginPage (reading from the SDK) sees isAuthenticated=true
+        // and never fires loginWithRedirect, leaving the user stuck on a
+        // "Redirecting to login..." spinner. Hitting logout({openUrl:false})
+        // forces the SDK's cache into the same un-authenticated state our
+        // store already holds, so loginWithRedirect can fire from /login.
+        void logout({ openUrl: false })
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, isLoading, user, getAccessTokenSilently, setUser])
+  }, [isAuthenticated, isLoading, user, getAccessTokenSilently, setUser, logout])
 
   return <>{children}</>
 }
